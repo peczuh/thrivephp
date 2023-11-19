@@ -1,7 +1,7 @@
 <?
 	namespace ThriveData\ThrivePHP;
 	
-	class ContextException extends Exception
+	class ContextException extends \Exception
 	{
 		protected array $context;
 		
