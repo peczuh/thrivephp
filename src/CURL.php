@@ -70,40 +70,42 @@
 			
 			$info = curl_getinfo($c);
 			$code = $info['http_code'];
+			$json = null;
+			
+			if (str_starts_with($info['content_type'], 'application/json')):
+				$json = json_decode($result);
+			endif;
 			
 			if ($code < 200 || $code >= 300):
 				switch($code):
-					case 301: throw new MovedPermanently('resource moved permanently'); break;
-					case 302: throw new MovedTemporarily('resource moved temporarily'); break;
-					case 303: throw new SeeOtherRedirect('request completed and response found at other URI'); break;
-					case 307: throw new TemporaryRedirect('repeat request at temporary URI');
+					case 301: throw new MovedPermanently('resource moved permanently', context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 302: throw new MovedTemporarily('resource moved temporarily', context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 303: throw new SeeOtherRedirect('request completed and response found at other URI', context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 307: throw new TemporaryRedirect('repeat request at temporary URI', context: ['result' => $result, 'info' => $info, 'json' => $json]);
 					case 308: throw new PermanentRedirect('request should change permanently at new URI'); break;
-					case 400: throw new BadRequest('the client request is invalid', $code, context: ['result' => $result]); break;
-					case 401: throw new Unauthorized('not authorized to access server resources', $code); break;
-					case 403: throw new Forbidden('permission denied to resource', $code); break;
-					case 404: throw new NotFound('resource not found', $code); break;
-					case 500: throw new InternalServerError('the server has an internal error', $code); break;
+					case 400: throw new BadRequest('the client request is invalid', $code, context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 401: throw new Unauthorized('not authorized to access server resources', $code, context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 403: throw new Forbidden('permission denied to resource', $code, context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 404: throw new NotFound('resource not found', $code, context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
+					case 500: throw new InternalServerError('the server has an internal error', $code, context: ['result' => $result, 'info' => $info, 'json' => $json]); break;
 				endswitch;
 				
 				if ($code < 200):
-					throw new InformationException('unexpected information');
+					throw new InformationException('unexpected information', context: ['result' => $result, 'info' => $info]);
 				elseif($code >= 300 && $code < 400):
-					throw new RedirectException('unexpected redirect');
+					throw new RedirectException('unexpected redirect', context: ['result' => $result, 'info' => $info]);
 				elseif ($code >= 400 && $code < 500):
-					throw new RequestException('problem with request');
+					throw new RequestException('problem with request', context: ['result' => $result, 'info' => $info]);
 				elseif ($code >= 500):
-					throw new ResponseException('problem with server');
+					throw new ResponseException('problem with server', context: ['result' => $result, 'info' => $info]);
 				endif;
 				
-				throw new Exception('unknown response');
+				throw new CURLException('unknown response', context: ['result' => $result, 'info' => $info]);
 			endif;
 			
 			$this->info = $info;
 			$this->result = $result;
-			
-			if (str_starts_with($info['content_type'], 'application/json')):
-				$this->json = json_decode($result);
-			endif;
+			$this->json = $json;
 		}
 	}
 	
