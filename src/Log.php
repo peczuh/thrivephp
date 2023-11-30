@@ -116,9 +116,12 @@
 					self::FATAL => 'FATAL',
 				};
 				
-				$bt = self::backtrace_format($backtrace);
-					
-				$message = sprintf("%s: %s\n%s", $prefix, $message, $bt);
+				$message = sprintf("%s: %s", $prefix, $message);
+				
+				$bt = Settings::fetch('log.trace') ?? false;
+				if ($bt):
+					$message .= sprintf("\n%s", self::backtrace_format($backtrace));
+				endif;
 					
 				if (php_sapi_name() == 'cli'):
 					printf("%s\n", $message);
