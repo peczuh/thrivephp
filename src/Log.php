@@ -50,6 +50,7 @@
 		{
 			$fmt = '';
 			foreach($backtrace as $idx => $frame):
+				if ($idx > 0) $fmt .= "\n";
 				$fmt .= sprintf("#%s | %s:%s | %s%s%s", $idx, $frame['file'], $frame['line'], $frame['class'] ?? '', $frame['type'] ?? '', $frame['function']);
 			endforeach;
 			return $fmt;
