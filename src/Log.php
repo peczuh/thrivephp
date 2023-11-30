@@ -3,6 +3,40 @@
 	
 	class Log
 	{
+		// user: person using a feature and doing an operation
+		// operator: responsible for the live operation and ongoing maintenance of the feature
+		// manager: feature owner, project manager, or person with responsibility for success of, or oversight over, the feature
+		// designer: person responsible for the design, implementation, and build, of the feature
+			
+		// system: the entire system, its subsystems and features
+		// feature: an aspect of the system that generally functions independentally of other features/subsystems
+		// operation: the thing that is being done, a process, function call, etc., that starts or stops either by a user, timer, or trigger
+			
+		// same info that a debugger might produce
+		const TRACE = 1;
+		
+		// diagnostic info only significant to devs
+		const DEBUG = 2;
+		
+		// system normal, feature normal, operation normal, behavior expected: operation completed, state change, config assumptions, info that might be useful if needed for verification later
+		const INFO = 4;
+		
+		// system normal, feature normal, operation normal, behavior unexpected/not ideal: deprecations, performance degraded, repeated notices might indicate a bitter problem, no intervention
+		const NOTICE = 8;
+		
+		// system normal, feature normal, operation degraded: an operation entered an abnormal state but can continue, may need intervention
+		const WARNING = 16;
+		
+		// system stable, feature degraded, operation failure: an operation entered an abnormal state and cannot continue, requires intervention
+		const ERROR = 32;
+		
+		// system degraded, feature failure, operation failure, immediate intervention
+		const CRITICAL = 64;
+		
+		// system failure, features failure, operations failure, immediate intervention
+		const FATAL = 128;
+		
+		
 		static function init()
 		{
 			error_reporting(E_ALL);
@@ -11,35 +45,86 @@
 			set_error_handler('\ThriveData\ThrivePHP\Log::error');
 			register_shutdown_function('\ThriveData\ThrivePHP\Log::shutdown');
 		}
-
-		static function debug($message, array $backtrace)
-		{
-			error_log(sprintf("DEBUG: %s\n%s", $message, self::backtrace_format($backtrace)));
-		}
 		
 		static function backtrace_format(array $backtrace)
 		{
 			$fmt = '';
 			foreach($backtrace as $idx => $frame):
-				$fmt .= sprintf("#%s | %s:%s | %s%s%s\n", $idx, $frame['file'], $frame['line'], $frame['class'] ?? '', $frame['type'] ?? '', $frame['function']);
+				$fmt .= sprintf("#%s | %s:%s | %s%s%s", $idx, $frame['file'], $frame['line'], $frame['class'] ?? '', $frame['type'] ?? '', $frame['function']);
 			endforeach;
 			return $fmt;
+		}
+		
+		static function debug($message)
+		{
+			self::log(self::DEBUG, $message, debug_backtrace());
 		}
 
 		static function info($message)
 		{
+			self::log(self::INFO, $message, debug_backtrace());
+		}
+		
+		static function notice($message)
+		{
+			self::log(self::NOTICE, $message, debug_backtrace());
 		}
 
 		static function warning($message)
 		{
+			self::log(self::WARNING, $message, debug_backtrace());
 		}
 
-		static function fail($message)
+		static function error($message)
 		{
+			self::log(self::ERROR, $message, debug_backtrace());
 		}
-
-		static function message($message, $severity)
+		
+		static function critical($message)
 		{
+			self::log(self::CRITICAL, $message, debug_backtrace());
+		}
+		
+		static function fatal($message)
+		{
+			self::log(self::FATAL, $message, debug_backtrace());
+		}
+		
+		static function log($severity, $message, $backtrace)
+		{
+			$threshold = match(Settings::fetch('log.level') ?? 'info') {
+				'trace' => self::TRACE,
+				'debug' => self::DEBUG,
+				'info' => self::INFO,
+				'notice' => self::NOTICE,
+				'warning' => self::WARNING,
+				'error' => self::ERROR,
+				'critical' => self::CRITICAL,
+				'fatal' => self::FATAL,
+			};
+			
+			if ($severity >= $threshold):
+				$prefix = match($severity) {
+					self::TRACE => 'TRACE',
+					self::DEBUG => 'DEBUG',
+					self::INFO => 'INFO',
+					self::NOTICE => 'NOTICE',
+					self::WARNING => 'WARNING',
+					self::ERROR => 'ERROR',
+					self::CRITICAL => 'CRITICAL',
+					self::FATAL => 'FATAL',
+				};
+				
+				$bt = self::backtrace_format($backtrace);
+					
+				$message = sprintf("%s: %s\n%s", $prefix, $message, $bt);
+					
+				if (php_sapi_name() == 'cli'):
+					printf("%s\n", $message);
+				endif;
+				
+				error_log($message);
+			endif;
 		}
 		
 		static function email($subject, $message)
@@ -71,7 +156,7 @@
 			endif;
 		}
 
-		static function error($severity=null, $message=null, $file=null, $line=null, $context=null)
+		static function nativeerror($severity=null, $message=null, $file=null, $line=null, $context=null)
 		{
 			// the error was suppressed with @-operator
 			if (error_reporting() === 0):
@@ -107,7 +192,7 @@
 			endif;
 		}
 		
-		static function dump($data, $indent=1, $first=true, $html=null)
+		static function dump($data, $print=false, $indent=1, $first=true, $html=null)
 		{
 			if (is_null($html)):
 				if (php_sapi_name() == 'cli'):
@@ -129,7 +214,7 @@
 				$indent++;
 				foreach($data AS $key => $value) {
 					$retval .= sprintf("\n%s[%s] = ", $prefix, $key);
-					$retval .= self::dump($value, $indent, false);
+					$retval .= self::dump($value, indent: $indent, first: false);
 				}
 			}
 			elseif (is_object($data)) {
@@ -137,13 +222,17 @@
 				$indent++;
 				foreach((array)$data AS $key => $value) {
 					$retval .= sprintf("\n%s%s \u{2192} ", $prefix, $key);
-					$retval .= self::dump($value, $indent, false);
+					$retval .= self::dump($value, indent: $indent, first: false);
 				}
 			}
-			if ($first) $retval .= "\n";
-			if ($first && $html) printf('<pre><div style="border: 1px solid red;">%s</div></pre>', $retval);
-			if ($first && !$html) printf('%s', $retval);
-			return $retval;
+			
+			if ($print) {
+				if ($first) $retval .= "\n";
+				if ($first && $html) printf('<pre><div style="border: 1px solid red;">%s</div></pre>', $retval);
+				if ($first && !$html) printf('%s', $retval);
+			} else {
+				return $retval;
+			}
 		}
 	}
 
