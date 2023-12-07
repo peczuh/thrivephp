@@ -5,7 +5,7 @@
 	{
 		static function start()
 		{
-			Log::debug(message: 'starting session', backtrace: debug_backtrace());
+			Log::debug(message: 'starting session');
 				
 			if(!isset($_SESSION)):
 				\session_start();
@@ -20,6 +20,8 @@
 		
 		static function clear()
 		{
+			Log::debug(message: 'clearing session');
+			
 			self::start();
 			
 			$_SESSION = array();
@@ -27,7 +29,7 @@
 		
 		static function authenticate()
 		{
-			Log::debug('authenticating', debug_backtrace());
+			Log::debug('authenticating');
 			
 			self::start();
 			
@@ -38,17 +40,16 @@
 			
 			try {
 				$session = DB::query(<<<SQL
-					UPDATE users_sessions SET expires_when = now()+make_interval(hours := 24) WHERE id=$1 AND expires_when > now() RETURNING *
+					UPDATE public.users_sessions SET expires_when = now()+make_interval(hours := 24) WHERE id=$1 AND expires_when > now() RETURNING *
 					SQL, $_SESSION['session']['id']
 				)->single();
 				Log::debug(sprintf('updated user session | id=[%s]', $session->id), debug_backtrace());
-			} catch (\Thrive\DatabaseNoResult $e) {
+			} catch (\ThriveData\ThrivePHP\DatabaseNoResult $e) {
 				Log::debug(
 					sprintf('could not update user session | id=[%s] | message=[%s] ',
 						$_SESSION['session']['id'],
 						$e->getMessage()
-						),
-					debug_backtrace()
+					)
 				);
 				Response::redirect('/login');
 			}
