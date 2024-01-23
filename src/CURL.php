@@ -16,6 +16,7 @@
 			public string $url,
 			public ?string $method = 'get',
 			public ?array $headers = [],
+			public ?array $query = [],
 			public ?string $data = null,
 			public ?string $file = null,
 			public ?bool $returnheader = false,
@@ -23,6 +24,10 @@
 			public ?bool $follow = true,
 		) {
 			printf("CURL::__construct()\n");
+			
+			if (count($query) > 0):
+				$url = sprintf('%s?%s', $url, http_build_query($query));
+			endif;
 			
 			$c = curl_init();
 			
