@@ -9,7 +9,7 @@
 		{
 			if (count($files) == 0):
 				$files[] = PATH_ROOT.'/settings.json';
-				$files[] = PATH_ROOT.'/settings.json';
+				$files[] = PATH_ROOT.'/local/settings.json';
 			endif;
 				
 			foreach($files as $f):
