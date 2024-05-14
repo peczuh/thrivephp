@@ -9,7 +9,6 @@
 				self::setPathRoot();
 			endif;
 				
-			spl_autoload_register([self::class, 'autoload']);
 			Settings::init();
 			Log::init();
 		}
@@ -50,23 +49,6 @@
 			return self::$pathroot.'/local';
 		}
 		
-		static function autoload($class)
-		{
-			$parts = explode('\\', $class);
-			$paths = [
-				'class' => $class,
-				'app' => sprintf('%s/php/%s.php', PATH_ROOT, implode('/', $parts)),
-			];
-			
-			foreach ($paths as $p):
-				if (is_readable($p)):
-					require_once($p);
-					return;
-				endif;
-			endforeach;
-			
-			throw new AutoloadException("file not found for class $class");
-		}
 		
 		static function start()
 		{
