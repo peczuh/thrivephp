@@ -1,8 +1,14 @@
 <?
 	namespace ThriveData\ThrivePHP;
 	
+	/**
+	 * PostgreSQL database interface.
+	 */
 	class DB
 	{
+		/**
+		 * Queries the database.
+		 */
 		static function query($query, ...$params)
 		{
 			$c = new DatabaseConnection();
@@ -15,12 +21,18 @@
 			return $c->send($query, ...$params);
 		}
 		
+		/**
+		 * Updates `$table` with `$data` that matches `$condition`.
+		 */
 		static function update($table, $data, $condition)
 		{
 			$c = new DatabaseConnection();
 			return $c->update($table, $data, $condition);
 		}
 		
+		/**
+		 * Inserts `$data` into `$table`.
+		 */
 		static function insert($table, $data)
 		{
 			$c = new DatabaseConnection();
@@ -28,10 +40,23 @@
 		}
 	}
 	
+	/**
+	 * Connection to the database.
+	 */
 	class DatabaseConnection
 	{
 		private $connection;
 		
+		/**
+		 * Start and setup connection to the database.
+		 *
+		 * The database connection parameters are retrieved from `settings.json` and the key `pgsql.connections.default`. (See `Settings` class.)
+		 *
+		 * The database GUC `intervalstyle` is set to `iso_8601` to be more compatible with date parsing.
+		 *
+		 * Some custom GUC parameters are set which are accessible by database queries:
+		 * - 
+		 */
 		public function __construct($dsn = null)
 		{
 			if(is_null($dsn)):

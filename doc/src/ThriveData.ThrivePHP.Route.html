@@ -1,0 +1,698 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+
+	<title>Class ThriveData\ThrivePHP\Route |  API</title>
+	<link rel="stylesheet" href="assets/main.css">
+	<script src="assets/main.js" defer></script>
+</head>
+
+<body class="layout">
+	<div class="layout-aside">
+	<div class="menu">
+			<div class="menu-section">
+				<h3>Namespaces</h3>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.html">ThriveData</a>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</div>
+
+		<div class="menu-section">
+			<h3>Classes</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.ACL.html">
+							ACL
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Application.html">
+							Application
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Arrays.html">
+							Arrays
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Command.html">
+							Command
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Commander.html">
+							Commander
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Controller.html">
+							Controller
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CURL.html">
+							CURL
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseCondition.html">
+							DatabaseCondition
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseConnection.html">
+							DatabaseConnection
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDateInterval.html">
+							DatabaseDateInterval
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDateTime.html">
+							DatabaseDateTime
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseResult.html">
+							DatabaseResult
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DB.html">
+							DB
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Log.html">
+							Log
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Notification.html">
+							Notification
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Page.html">
+							Page
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Response.html">
+							Response
+						</a>
+					</li>
+					<li class="active">
+						<a href="ThriveData.ThrivePHP.Route.html">
+							Route
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Router.html">
+							Router
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Session.html">
+							Session
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Settings.html">
+							Settings
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.View.html">
+							View
+						</a>
+					</li>
+			</ul>
+		</div>
+		<div class="menu-section">
+			<h3>Exceptions</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.ApplicationException.html">
+							ApplicationException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.AutoloadException.html">
+							AutoloadException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.BadRequest.html">
+							BadRequest
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CompileErrorException.html">
+							CompileErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CompileWarningException.html">
+							CompileWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ContextException.html">
+							ContextException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CoreErrorException.html">
+							CoreErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CoreWarningException.html">
+							CoreWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CURLException.html">
+							CURLException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseCheckViolation.html">
+							DatabaseCheckViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseClientException.html">
+							DatabaseClientException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDataException.html">
+							DatabaseDataException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDataTypeMismatch.html">
+							DatabaseDataTypeMismatch
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseException.html">
+							DatabaseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseExclusionViolation.html">
+							DatabaseExclusionViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseInvalidTextRepresentation.html">
+							DatabaseInvalidTextRepresentation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseManyResults.html">
+							DatabaseManyResults
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseNoResult.html">
+							DatabaseNoResult
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseNotNullViolation.html">
+							DatabaseNotNullViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseServerException.html">
+							DatabaseServerException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseUndefinedColumn.html">
+							DatabaseUndefinedColumn
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseUniqueViolation.html">
+							DatabaseUniqueViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DeprecatedException.html">
+							DeprecatedException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ErrorException.html">
+							ErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Exception.html">
+							Exception
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ExecuteException.html">
+							ExecuteException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.InformationException.html">
+							InformationException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.InternalServerError.html">
+							InternalServerError
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.MovedPermanently.html">
+							MovedPermanently
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.MovedTemporarily.html">
+							MovedTemporarily
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NotFound.html">
+							NotFound
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NoticeException.html">
+							NoticeException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ParseException.html">
+							ParseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermanentRedirect.html">
+							PermanentRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermissionDenied.html">
+							PermissionDenied
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermissionException.html">
+							PermissionException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RecoverableErrorException.html">
+							RecoverableErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RedirectException.html">
+							RedirectException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RequestException.html">
+							RequestException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ResponseException.html">
+							ResponseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RootPathUnknown.html">
+							RootPathUnknown
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.SeeOtherRedirect.html">
+							SeeOtherRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.SettingsException.html">
+							SettingsException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.StrictException.html">
+							StrictException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.TemporaryRedirect.html">
+							TemporaryRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Unauthorized.html">
+							Unauthorized
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserDeprecatedException.html">
+							UserDeprecatedException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserErrorException.html">
+							UserErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserNoticeException.html">
+							UserNoticeException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserWarningException.html">
+							UserWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WarningException.html">
+							WarningException
+						</a>
+					</li>
+			</ul>
+		</div>
+	</div>
+	</div>
+
+	<div class="layout-main">
+		<div class="layout-navbar">
+	<nav class="navbar">
+		<div class="navbar-left">
+			<ul class="navbar-links">
+				<li>
+					<a href="index.html">Overview</a>
+				</li>
+				<li>
+					
+						<a href="namespace-ThriveData.ThrivePHP.html">Namespace</a>
+					
+				</li>
+<li class="active"><a href="ThriveData.ThrivePHP.Route.html">Class</a></li>				<li>
+					<a href="tree.html">Tree</a>
+				</li>
+			</ul>
+		</div>
+		<div class="navbar-right">
+	<div class="search" data-elements="assets/elements.js">
+		<input class="search-input" placeholder="Search class, function or namespace" autofocus>
+		<ul class="search-results"></ul>
+	</div>
+		</div>
+	</nav>
+		</div>
+
+		<div class="layout-content">
+		<h1>
+			Class <a href="namespace-ThriveData.html">ThriveData</a>\<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>\<a href="ThriveData.ThrivePHP.Route.html">Route</a>
+		</h1>
+
+
+	<table class="classLikeSignatureTable">
+
+
+
+
+	</table>
+		<div class="classLikeDescription">
+	<div class="description"><p>Defines the HTTP request to match and a callback to call if matched. Routes are registered with <code>Router::register()</code>.</p>
+<p>Example:</p>
+<pre><code class="language-php">new Route(url: '{^/user/([0-9]+)/account$}', callback: '\ui\pages\user\account::routed');
+new Route(url: '{^/api/v1/user/([0-9]+)/details$}', callback: '\api\v1\user\details::routed');
+</code></pre>
+</div>
+		</div>
+
+
+		<div class="classLikeSection">
+			<b>Located at</b> <a href="source-Route.html#14" title="Go to source code">Route.php</a><br>
+		</div>
+
+
+
+		<table class="table" id="methods">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Methods</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="__construct" id="___construct">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-Route.html#16-31" title="Go to source code">__construct</a>(<span>string <var>$url</var></span>, <span>string <var>$callback</var></span>, <span>string <var>$method</var> = <span class="php-str">'&#123;^(.*)$}'</span></span>, <span>string <var>$host</var> = <span class="php-str">'&#123;^(.*)$}'</span></span>, <span>string <var>$id</var> = <span class="php-kw">null</span></span>)</code>
+
+
+	<div class="expandable-collapsedView">
+		Creates a new Route.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Creates a new Route.</p>
+</div>
+
+							<h4>Parameters</h4>
+							<table>
+									<tr>
+										<td><var>$url</var>&nbsp;&nbsp;</td>
+										<td><p>A regex to compare against the HTTP request URL. It is recommened to use the regex deliminators <code>{</code> and <code>}</code> as opposed to the usual <code>/</code> and <code>/</code> to avoid having to escape every forward slash.</p>
+</td>
+									</tr>
+									<tr>
+										<td><var>$callback</var>&nbsp;&nbsp;</td>
+										<td><p>The method or function to call when the route is matched by <code>Router</code>.</p>
+</td>
+									</tr>
+									<tr>
+										<td><var>$method</var>&nbsp;&nbsp;</td>
+										<td><p>A regex to compare against the HTTP method (e.g. GET, POST, etc.). By default matches any method.</p>
+</td>
+									</tr>
+									<tr>
+										<td><var>$host</var>&nbsp;&nbsp;</td>
+										<td><p>A regex to compare against the HTTP host. By default matches any host.</p>
+</td>
+									</tr>
+									<tr>
+										<td><var>$id</var>&nbsp;&nbsp;</td>
+										<td><p>A unique ID for identifying the exact Route among all registered routes. Probably only useful for debugging purposes.</p>
+</td>
+									</tr>
+							</table>
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___construct">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+
+
+
+		<table class="table" id="properties">
+			<tr>
+				<th class="table-heading sortable" colspan="4" title="Switch between natural and alphabetical order">Properties</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="url" id="$url">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">string</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Route.html#26" title="Go to source code">$url</a></var></code>
+				
+	<div class="expandable-collapsedView">
+		A regex to compare against the HTTP request URL. It is recommened to use the regex deliminators `&#123;` and `}` as opposed…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>A regex to compare against the HTTP request URL. It is recommened to use the regex deliminators <code>{</code> and <code>}</code> as opposed to the usual <code>/</code> and <code>/</code> to avoid having to escape every forward slash.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$url">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="callback" id="$callback">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">string</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Route.html#27" title="Go to source code">$callback</a></var></code>
+				
+	<div class="expandable-collapsedView">
+		The method or function to call when the route is matched by `Router`.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>The method or function to call when the route is matched by <code>Router</code>.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$callback">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="method" id="$method">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">string</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Route.html#28" title="Go to source code">$method</a></var></code>
+				
+	<div class="expandable-collapsedView">
+		A regex to compare against the HTTP method (e.g. GET, POST, etc.). By default matches any method.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>A regex to compare against the HTTP method (e.g. GET, POST, etc.). By default matches any method.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$method">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="host" id="$host">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">string</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Route.html#29" title="Go to source code">$host</a></var></code>
+				
+	<div class="expandable-collapsedView">
+		A regex to compare against the HTTP host. By default matches any host.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>A regex to compare against the HTTP host. By default matches any host.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$host">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="id" id="$id">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">string</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Route.html#30" title="Go to source code">$id</a></var></code>
+				
+	<div class="expandable-collapsedView">
+		A unique ID for identifying the exact Route among all registered routes. Probably only useful for debugging purposes.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>A unique ID for identifying the exact Route among all registered routes. Probably only useful for debugging purposes.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$id">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+		</div>
+
+		<div class="layout-footer">
+			 API documentation generated by <a href="https://www.apigen.org">ApiGen v7.0.0-alpha.6</a>
+		</div>
+	</div>
+
+	<div class="layout-rest">
+		<div class="navbar"></div>
+	</div>
+</body>
+</html>

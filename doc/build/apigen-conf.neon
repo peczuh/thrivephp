@@ -1,0 +1,4 @@
+parameters:
+	workingDir: '../../'
+	paths: ['../../src']
+	outputDir: '../src/'
