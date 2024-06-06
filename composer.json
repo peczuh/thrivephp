@@ -1,23 +1,23 @@
 {
-    "name": "thrivedata/thrivephp",
-    "description": "A simple PHP framework.",
+	"name": "thrivedata/thrivephp",
+	"description": "A simple PHP framework.",
 	"homepage": "https://github.com/thrivedata/thrivephp",
-    "type": "library",
-    "license": "MPL-2.0",
-    "autoload": {
-        "psr-4": {
-            "ThriveData\\ThrivePHP\\": "src/"
-        }
-    },
-    "authors": [
-        {
-            "name": "Ian Timothy",
-            "email": "ian@thrivedata.it",
+	"type": "library",
+	"license": "MPL-2.0",
+	"autoload": {
+		"psr-4": {
+			"ThriveData\\ThrivePHP\\": "src/"
+		}
+	},
+	"authors": [
+		{
+			"name": "Ian Timothy",
+			"email": "ian@thrivedata.it",
 			"homepage": "https://thrivedata.it"
-        }
-    ],
-    "minimum-stability": "stable",
-    "require": {
+		}
+	],
+	"minimum-stability": "stable",
+	"require": {
 		"php": ">=8.0"
 	}
 }

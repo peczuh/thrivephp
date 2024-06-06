@@ -97,7 +97,7 @@
 				
 				if ($code < 200):
 					throw new InformationException('unexpected information', context: ['result' => $result, 'info' => $info]);
-				elseif($code >= 300 && $code < 400):
+				elseif ($code >= 300 && $code < 400):
 					throw new RedirectException('unexpected redirect', context: ['result' => $result, 'info' => $info]);
 				elseif ($code >= 400 && $code < 500):
 					throw new RequestException('problem with request', context: ['result' => $result, 'info' => $info]);
