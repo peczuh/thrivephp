@@ -443,7 +443,6 @@
 			public $detail,
 			public $hint,
 			public $position,
-			public $context,
 			public $schema,
 			public $table,
 			public $column,
