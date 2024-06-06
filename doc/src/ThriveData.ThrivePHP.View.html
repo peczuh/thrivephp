@@ -1,0 +1,474 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+
+	<title>Class ThriveData\ThrivePHP\View |  API</title>
+	<link rel="stylesheet" href="assets/main.css">
+	<script src="assets/main.js" defer></script>
+</head>
+
+<body class="layout">
+	<div class="layout-aside">
+	<div class="menu">
+			<div class="menu-section">
+				<h3>Namespaces</h3>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.html">ThriveData</a>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</div>
+
+		<div class="menu-section">
+			<h3>Classes</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.ACL.html">
+							ACL
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Application.html">
+							Application
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Arrays.html">
+							Arrays
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Command.html">
+							Command
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Commander.html">
+							Commander
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Controller.html">
+							Controller
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CURL.html">
+							CURL
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseCondition.html">
+							DatabaseCondition
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseConnection.html">
+							DatabaseConnection
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDateInterval.html">
+							DatabaseDateInterval
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDateTime.html">
+							DatabaseDateTime
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseResult.html">
+							DatabaseResult
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DB.html">
+							DB
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Log.html">
+							Log
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Notification.html">
+							Notification
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Page.html">
+							Page
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Response.html">
+							Response
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Route.html">
+							Route
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Router.html">
+							Router
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Session.html">
+							Session
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Settings.html">
+							Settings
+						</a>
+					</li>
+					<li class="active">
+						<a href="ThriveData.ThrivePHP.View.html">
+							View
+						</a>
+					</li>
+			</ul>
+		</div>
+		<div class="menu-section">
+			<h3>Exceptions</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.ApplicationException.html">
+							ApplicationException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.AutoloadException.html">
+							AutoloadException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.BadRequest.html">
+							BadRequest
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CompileErrorException.html">
+							CompileErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CompileWarningException.html">
+							CompileWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ContextException.html">
+							ContextException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CoreErrorException.html">
+							CoreErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CoreWarningException.html">
+							CoreWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CURLException.html">
+							CURLException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseCheckViolation.html">
+							DatabaseCheckViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseClientException.html">
+							DatabaseClientException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDataException.html">
+							DatabaseDataException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseDataTypeMismatch.html">
+							DatabaseDataTypeMismatch
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseException.html">
+							DatabaseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseExclusionViolation.html">
+							DatabaseExclusionViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseInvalidTextRepresentation.html">
+							DatabaseInvalidTextRepresentation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseManyResults.html">
+							DatabaseManyResults
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseNoResult.html">
+							DatabaseNoResult
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseNotNullViolation.html">
+							DatabaseNotNullViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseServerException.html">
+							DatabaseServerException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseUndefinedColumn.html">
+							DatabaseUndefinedColumn
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DatabaseUniqueViolation.html">
+							DatabaseUniqueViolation
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DeprecatedException.html">
+							DeprecatedException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ErrorException.html">
+							ErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Exception.html">
+							Exception
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ExecuteException.html">
+							ExecuteException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.InformationException.html">
+							InformationException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.InternalServerError.html">
+							InternalServerError
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.MovedPermanently.html">
+							MovedPermanently
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.MovedTemporarily.html">
+							MovedTemporarily
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NotFound.html">
+							NotFound
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NoticeException.html">
+							NoticeException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ParseException.html">
+							ParseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermanentRedirect.html">
+							PermanentRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermissionDenied.html">
+							PermissionDenied
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermissionException.html">
+							PermissionException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RecoverableErrorException.html">
+							RecoverableErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RedirectException.html">
+							RedirectException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RequestException.html">
+							RequestException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ResponseException.html">
+							ResponseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RootPathUnknown.html">
+							RootPathUnknown
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.SeeOtherRedirect.html">
+							SeeOtherRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.SettingsException.html">
+							SettingsException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.StrictException.html">
+							StrictException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.TemporaryRedirect.html">
+							TemporaryRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Unauthorized.html">
+							Unauthorized
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserDeprecatedException.html">
+							UserDeprecatedException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserErrorException.html">
+							UserErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserNoticeException.html">
+							UserNoticeException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserWarningException.html">
+							UserWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WarningException.html">
+							WarningException
+						</a>
+					</li>
+			</ul>
+		</div>
+	</div>
+	</div>
+
+	<div class="layout-main">
+		<div class="layout-navbar">
+	<nav class="navbar">
+		<div class="navbar-left">
+			<ul class="navbar-links">
+				<li>
+					<a href="index.html">Overview</a>
+				</li>
+				<li>
+					
+						<a href="namespace-ThriveData.ThrivePHP.html">Namespace</a>
+					
+				</li>
+<li class="active"><a href="ThriveData.ThrivePHP.View.html">Class</a></li>				<li>
+					<a href="tree.html">Tree</a>
+				</li>
+			</ul>
+		</div>
+		<div class="navbar-right">
+	<div class="search" data-elements="assets/elements.js">
+		<input class="search-input" placeholder="Search class, function or namespace" autofocus>
+		<ul class="search-results"></ul>
+	</div>
+		</div>
+	</nav>
+		</div>
+
+		<div class="layout-content">
+		<h1>
+			Class <a href="namespace-ThriveData.html">ThriveData</a>\<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>\<a href="ThriveData.ThrivePHP.View.html">View</a>
+		</h1>
+
+
+	<table class="classLikeSignatureTable">
+
+
+
+
+	</table>
+
+
+		<div class="classLikeSection">
+			<b>Located at</b> <a href="source-View.html#5" title="Go to source code">View.php</a><br>
+		</div>
+
+
+
+
+
+
+
+
+
+
+
+		</div>
+
+		<div class="layout-footer">
+			 API documentation generated by <a href="https://www.apigen.org">ApiGen v7.0.0-alpha.6</a>
+		</div>
+	</div>
+
+	<div class="layout-rest">
+		<div class="navbar"></div>
+	</div>
+</body>
+</html>

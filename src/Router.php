@@ -1,13 +1,39 @@
 <?
 	namespace ThriveData\ThrivePHP;
 
+	/**
+	 * Routes HTTP requests from a front controller to registered Route objects. This is a static singleton class.
+	 *
+	 * This class functions based on the Front Controller pattern, where a 
+	 * webserver (such as nginx) is configured to proxy HTTP requests to a front contoller.
+	 *
+	 * The front controller passes the request from the webserver to Router::call().
+	 *
+	 * Router::call() searches the registered Route objects (via `Router::register()`) for a Route
+	 * that matches the HTTP method, host, and URL.
+	 *
+	 * When a match is found, the callback given in the Route object is called,
+	 * which is typically a method in a subclassed Page or API class.
+	 *
+	 * If a match is not found, a HTTP 404 response is returned.
+	 */
 	class Router
 	{
+		/** Method in the web server's HTTP header (GET, POST, etc.). */
 		static $method;
+		
+		/** Host in the web server's HTTP header. */
 		static $host;
+		
+		/** Request URL in the server's HTTP header. */
 		static $url;
+		
+		/** Routes registered via Router::register(). */
 		static $routes = [];
 		
+		/**
+		 * Setup static properties. Called by `Application::init()`.
+		 */
 		static function init()
 		{
 			self::$url = $_SERVER['PATH_INFO'];
@@ -21,11 +47,18 @@
 			endif;
 		}
 		
+		/**
+		 * Register {@see Route} objects. Called in `routes.php` where routes are defined.
+		 */
 		static function register(Route $route)
 		{
 			self::$routes[$route->host][$route->url][$route->method] = $route;
 		}
 		
+		/**
+		 * Searches for a `Route` matching the HTTP request and calls its callback method.
+		 * Called by Router::start().
+		 */
 		static function call(string $host, string $url, string $method)
 		{
 			foreach(self::$routes as $host_regex => $host_routes):
@@ -58,6 +91,9 @@
 			print('404 not found');
 		}
 		
+		/**
+		 * Called by `Application::start()` to begin routing.
+		 */
 		static function start()
 		{
 			self::call(host: self::$host, url: self::$url, method: self::$method);
