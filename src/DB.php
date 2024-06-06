@@ -403,13 +403,13 @@
 		];
 	}
 	
-	class DatabaseException extends \Exception {}
+	class DatabaseException extends ContextException {}
 	
 	class DatabaseClientException extends DatabaseException {}
 	class DatabaseNoResult extends DatabaseClientException {}
 	class DatabaseManyResults extends DatabaseClientException {}
 	
-	class DatabaseServerException extends \Exception
+	class DatabaseServerException extends DatabaseException
 	{
 		public function __construct(
 			public $severity,
@@ -425,7 +425,7 @@
 			public $datatype,
 			public $constraint,
 			public $condition,
-			?throwable $previous=null,
+			?\throwable $previous=null,
 		) {
 			parent::__construct(message: $message, previous: $previous);
 		}
