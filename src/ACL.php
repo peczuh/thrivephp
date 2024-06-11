@@ -68,8 +68,8 @@
 			
 			// Check permissions with session (avoids potentially hundreds of database lookups)
 			if ($session = ($_SESSION['user']['permissions'] ?? null)):
-				$superuser = $session->superuser ?? null;
-				$grants = $session->acl->$key ?? null;
+				$superuser = $session['superuser'] ?? null;
+				$grants = $session['acl'][$key] ?? null;
 				
 				if ($superuser):
 					return true;
@@ -82,18 +82,18 @@
 			// Check permissions with database lookup
 			else:
 				// Check if user is superuser
-				$count = DB::query("SELECT count(*) AS count FROM users WHERE id=$1 AND superuser IS TRUE", $userId)
+				$count = DB::query("SELECT count(*) AS count FROM public.users WHERE id=$1 AND superuser IS TRUE", $userId)
 					->single()->count;
 				if ($count == 1)
 					return true;
 				
 				$count = DB::query(<<<SQL
 					SELECT COUNT(*) AS count 
-					FROM acl_permissions AS p 
-						JOIN acl_keys AS k ON (p.key_id = k.id)
-						JOIN roles AS r ON (p.role_id = r.id)
-						JOIN users_roles AS ur ON (ur.role_id = r.id)
-						JOIN users AS u ON (ur.user_id = u.id)
+					FROM public.acl_permissions AS p 
+						JOIN public.acl_keys AS k ON (p.key_id = k.id)
+						JOIN public.roles AS r ON (p.role_id = r.id)
+						JOIN public.users_roles AS ur ON (ur.role_id = r.id)
+						JOIN public.users AS u ON (ur.user_id = u.id)
 					WHERE k.key=$1 AND p.permissions & $2 = $2 AND u.id=$3
 					SQL, $key, $permissions, $userId)
 					->single()->count;
@@ -124,7 +124,7 @@
 			$userId = $userId ?? $_SESSION['user']['id'] ?? null;
 			if (is_null($userId)) throw new PermissionsException('could not get user ID to check roles.');
 			
-			if (isset($_SESSION['user']->permissions->roles->$role)):
+			if (isset($_SESSION['session']['roles'][$role])):
 				return true;
 			endif;
 		}
@@ -149,11 +149,11 @@
 			$users = User::select(
 				"SELECT
 					u.id
-				FROM acl_permissions AS p
-					JOIN acl_keys AS k ON (p.key_id = k.id)
-					JOIN roles AS r ON (p.role_id = r.id)
-					JOIN users_roles AS ur ON (ur.role_id = r.id)
-					JOIN users AS u ON (ur.user_id = u.id)
+				FROM public.acl_permissions AS p
+					JOIN public.acl_keys AS k ON (p.key_id = k.id)
+					JOIN public.roles AS r ON (p.role_id = r.id)
+					JOIN public.users_roles AS ur ON (ur.role_id = r.id)
+					JOIN public.users AS u ON (ur.user_id = u.id)
 				WHERE k.key = $1 AND p.permissions & $2 = $3",
 				[$key, $permissions, $permissions]
 			);
@@ -168,7 +168,7 @@
 		{
 			$json = DB::query(
 				"WITH t_user AS (
-					SELECT id FROM users WHERE id=$1
+					SELECT id FROM public.users WHERE id=$1
 				),
 				t_acl AS (
 					WITH t AS(
@@ -176,11 +176,11 @@
 							k.id AS key,
 							bit_or(p.permissions) AS permissions
 						FROM
-							acl_permissions AS p
-							JOIN acl_keys AS k ON (p.key_id = k.id)
-							JOIN roles AS r ON (p.role_id = r.id)
-							JOIN users_roles AS ur ON (ur.role_id = r.id)
-							JOIN users AS u ON (ur.user_id = u.id)
+							public.acl_permissions AS p
+							JOIN public.acl_keys AS k ON (p.key_id = k.id)
+							JOIN public.roles AS r ON (p.role_id = r.id)
+							JOIN public.users_roles AS ur ON (ur.role_id = r.id)
+							JOIN public.users AS u ON (ur.user_id = u.id)
 						WHERE u.id=(SELECT id FROM t_user)
 						GROUP BY k.id
 					)
@@ -188,9 +188,9 @@
 				),
 				t_roles AS (
 					SELECT json_object_agg(r.id, true) AS data
-					FROM users AS u
-						JOIN users_roles AS ur ON (ur.user_id = u.id)
-						JOIN roles AS r ON (ur.role_id = r.id)
+					FROM public.users AS u
+						JOIN public.users_roles AS ur ON (ur.user_id = u.id)
+						JOIN public.roles AS r ON (ur.role_id = r.id)
 					WHERE u.id = (SELECT id FROM t_user)
 				)
 				SELECT json_build_object(
