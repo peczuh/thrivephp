@@ -1,7 +1,7 @@
 {
 	"name": "thrivedata/thrivephp",
 	"description": "A simple PHP framework.",
-	"homepage": "https://github.com/thrivedata/thrivephp",
+	"homepage": "https://github.com/peczuh/thrivephp",
 	"type": "library",
 	"license": "MPL-2.0",
 	"autoload": {
