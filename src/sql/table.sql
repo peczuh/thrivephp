@@ -1,5 +1,5 @@
 
-create or replace function public.created()
+create or replace function pz.created()
 returns trigger language plpgsql as $function$
 begin
 	
@@ -25,7 +25,7 @@ end;
 $function$;
 
 
-create or replace function public.updated()
+create or replace function pz.updated()
 returns trigger language plpgsql as $function$
 begin
 	
@@ -54,7 +54,7 @@ $function$;
 
 
 
-create or replace procedure public.provision(
+create or replace procedure pz.provision(
 	target_table regclass,
 	user_id boolean default true,
 	created_when boolean default true,
@@ -84,7 +84,7 @@ begin
 	end if;
 	if (created_id and user_id) then
 		execute format('alter table %s '
-			'add column if not exists created_id uuid not null references public.users(id) on update cascade deferrable initially deferred',
+			'add column if not exists created_id uuid not null references pz.users(id) on update cascade deferrable initially deferred',
 			target_table
 		);
 	end if;
@@ -102,7 +102,7 @@ begin
 	end if;
 	if (updated_id) then
 		execute format('alter table %s '
-			'add column if not exists updated_id uuid not null references public.users(id) on update cascade deferrable initially deferred',
+			'add column if not exists updated_id uuid not null references pz.users(id) on update cascade deferrable initially deferred',
 			target_table
 		);
 	end if;
@@ -120,7 +120,7 @@ begin
 	end if;
 	if (deleted_id) then
 		execute format('alter table %s '
-			'add column if not exists deleted_id uuid references public.users(id) on update cascade deferrable initially deferred',
+			'add column if not exists deleted_id uuid references pz.users(id) on update cascade deferrable initially deferred',
 			target_table
 		);
 	end if;
@@ -128,7 +128,7 @@ begin
 	-- audit
 
 	if (audit is true) then		
-		execute format('create or replace trigger audit after insert or update or delete on %s for each row execute procedure public.audit()', target_table);
+		execute format('create or replace trigger audit after insert or update or delete on %s for each row execute procedure pz.audit()', target_table);
 	end if;
 end;
 $procedure$;

@@ -82,18 +82,18 @@
 			// Check permissions with database lookup
 			else:
 				// Check if user is superuser
-				$count = DB::query("SELECT count(*) AS count FROM public.users WHERE id=$1 AND superuser IS TRUE", $userId)
+				$count = DB::query("SELECT count(*) AS count FROM pz.users WHERE id=$1 AND superuser IS TRUE", $userId)
 					->single()->count;
 				if ($count == 1)
 					return true;
 				
 				$count = DB::query(<<<SQL
 					SELECT COUNT(*) AS count 
-					FROM public.acl_permissions AS p 
-						JOIN public.acl_keys AS k ON (p.key_id = k.id)
-						JOIN public.roles AS r ON (p.role_id = r.id)
-						JOIN public.users_roles AS ur ON (ur.role_id = r.id)
-						JOIN public.users AS u ON (ur.user_id = u.id)
+					FROM pz.acl_permissions AS p 
+						JOIN pz.acl_keys AS k ON (p.key_id = k.id)
+						JOIN pz.roles AS r ON (p.role_id = r.id)
+						JOIN pz.users_roles AS ur ON (ur.role_id = r.id)
+						JOIN pz.users AS u ON (ur.user_id = u.id)
 					WHERE k.key=$1 AND p.permissions & $2 = $2 AND u.id=$3
 					SQL, $key, $permissions, $userId)
 					->single()->count;
@@ -149,11 +149,11 @@
 			$users = User::select(
 				"SELECT
 					u.id
-				FROM public.acl_permissions AS p
-					JOIN public.acl_keys AS k ON (p.key_id = k.id)
-					JOIN public.roles AS r ON (p.role_id = r.id)
-					JOIN public.users_roles AS ur ON (ur.role_id = r.id)
-					JOIN public.users AS u ON (ur.user_id = u.id)
+				FROM pz.acl_permissions AS p
+					JOIN pz.acl_keys AS k ON (p.key_id = k.id)
+					JOIN pz.roles AS r ON (p.role_id = r.id)
+					JOIN pz.users_roles AS ur ON (ur.role_id = r.id)
+					JOIN pz.users AS u ON (ur.user_id = u.id)
 				WHERE k.key = $1 AND p.permissions & $2 = $3",
 				[$key, $permissions, $permissions]
 			);
@@ -168,7 +168,7 @@
 		{
 			$json = DB::query(
 				"WITH t_user AS (
-					SELECT id FROM public.users WHERE id=$1
+					SELECT id FROM pz.users WHERE id=$1
 				),
 				t_acl AS (
 					WITH t AS(
@@ -176,11 +176,11 @@
 							k.id AS key,
 							bit_or(p.permissions) AS permissions
 						FROM
-							public.acl_permissions AS p
-							JOIN public.acl_keys AS k ON (p.key_id = k.id)
-							JOIN public.roles AS r ON (p.role_id = r.id)
-							JOIN public.users_roles AS ur ON (ur.role_id = r.id)
-							JOIN public.users AS u ON (ur.user_id = u.id)
+							pz.acl_permissions AS p
+							JOIN pz.acl_keys AS k ON (p.key_id = k.id)
+							JOIN pz.roles AS r ON (p.role_id = r.id)
+							JOIN pz.users_roles AS ur ON (ur.role_id = r.id)
+							JOIN pz.users AS u ON (ur.user_id = u.id)
 						WHERE u.id=(SELECT id FROM t_user)
 						GROUP BY k.id
 					)
@@ -188,9 +188,9 @@
 				),
 				t_roles AS (
 					SELECT json_object_agg(r.id, true) AS data
-					FROM public.users AS u
-						JOIN public.users_roles AS ur ON (ur.user_id = u.id)
-						JOIN public.roles AS r ON (ur.role_id = r.id)
+					FROM pz.users AS u
+						JOIN pz.users_roles AS ur ON (ur.user_id = u.id)
+						JOIN pz.roles AS r ON (ur.role_id = r.id)
 					WHERE u.id = (SELECT id FROM t_user)
 				)
 				SELECT json_build_object(

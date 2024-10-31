@@ -40,7 +40,7 @@
 			
 			try {
 				$session = DB::query(<<<SQL
-					UPDATE public.users_sessions SET expires_when = now()+make_interval(hours := 24) WHERE id=$1 AND expires_when > now() RETURNING *
+					UPDATE pz.users_sessions SET expires_when = now()+make_interval(hours := 24) WHERE id=$1 AND expires_when > now() RETURNING *
 					SQL, $_SESSION['session']['id']
 				)->single();
 				Log::debug(sprintf('updated user session | id=[%s]', $session->id), debug_backtrace());
