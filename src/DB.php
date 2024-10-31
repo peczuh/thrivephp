@@ -428,7 +428,7 @@
 		];
 	}
 	
-	class DatabaseException extends ContextException {}
+	class DatabaseException extends \Exception {}
 	
 	class DatabaseClientException extends DatabaseException {}
 	class DatabaseNoResult extends DatabaseClientException {}
@@ -443,6 +443,7 @@
 			public $detail,
 			public $hint,
 			public $position,
+			public $context,
 			public $schema,
 			public $table,
 			public $column,
