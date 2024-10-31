@@ -1,36 +1,36 @@
-create table public.roles (
+create table pz.roles (
 	id uuid not null primary key default gen_random_uuid(),
 	name text not null unique
 );
-call public.provision('public.roles'::regclass);
+call pz.provision('pz.roles'::regclass);
 
 
-create table public.users_roles (
+create table pz.users_roles (
 	id uuid not null primary key default gen_random_uuid(),
-	user_id uuid not null references public.users(id),
-	role_id uuid not null references public.roles(id)
+	user_id uuid not null references pz.users(id),
+	role_id uuid not null references pz.roles(id)
 );
-call public.provision('public.users_roles'::regclass);
+call pz.provision('pz.users_roles'::regclass);
 
 
-create table public.acl_keys (
+create table pz.acl_keys (
 	id uuid not null primary key default gen_random_uuid(),
 	key text not null,
 	name text not null
 );
-call public.provision('public.acl_keys'::regclass);
+call pz.provision('pz.acl_keys'::regclass);
 
 
-create table public.acl_permissions (
+create table pz.acl_permissions (
 	id uuid not null primary key default gen_random_uuid(),
-	role_id uuid not null references public.roles(id),
-	key_id uuid not null references public.acl_keys(id),
+	role_id text not null references pz.roles(id),
+	key_id uuid not null references pz.acl_keys(id),
 	permissions integer not null default 0
 );
-call public.provision('public.acl_permissions'::regclass);
+call pz.provision('pz.acl_permissions'::regclass);
 
 
-create or replace function public.permissions_compose(
+create or replace function pz.permissions_compose(
 	sel boolean default false,
 	upd boolean default false,
 	ins boolean default false,
@@ -49,7 +49,7 @@ create or replace function public.permissions_compose(
 $function$;
 
 
-create or replace function public.permissions_decompose(
+create or replace function pz.permissions_decompose(
 	grants bit,
 	out sel boolean,
 	out upd boolean,
