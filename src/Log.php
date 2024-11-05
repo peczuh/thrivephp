@@ -41,7 +41,7 @@
 		{
 			error_reporting(E_ALL);
 			
-			set_exception_handler('\ThriveData\ThrivePHP\Log::exceptionHandler');
+			set_exception_handler('\ThriveData\ThrivePHP\Log::exception');
 			set_error_handler('\ThriveData\ThrivePHP\Log::errorHandler');
 			register_shutdown_function('\ThriveData\ThrivePHP\Log::shutdown');
 		}
@@ -56,9 +56,9 @@
 			return $fmt;
 		}
 		
-		static function debug($message)
+		static function debug($message, $backtrace=null)
 		{
-			self::log(self::DEBUG, $message, debug_backtrace());
+			self::log(self::DEBUG, $message, $backtrace ?? debug_backtrace());
 		}
 
 		static function info($message)
@@ -135,7 +135,7 @@
 		{
 		}
 		
-		static function exceptionHandler($e, ?bool $display=null)
+		static function exception($e, ?bool $display=null)
 		{
 			$display = ini_get('display_errors');
 			$log = ini_get('log_errors');
