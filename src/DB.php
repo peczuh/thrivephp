@@ -333,6 +333,8 @@
 	
 	class DatabaseDateInterval extends \DateInterval
 	{
+		private $y, $m, $d, $h, $i, $s, $f;
+		
 		public function __construct($spec)
 		{
 			if(preg_match('/P(?:([0-9]+)Y)?(?:([0-9]+)M)?(?:([0-9]+)D)?(?:T(?:([0-9]+)H)?(?:([0-9]+)M)?(?:([0-9]+)(?:\.([0-9]+))?S)?)?/', $spec, $matches)):
@@ -348,7 +350,6 @@
 
 		public function truncate($part=null, $precision=0)
 		{
-			//print '<pre>'.Log::dump($this).'</pre>'; die;
 			$td = $this->s/60/60/24 + $this->i/60/24 + $this->h/24 + $this->d;
 			$th = $this->s/60/60 + $this->i/60 + $this->h;
 			$ti = $this->s/60 + $this->i;
