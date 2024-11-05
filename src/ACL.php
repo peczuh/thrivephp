@@ -64,7 +64,7 @@
 		static function check($key, $permissions, $userId=null)
 		{
 			$userId = $userId ?? $_SESSION['user']['id'] ?? null;
-			if (is_null($userId)) throw new PermissionsException('could not get user ID to check permissions');
+			if (is_null($userId)) throw new PermissionException('could not get user ID to check permissions');
 			
 			// Check permissions with session (avoids potentially hundreds of database lookups)
 			if ($session = ($_SESSION['user']['permissions'] ?? null)):
@@ -82,23 +82,15 @@
 			// Check permissions with database lookup
 			else:
 				// Check if user is superuser
-				$count = DB::query("SELECT count(*) AS count FROM pz.users WHERE id=$1 AND superuser IS TRUE", $userId)
-					->single()->count;
-				if ($count == 1)
+				$superuser = DB::query("SELECT count(*) FROM users WHERE id=$1 AND superuser IS TRUE", $userId)->single()->count;
+				if ($superuser):
 					return true;
+				endif;
 				
-				$count = DB::query(<<<SQL
-					SELECT COUNT(*) AS count 
-					FROM pz.acl_permissions AS p 
-						JOIN pz.acl_keys AS k ON (p.key_id = k.id)
-						JOIN pz.roles AS r ON (p.role_id = r.id)
-						JOIN pz.users_roles AS ur ON (ur.role_id = r.id)
-						JOIN pz.users AS u ON (ur.user_id = u.id)
-					WHERE k.key=$1 AND p.permissions & $2 = $2 AND u.id=$3
-					SQL, $key, $permissions, $userId)
-					->single()->count;
-				if ($count > 0)
+				$permitted = DB::query("SELECT acl_check($1::text, $2::integer::bit(6), $3::uuid)", $key, $permissions, $userId)->single()->acl_check;
+				if ($permitted):
 					return true;
+				endif;
 			endif;
 			
 			return false;
@@ -168,7 +160,14 @@
 		{
 			$json = DB::query(
 				"WITH t_user AS (
-					SELECT id FROM pz.users WHERE id=$1
+					SELECT id,
+						json_build_object(
+							'id', id,
+							'login', login,
+							'name', name,
+							'superuser', superuser
+						) AS data
+					FROM pz.users WHERE id=$1
 				),
 				t_acl AS (
 					WITH t AS(
@@ -194,6 +193,7 @@
 					WHERE u.id = (SELECT id FROM t_user)
 				)
 				SELECT json_build_object(
+					'user', (SELECT data FROM t_user),
 					'roles', (SELECT data FROM t_roles),
 					'acl', (SELECT data FROM t_acl)
 				) AS data",
