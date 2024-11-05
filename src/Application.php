@@ -6,6 +6,9 @@
 	 */
 	class Application
 	{
+		const PATH_ROOT = PATH_ROOT;
+		const PATH_LOCAL = PATH_LOCAL.'/local';
+		
 		/**
 		 * Setup application. Called by front controller.
 		 */
@@ -28,17 +31,13 @@
 		 *
 		 * @throws RootPathUnknown
 		 */
-		static function setPathRoot(?string $path = null)
+		static function pathRoot()
 		{
-			if (is_null($path)):
-				if (defined('PATH_ROOT')):
-					$path = PATH_ROOT;
-				else:
-					if (class_exists('\Composer\AutoLoad\ClassLoader')):
-						$reflection = new \ReflectionClass(\Composer\Autoload\ClassLoader::class);
-						$path = dirname($reflection->getFileName(), 3);
-					endif;
-				endif;
+			if (self::$PATH_ROOT):
+				$path = self::$PATH_ROOT;
+			elseif (class_exists('\Composer\AutoLoad\ClassLoader')):
+				$reflection = new \ReflectionClass(\Composer\Autoload\ClassLoader::class);
+				$path = dirname($reflection->getFileName(), 3);
 			endif;
 			
 			if (is_null($path))
@@ -50,8 +49,6 @@
 			if (!is_readable($path))
 				throw new RootPathUnknown('root path is not readable');
 			
-			define('PATH_ROOT', $path);
-				
 			return $path;
 		}
 		
@@ -63,11 +60,11 @@
 		 */
 		static function pathLocal()
 		{
-			if (defined('PATH_LOCAL')):
-				return PATH_LOCAL;
+			if (self::PATH_LOCAL):
+				return self::PATH_LOCAL;
 			endif;
 			
-			return self::$pathroot.'/local';
+			return PATH_ROOT.'/local';
 		}
 		
 		/**
