@@ -14,10 +14,6 @@
 		 */
 		static function init()
 		{
-			if (!defined('PATH_ROOT')):
-				self::setPathRoot();
-			endif;
-				
 			Settings::init();
 			Log::init();
 		}
