@@ -7,7 +7,7 @@
 		
 		static function init()
 		{
-			$file = PATH_ROOT.'/commands.php';
+			$file = Application::PATH_ROOT.'/commands.php';
 			if (is_readable($file)):
 				require($file);
 			endif;

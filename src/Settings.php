@@ -8,8 +8,8 @@
 		static function init(string ...$files)
 		{
 			if (count($files) == 0):
-				$files[] = PATH_ROOT.'/settings.json';
-				$files[] = PATH_ROOT.'/local/settings.json';
+				$files[] = Application::PATH_ROOT.'/settings.json';
+				$files[] = Application::PATH_ROOT.'/local/settings.json';
 			endif;
 				
 			foreach($files as $f):

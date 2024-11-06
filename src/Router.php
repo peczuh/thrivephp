@@ -40,7 +40,7 @@
 			self::$method = $_SERVER['REQUEST_METHOD'];
 			self::$host = $_SERVER['HTTP_HOST'];
 			
-			$file = PATH_ROOT.'/routes.php';
+			$file = Application::PATH_ROOT.'/routes.php';
 			if (is_readable($file)):
 				Log::debug('found routes file');
 				require($file);
