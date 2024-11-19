@@ -186,7 +186,7 @@
 					SELECT json_object_agg(t.key, t.permissions ORDER BY t.key) AS data FROM t
 				),
 				t_roles AS (
-					SELECT json_object_agg(r.id, true) AS data
+					SELECT json_object_agg(r.id, true ORDER BY dashboard_sort NULLS LAST) AS data
 					FROM pz.users AS u
 						JOIN pz.users_roles AS ur ON (ur.user_id = u.id)
 						JOIN pz.roles AS r ON (ur.role_id = r.id)
