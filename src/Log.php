@@ -232,7 +232,7 @@
 			
 			if ($print) {
 				if ($first) $retval .= "\n";
-				if ($first && $html) printf('<pre><div style="border: 1px solid red;">%s</div></pre>', $retval);
+				if ($first && $html) printf('<pre><div style="border: 1px solid rgb(241, 174, 181); color: rgb(88, 21, 28); background: rgb(248, 215, 218); padding: 1rem;">%s</div></pre>', $retval);
 				if ($first && !$html) printf('%s', $retval);
 			} else {
 				return $retval;
