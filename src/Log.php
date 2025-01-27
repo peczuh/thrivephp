@@ -179,7 +179,6 @@
 				case E_USER_ERROR:          throw new UserErrorException ($message, 0, $severity, $file, $line);
 				case E_USER_WARNING:        throw new UserWarningException ($message, 0, $severity, $file, $line);
 				case E_USER_NOTICE:         throw new UserNoticeException ($message, 0, $severity, $file, $line);
-				case E_STRICT:              throw new StrictException ($message, 0, $severity, $file, $line);
 				case E_RECOVERABLE_ERROR:   throw new RecoverableErrorException ($message, 0, $severity, $file, $line);
 				case E_DEPRECATED:          throw new DeprecatedException ($message, 0, $severity, $file, $line);
 				case E_USER_DEPRECATED:     throw new UserDeprecatedException ($message, 0, $severity, $file, $line);
