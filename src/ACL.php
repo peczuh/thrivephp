@@ -23,7 +23,7 @@
 		const none = 0;
 		const select = 1;   // User has read/view/select permission for items belonging to himself
 		const update = 2;   // User has write/save/update permission for items belonging to himeself
-		const create = 4;   // User has write/create/insert permission for items belonging to himself
+		const insert = 4;   // User has write/create/insert permission for items belonging to himself
 		const delete = 8;   // User has delete permission for items belonging to himself
 		const manager = 16;   // User has the above permissions for items belonging to users for who he is a manager
 		const admin = 32;	// User has the above permissions for all items
@@ -138,16 +138,18 @@
 		 */
 		static function users($key, $permissions)
 		{
-			$users = User::select(
-				"SELECT
-					u.id
+			$users = DB::query(<<<SQL
+				SELECT
+					u.id,
+					u.email
 				FROM pz.acl_permissions AS p
 					JOIN pz.acl_keys AS k ON (p.key_id = k.id)
 					JOIN pz.roles AS r ON (p.role_id = r.id)
 					JOIN pz.users_roles AS ur ON (ur.role_id = r.id)
 					JOIN pz.users AS u ON (ur.user_id = u.id)
-				WHERE k.key = $1 AND p.permissions & $2 = $3",
-				[$key, $permissions, $permissions]
+				WHERE k.id = $1 AND p.permissions & $2::integer::bit(6) = $2::integer::bit(6)
+				SQL,
+				$key, $permissions
 			);
 			
 			return $users;
