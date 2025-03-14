@@ -166,6 +166,7 @@
 						json_build_object(
 							'id', id,
 							'login', login,
+							'email', email,
 							'name', name,
 							'superuser', superuser
 						) AS data
