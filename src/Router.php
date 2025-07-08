@@ -19,15 +19,6 @@
 	 */
 	class Router
 	{
-		/** Method in the web server's HTTP header (GET, POST, etc.). */
-		static $method;
-		
-		/** Host in the web server's HTTP header. */
-		static $host;
-		
-		/** Request URL in the server's HTTP header. */
-		static $url;
-		
 		/** Routes registered via Router::register(). */
 		static $routes = [];
 		
@@ -36,9 +27,7 @@
 		 */
 		static function init()
 		{
-			self::$url = $_SERVER['PATH_INFO'];
-			self::$method = $_SERVER['REQUEST_METHOD'];
-			self::$host = $_SERVER['HTTP_HOST'];
+			Request::init();
 			
 			$file = PATH_ROOT.'/routes.php';
 			if (is_readable($file)):
@@ -102,7 +91,7 @@
 		 */
 		static function start()
 		{
-			self::call(host: self::$host, url: self::$url, method: self::$method);
+			self::call(host: Request::$host, url: Request::$url, method: Request::$method);
 		}
 	}
 	
