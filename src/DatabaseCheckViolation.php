@@ -1,0 +1,3 @@
+<?
+	class DatabaseCheckViolation extends DatabaseServerException {}
+?>
