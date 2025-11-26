@@ -64,6 +64,7 @@
 		static function check($key, $permissions, $userId=null)
 		{
 			$userId = $userId ?? $_SESSION['user']['id'] ?? null;
+			Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s)', $key, $permissions, $userId));
 			if (is_null($userId)) throw new PermissionException('could not get user ID to check permissions');
 			
 			// Check permissions with session (avoids potentially hundreds of database lookups)
@@ -71,28 +72,39 @@
 				$superuser = $_SESSION['user']['superuser'] ?? null;
 				$grants = $_SESSION['permissions'][$key] ?? null;
 				
+				Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | found session permissions', $key, $permissions, $userId));
+				
 				if ($superuser):
+					Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | is superuser', $key, $permissions, $userId));
 					return true;
 				endif;
 				
 				if (($grants & $permissions) == $permissions):
+					Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | grant found', $key, $permissions, $userId));
 					return true;
 				endif;
 				
+				Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | no grant found', $key, $permissions, $userId));
+				
 			// Check permissions with database lookup
 			else:
+				Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | session permissions not found', $key, $permissions, $userId));
+				
 				// Check if user is superuser
 				$superuser = DB::query("SELECT count(*) FROM users WHERE id=$1 AND superuser IS TRUE", $userId)->single()->count;
 				if ($superuser):
+					Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | is superuser', $key, $permissions, $userId));
 					return true;
 				endif;
 				
 				$permitted = DB::query("SELECT public.permissions_check($1::text, $2::integer::bit(6), $3::uuid)", $key, $permissions, $userId)->single()->permissions_check;
 				if ($permitted):
+					Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | grant found', $key, $permissions, $userId));
 					return true;
 				endif;
 			endif;
 			
+			Log::trace(sprintf('acl::check(key: %s, permssions: %s, userId: %s) | check failed', $key, $permissions, $userId));
 			return false;
 		}
 		
@@ -160,8 +172,8 @@
 		 */
 		static function session($user_id)
 		{
-			$json = DB::query(
-				"WITH t_user AS (
+			$json = DB::query(<<<'SQL'
+				WITH t_user AS (
 					SELECT u.id,
 						json_build_object(
 							'id', u.id,
@@ -201,8 +213,8 @@
 					'user', (SELECT data FROM t_user),
 					'roles', (SELECT data FROM t_roles),
 					'permissions', (SELECT data FROM t_acl)
-				) AS data",
-				$user_id
+				) AS data
+				SQL, $user_id
 			)->single(json: 'array')->data;
 			
 			return $json;
