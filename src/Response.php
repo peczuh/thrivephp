@@ -23,6 +23,14 @@
 			http_response_code(self::$code);
 		}
 		
+		static function failure(int $code=400, ?array $headers=[])
+		{
+			self::$code = $code;
+			self::$headers = $headers;
+				
+			http_response_code(self::$code);
+		}
+		
 		static function redirect(string $url)
 		{
 			Log::debug('redirecting to '.$url, debug_backtrace());
