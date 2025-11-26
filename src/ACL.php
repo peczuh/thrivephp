@@ -67,9 +67,9 @@
 			if (is_null($userId)) throw new PermissionException('could not get user ID to check permissions');
 			
 			// Check permissions with session (avoids potentially hundreds of database lookups)
-			if ($session = ($_SESSION['user']['permissions'] ?? null)):
-				$superuser = $session['superuser'] ?? null;
-				$grants = $session['acl'][$key] ?? null;
+			if ($session = ($_SESSION['permissions'] ?? null)):
+				$superuser = $_SESSION['user']['superuser'] ?? null;
+				$grants = $_SESSION['permissions'][$key] ?? null;
 				
 				if ($superuser):
 					return true;
@@ -176,7 +176,7 @@
 					WITH t AS(
 						SELECT
 							k.id AS key,
-							bit_or(p.permissions) AS permissions
+							bit_or(p.permissions)::integer AS permissions
 						FROM
 							public.roles_permissions AS p
 							JOIN public.permissions AS k ON (p.key_id = k.id)
@@ -200,7 +200,7 @@
 				SELECT json_build_object(
 					'user', (SELECT data FROM t_user),
 					'roles', (SELECT data FROM t_roles),
-					'acl', (SELECT data FROM t_acl)
+					'permissions', (SELECT data FROM t_acl)
 				) AS data",
 				$user_id
 			)->single(json: 'array')->data;
