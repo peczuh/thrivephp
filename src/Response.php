@@ -23,10 +23,10 @@
 			http_response_code(self::$code);
 		}
 		
-		static function redirect(string $url, ...$values)
+		static function redirect(string $url)
 		{
 			Log::debug('redirecting to '.$url, debug_backtrace());
-			header(sprintf('Location: %s', sprintf($url, ...$values)), true, 302);
+			header(sprintf('Location: %s', $url), true, 302);
 			exit();
 		}
 		

@@ -35,7 +35,7 @@
 			
 			if(!isset($_SESSION['session']['id'])):
 				Log::debug('session is not set, redirecting to login', debug_backtrace());
-				Response::redirect("/login?referrer={$_SERVER['REQUEST_URI']}");
+				Response::redirect("/login?referrer=".urlencode($_SERVER['REQUEST_URI']));
 			endif;
 			
 			try {
