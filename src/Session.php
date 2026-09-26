@@ -27,15 +27,20 @@
 			$_SESSION = array();
 		}
 		
-		static function authenticate()
+		static function authenticate($redirect = '/login')
 		{
 			Log::debug('authenticating');
 			
 			self::start();
 			
 			if(!isset($_SESSION['session']['id'])):
-				Log::debug('session is not set, redirecting to login', debug_backtrace());
-				Response::redirect("/login?referrer=".urlencode($_SERVER['REQUEST_URI']));
+				if ($redirect):
+					Log::debug('session is not set, redirecting', debug_backtrace());
+					Response::redirect("$redirect?referrer=".urlencode($_SERVER['REQUEST_URI'] ?? '/'));
+				endif;
+				
+				Log::debug('session is not set', debug_backtrace());
+				throw new NoAuth('session is not set');
 			endif;
 			
 			try {
@@ -51,7 +56,12 @@
 						$e->getMessage()
 					)
 				);
-				Response::redirect('/login');
+
+				if ($redirect):
+					Response::redirect($redirect.'?referrer='.urlencode($_SERVER['REQUEST_URI'] ?? '/'));
+				endif;
+
+				throw new NoAuth('could not update user session');
 			}
 		}
 		
@@ -77,4 +87,6 @@
 		}
 
 	}
+	
+	class NoAuth extends ContextException {}
 ?>
