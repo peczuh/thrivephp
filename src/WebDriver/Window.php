@@ -93,6 +93,63 @@
 			]));
 		}
 
+		/**
+		 * Re-find in this window/frame every 100 ms until the first match exists, then return it.
+		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
+		 * the browser constructor timeout. Throws on expiry; only missing/stale element
+		 * errors are retried. As with wait(), in-flight commands retain their own timeouts.
+		 */
+		public function findWaitPresent(string $selector, string $using = 'css selector', ?float $timeout = null): Element
+		{
+			return $this->wait(fn() => $this->find($selector, $using), $timeout === null ? null : $timeout / 1000);
+		}
+
+		/**
+		 * Re-find until the first match is displayed, then return it; later matches are ignored.
+		 * Visibility does not guarantee clickability. Uses find() strategies and
+		 * findWaitPresent() polling/error semantics. $timeout is positive, finite
+		 * milliseconds; null uses the browser constructor timeout. Throws on expiry.
+		 */
+		public function findWaitVisible(string $selector, string $using = 'css selector', ?float $timeout = null): Element
+		{
+			return $this->wait(function () use ($selector, $using) {
+				$element = $this->find($selector, $using);
+				return $element->displayed() ? $element : false;
+			}, $timeout === null ? null : $timeout / 1000);
+		}
+
+		/**
+		 * Re-query until no matches remain, including replacements; return this window.
+		 * An empty search succeeds immediately. Uses find() strategies and
+		 * findWaitPresent() polling/error semantics. $timeout is positive, finite
+		 * milliseconds; null uses the browser constructor timeout. Throws on expiry.
+		 */
+		public function waitNotPresent(string $selector, string $using = 'css selector', ?float $timeout = null): self
+		{
+			$this->wait(fn() => $this->findAll($selector, $using)->count() === 0, $timeout === null ? null : $timeout / 1000);
+			return $this;
+		}
+
+		/**
+		 * Re-query until no matches are displayed, including replacements; return this window.
+		 * An empty search succeeds immediately. Uses find() strategies and
+		 * findWaitPresent() polling/error semantics; a stale match triggers a fresh search.
+		 * $timeout is positive, finite milliseconds; null uses the browser constructor
+		 * timeout. Throws on expiry.
+		 */
+		public function waitNotVisible(string $selector, string $using = 'css selector', ?float $timeout = null): self
+		{
+			$this->wait(function () use ($selector, $using) {
+				foreach ($this->findAll($selector, $using) as $element):
+					if ($element->displayed()):
+						return false;
+					endif;
+				endforeach;
+				return true;
+			}, $timeout === null ? null : $timeout / 1000);
+			return $this;
+		}
+
 		/** Return a snapshot in document order, including an empty set when nothing matches. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{

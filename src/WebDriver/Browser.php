@@ -164,6 +164,48 @@
 			return $this->window()->find($selector, $using);
 		}
 
+		/**
+		 * Re-find in the current window/frame until the first match exists, then return it.
+		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
+		 * the constructor timeout. Throws on expiry; see Window::findWaitPresent().
+		 */
+		public function findWaitPresent(string $selector, string $using = 'css selector', ?float $timeout = null): Element
+		{
+			return $this->window()->findWaitPresent($selector, $using, $timeout);
+		}
+
+		/**
+		 * Re-find until the first match is displayed, then return it (not a clickability guarantee).
+		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
+		 * the constructor timeout. Throws on expiry; see Window::findWaitVisible().
+		 */
+		public function findWaitVisible(string $selector, string $using = 'css selector', ?float $timeout = null): Element
+		{
+			return $this->window()->findWaitVisible($selector, $using, $timeout);
+		}
+
+		/**
+		 * Re-query until no matches remain, including replacements; return this browser.
+		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
+		 * the constructor timeout. Throws on expiry; an empty search succeeds immediately.
+		 */
+		public function waitNotPresent(string $selector, string $using = 'css selector', ?float $timeout = null): self
+		{
+			$this->window()->waitNotPresent($selector, $using, $timeout);
+			return $this;
+		}
+
+		/**
+		 * Re-query until no matches are displayed, including replacements; return this browser.
+		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
+		 * the constructor timeout. Throws on expiry; an empty search succeeds immediately.
+		 */
+		public function waitNotVisible(string $selector, string $using = 'css selector', ?float $timeout = null): self
+		{
+			$this->window()->waitNotVisible($selector, $using, $timeout);
+			return $this;
+		}
+
 		/** Return a snapshot of matching elements in document order, possibly empty. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{

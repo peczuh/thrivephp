@@ -4,7 +4,8 @@
 	/**
 	 * A DOM element bound to its browser window and original frame path. Commands
 	 * select that context automatically and return this element for fluent chaining.
-	 * References are never silently re-found: stale-element errors propagate.
+	 * References are never silently re-found: stale-element errors propagate except
+	 * when completing waitNotPresent() or waitNotVisible().
 	 */
 	class Element
 	{
@@ -202,6 +203,54 @@
 		public function displayed(): bool
 		{
 			return $this->request('GET', '/displayed');
+		}
+
+		/**
+		 * Poll the original node every 100 ms until stale, then return this same (unusable)
+		 * element, without finding replacements. $timeout is positive, finite milliseconds;
+		 * null uses the browser constructor timeout. Throws on expiry; other errors follow
+		 * Browser::wait() semantics. In-flight commands retain their own timeouts.
+		 */
+		public function waitNotPresent(?float $timeout = null): self
+		{
+			$browser = $this->window->browser();
+			$browser->wait(function () use ($browser) {
+				// A stale frame during context restoration is not proof that this node is stale.
+				$browser->activate($this->window, $this->frames);
+				try {
+					$this->tag();
+					return false;
+				} catch (\RuntimeException $error) {
+					if (!preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
+						throw $error;
+					endif;
+					return true;
+				}
+			}, $timeout === null ? null : $timeout / 1000);
+			return $this;
+		}
+
+		/**
+		 * Poll the original node until hidden or stale; replacements are not re-found.
+		 * Return this same element; a stale reference remains unusable. Uses waitNotPresent()
+		 * polling/error semantics. $timeout is positive, finite milliseconds; null uses
+		 * the browser constructor timeout. Throws on expiry.
+		 */
+		public function waitNotVisible(?float $timeout = null): self
+		{
+			$browser = $this->window->browser();
+			$browser->wait(function () use ($browser) {
+				$browser->activate($this->window, $this->frames);
+				try {
+					return !$this->displayed();
+				} catch (\RuntimeException $error) {
+					if (!preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
+						throw $error;
+					endif;
+					return true;
+				}
+			}, $timeout === null ? null : $timeout / 1000);
+			return $this;
 		}
 
 		/** Return enabled state according to WebDriver's form-control rules. */
