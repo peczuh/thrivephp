@@ -1,10 +1,12 @@
 <?
-	namespace ThriveData\ThrivePHP;
+	namespace ThriveData\ThrivePHP\Database;
+
+	use ThriveData\ThrivePHP\Settings;
 	
 	/**
 	 * Connection to the database.
 	 */
-	class DatabaseConnection
+	class Connection
 	{
 		private $connection;
 		
@@ -66,17 +68,17 @@
 		public function send($query, ...$params)
 		{
 			if (pg_connection_busy($this->connection)):
-				throw new DatabaseException('connection is busy');
+				throw new Exception('connection is busy');
 			endif;
 			
 			$result = pg_get_result($this->connection);
 			if ($result !== false):
-				throw new DatabaseException('results on connection');
+				throw new Exception('results on connection');
 			endif;
 			
 			$status = pg_send_query_params($this->connection, $query, $params);
 			if (!$status):
-				throw new DatabaseException('Could not send query.');
+				throw new Exception('Could not send query.');
 			endif;
 			
 			$result = false;
@@ -85,7 +87,7 @@
 			endwhile;
 			
 			if ($result === false):
-				throw new DatabaseException('Could not get query result.');
+				throw new Exception('Could not get query result.');
 			endif;
 			
 			$error = pg_result_error($result);
@@ -105,44 +107,44 @@
 					'datatype' => pg_result_error_field($result, PGSQL_DIAG_DATATYPE_NAME),
 					'constraint' => pg_result_error_field($result, PGSQL_DIAG_CONSTRAINT_NAME),
 				];
-				$fields['condition'] = DatabaseCondition::$codes[$fields['sqlstate']] ?? $fields['sqlstate'];
+				$fields['condition'] = Condition::$codes[$fields['sqlstate']] ?? $fields['sqlstate'];
 				
 				$cancel = pg_cancel_query($this->connection);
 				if ($cancel === false):
-					throw new DatabaseException('Could not cancel query after error.');
+					throw new Exception('Could not cancel query after error.');
 				endif;
 				
 				// this prevents "Cannot set connection to blocking mode"
 				$close = pg_close($this->connection);
 				if ($close == false):
-					throw new DatabaseException('Could not close connection after error.');
+					throw new Exception('Could not close connection after error.');
 				endif;
 				
 				switch ($fields['condition']):
 					case 'data_exception':
-						throw new DatabaseDataException(...$fields); break;
+						throw new DataException(...$fields); break;
 					case 'datatype_mismatch':   // 42804
-						throw new DatabaseDatatypeMismatch(...$fields); break;
+						throw new DataTypeMismatch(...$fields); break;
 					case 'not_null_violation':   // 23502
-						throw new DatabaseNotNullViolation(...$fields); break;
+						throw new NotNullViolation(...$fields); break;
 					case 'undefined_column':
-						throw new DatabaseUndefinedColumn(...$fields); break;
+						throw new UndefinedColumn(...$fields); break;
 					case 'unique_violation':
-						throw new DatabaseUniqueViolation(...$fields); break;
+						throw new UniqueViolation(...$fields); break;
 					case 'check_violation':
-						throw new DatabaseCheckViolation(...$fields); break;
+						throw new CheckViolation(...$fields); break;
 					case 'exclusion_violation':
-						throw new DatabaseExclusionViolation(...$fields); break;
+						throw new ExclusionViolation(...$fields); break;
 					case 'invalid_text_representation':
-						throw new DatabaseInvalidTextRepresentation(...$fields); break;
+						throw new InvalidTextRepresentation(...$fields); break;
 					case 'foreign_key_violation':
-						throw new DatabaseForeignKeyViolation(...$fields); break;
+						throw new ForeignKeyViolation(...$fields); break;
 					default:
-						throw new DatabaseServerException(...$fields);
+						throw new ServerException(...$fields);
 				endswitch;
 			endif;
 			
-			return new DatabaseResult($result);
+			return new Result($result);
 		}
 
 		public function update($table, $data, $condition)

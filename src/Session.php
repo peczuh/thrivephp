@@ -49,7 +49,7 @@
 					SQL, $_SESSION['session']['id']
 				)->single();
 				Log::debug(sprintf('updated user session | id=[%s]', $session->id), debug_backtrace());
-			} catch (\ThriveData\ThrivePHP\DatabaseNoResult $e) {
+			} catch (\ThriveData\ThrivePHP\Database\NoResult $e) {
 				Log::debug(
 					sprintf('could not update user session | id=[%s] | message=[%s] ',
 						$_SESSION['session']['id'],

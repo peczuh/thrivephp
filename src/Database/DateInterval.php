@@ -1,7 +1,7 @@
 <?
-	namespace ThriveData\ThrivePHP;
+	namespace ThriveData\ThrivePHP\Database;
 	
-	class DatabaseDateInterval extends \DateInterval
+	class DateInterval extends \DateInterval
 	{
 		private $y, $m, $d, $h, $i, $s, $f;
 		

@@ -11,13 +11,13 @@
 		 */
 		static function query($query, ...$params)
 		{
-			$c = new DatabaseConnection();
+			$c = new Database\Connection();
 			return $c->query($query, ...$params);
 		}
 		
 		static function send($query, ...$params)
 		{
-			$c = new DatabaseConnection();
+			$c = new Database\Connection();
 			return $c->send($query, ...$params);
 		}
 		
@@ -26,7 +26,7 @@
 		 */
 		static function update($table, $data, $condition)
 		{
-			$c = new DatabaseConnection();
+			$c = new Database\Connection();
 			return $c->update($table, $data, $condition);
 		}
 		
@@ -35,7 +35,7 @@
 		 */
 		static function insert($table, $data)
 		{
-			$c = new DatabaseConnection();
+			$c = new Database\Connection();
 			return $c->insert($table, $data);
 		}
 	}

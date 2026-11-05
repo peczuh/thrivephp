@@ -1,7 +1,7 @@
 <?
-	namespace ThriveData\ThrivePHP;
+	namespace ThriveData\ThrivePHP\Database;
 	
-	class DatabaseCondition
+	class Condition
 	{
 		static $codes = [
 			// data exception

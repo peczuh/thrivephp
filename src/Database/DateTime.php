@@ -1,7 +1,7 @@
 <?
-	namespace ThriveData\ThrivePHP;
+	namespace ThriveData\ThrivePHP\Database;
 	
-	class DatabaseDateTime extends \DateTime
+	class DateTime extends \DateTime
 	{
 		public function __toString()
 		{

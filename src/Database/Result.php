@@ -1,7 +1,7 @@
 <?
-	namespace ThriveData\ThrivePHP;
+	namespace ThriveData\ThrivePHP\Database;
 	
-	class DatabaseResult
+	class Result
 	{
 		private $result;
 		private $types;
@@ -63,12 +63,12 @@
 						case 'timestamptz':
 						case 'date':
 							if($value):
-								$value = new DatabaseDateTime($value);
+								$value = new DateTime($value);
 							endif;
 							break;
 						case 'interval':
 							if($value):
-								$value = new DatabaseDateInterval($value);
+								$value = new DateInterval($value);
 							endif;
 							break;
 						case 'json':
@@ -89,11 +89,11 @@
 			if ($this->rows() == 1):
 				return $this->fetch(convert: $convert, columns: $columns, json: $json);
 			elseif ($this->rows() == 0):
-				throw new DatabaseNoResult('no result');
+				throw new NoResult('no result');
 			elseif ($this->rows() > 1):
-				throw new DatabaseManyResults('result is not single row');
+				throw new ManyResults('result is not single row');
 			else:
-				throw new DatabaseException('unknown exception');
+				throw new Exception('unknown exception');
 			endif;
 		}
 		

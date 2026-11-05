@@ -1,7 +1,7 @@
 <?
-	namespace ThriveData\ThrivePHP;
+	namespace ThriveData\ThrivePHP\Database;
 	
-	class DatabaseServerException extends DatabaseException
+	class ServerException extends Exception
 	{
 		public function __construct(
 			public $severity,
