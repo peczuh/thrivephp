@@ -62,8 +62,8 @@
 		 * Assert this window's top-level URL matches a delimited PHP regex. $wait polls
 		 * every 100 ms; $timeout is positive milliseconds or null for the browser default,
 		 * ignored without waiting. Report once after success or expiry.
-		 * Return this window. Invalid patterns throw; results use Browser's assertion
-		 * callback, or throw on failure when none was supplied.
+		 * Return this window. Invalid patterns throw. Results report to the active Test;
+		 * failures throw both inside and outside Test::run().
 		 */
 		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null): self
 		{

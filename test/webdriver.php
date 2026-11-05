@@ -2,6 +2,7 @@
 
 // Run with: php test/webdriver.php (pcntl is used only by the local test driver).
 require dirname(__DIR__) . '/src/WebSocket.php';
+require __DIR__ . '/fixtures/test-runner.php';
 spl_autoload_register(function ($class) {
 	$prefix = 'ThriveData\\ThrivePHP\\WebDriver\\';
 	if (str_starts_with($class, $prefix)):
@@ -16,6 +17,24 @@ use ThriveData\ThrivePHP\WebDriver\Window;
 use ThriveData\ThrivePHP\WebDriver\ShadowRoot;
 use ThriveData\ThrivePHP\WebDriver\Screenshot;
 use ThriveData\ThrivePHP\WebDriver\PDF;
+use ThriveData\ThrivePHP\Test;
+
+/** Observe protocol assertion results independently of the runner's stopping behavior. */
+class RecordingBrowser extends Browser
+{
+	private Closure $record;
+
+	public function __construct(string $endpoint, string $browser, callable $record, float $timeout = 10)
+	{
+		$this->record = Closure::fromCallable($record);
+		parent::__construct($endpoint, $browser, timeout: $timeout);
+	}
+
+	public function reportAssertion(bool $condition, string $message): void
+	{
+		($this->record)($condition, $message);
+	}
+}
 
 const PRINT_DEFAULTS = [
 	'orientation' => 'portrait', 'scale' => 1, 'background' => false,
@@ -177,6 +196,63 @@ foreach (['chrome', 'firefox', 'safari'] as $browser):
 	});
 endforeach;
 
+foreach (['element', 'browser URL', 'window URL', 'count', 'empty snapshot', 'find', 'wait'] as $operation):
+	scenario("automatic Test reporting stops $operation failures and runs cleanup", function ($listener) use ($operation) {
+		createSession($listener);
+		exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'node']);
+		exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, true);
+		switch ($operation) {
+			case 'element':
+				exchange($listener, 'GET', '/session/session%2F1/element/node/text', null, 'Actual');
+				break;
+			case 'browser URL':
+			case 'window URL':
+				exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/actual');
+				break;
+			case 'count':
+				exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+				break;
+			case 'find':
+				exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '.missing'], ['error' => 'no such element', 'message' => 'absent'], 404);
+				break;
+			case 'wait':
+				exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, false);
+				break;
+		}
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($operation) {
+		$continued = false;
+		$cleaned = false;
+		[$status, $output] = runChecks([
+			'check' => function (Test $test) use ($url, $operation, &$continued, &$cleaned) {
+				$browser = new Browser($url, 'firefox');
+				try {
+					$element = $browser->find('#node')->isVisible();
+					$test->verify(false, 'continuing verification');
+					switch ($operation) {
+						case 'element': $element->textEquals('Expected'); break;
+						case 'browser URL': $browser->urlMatches('~/expected$~'); break;
+						case 'window URL': $browser->window()->urlMatches('~/expected$~'); break;
+						case 'count': $browser->findAll('.missing')->countEquals(1); break;
+						case 'empty snapshot': (new ElementSet())->countEquals(1); break;
+						case 'find': $browser->find('.missing', assert: true); break;
+						case 'wait': $element->wait(visible: true, assert: true, timeout: 20); break;
+					}
+					$continued = true;
+				} finally {
+					$browser->quit();
+					$cleaned = true;
+				}
+			},
+			'next' => function (Test $test) { $test->assert(true, 'Subsequent check ran.'); },
+		]);
+		verify($status === 1 && !$continued && $cleaned, 'Browser failure did not stop its check and run cleanup: ' . $output);
+		verify(str_contains($output, 'Checks: 1 passed, 1 failed') && str_contains($output, 'Assertions: 2 passed, 2 failed'), $output);
+		verify(substr_count($output, 'expected ') === 1 && !str_contains($output, 'Execution error'), 'Browser failure was not reported exactly once: ' . $output);
+		verify(Test::active() === null, 'Browser failure leaked its active recorder.');
+	});
+endforeach;
+
 $assertionCases = [
 	['isVisible', [], '/displayed', true, true, 'expected true, got true'],
 	['isVisible', [], '/displayed', false, false, 'expected true, got false'],
@@ -196,7 +272,7 @@ $assertionCases = [
 	['attributeMatches', ['missing', '/^$/'], '/attribute/missing', null, false, "expected a match for '/^$/', got NULL"],
 ];
 
-scenario('fluent element assertions report each result once and continue after recorded failures', function ($listener) use ($assertionCases) {
+scenario('protocol assertions report each result once through the recording probe', function ($listener) use ($assertionCases) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
 	foreach ($assertionCases as [$method, $arguments, $path, $actual]):
@@ -212,7 +288,7 @@ scenario('fluent element assertions report each result once and continue after r
 			return $condition;
 		}
 	};
-	$browser = new Browser($url, 'firefox', assert: [$recorder, 'assert']);
+	$browser = new RecordingBrowser($url, 'firefox', record: [$recorder, 'assert']);
 	$element = $browser->find('#name');
 	foreach ($assertionCases as $index => [$method, $arguments, $path, $actual, $expected, $message]):
 		verify($element->$method(...$arguments) === $element, "$method lost the fluent receiver.");
@@ -254,7 +330,7 @@ scenario('count assertions report empty window, descendant and shadow searches w
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$empty = $browser->findAll('.missing');
 	verify($empty->countEquals(0)->countEquals(1) === $empty, 'Empty count assertion lost its set.');
 	$set = $browser->findAll('input');
@@ -289,7 +365,7 @@ foreach (['browser', 'window'] as $receiver):
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($receiver) {
 		$results = [];
-		$browser = new Browser($url, 'firefox', assert: function (bool $condition, string $message) use (&$results): bool {
+		$browser = new RecordingBrowser($url, 'firefox', record: function (bool $condition, string $message) use (&$results): bool {
 			$results[] = [$condition, $message];
 			return $condition;
 		});
@@ -337,7 +413,7 @@ scenario('URL assertions retain receivers and select the top-level window withou
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$window = $browser->window()->switchFrame(0);
 	$browser->switch('other');
 	verify($window->urlMatches('~/projects/\d+$~') === $window, 'URL assertion lost its window.');
@@ -363,7 +439,7 @@ scenario('element assertions restore captured context and distinguish stale refe
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$element = $browser->switchFrame(0)->find('#original');
 	$browser->switch('other');
 	$element->isVisible();
@@ -386,7 +462,7 @@ scenario('invalid assertion patterns and callback exceptions propagate without e
 }, function ($url) {
 	$calls = 0;
 	$expected = new RuntimeException('WebDriver HTTP 404 stale element reference: recorder failure');
-	$browser = new Browser($url, 'firefox', assert: function () use (&$calls, $expected) { $calls++; throw $expected; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function () use (&$calls, $expected) { $calls++; throw $expected; });
 	$element = $browser->find('#name');
 	expectError(fn() => $element->attributeMatches('missing', '/[/'), 'Could not evaluate assertion pattern');
 	expectError(fn() => $browser->urlMatches('not delimited'), 'Could not evaluate assertion pattern');
@@ -430,7 +506,7 @@ foreach ($retryAssertions as [$method, $arguments, $path, $pending, $ready]):
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($method, $arguments) {
 		$results = [];
-		$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+		$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 		$element = $browser->switchFrame(0)->find('//status', 'xpath');
 		$browser->switch('other');
 		verify($element->$method(...[...$arguments, 'wait' => true, 'timeout' => 1000])->click() === $element, 'Retry lost its fluent receiver.');
@@ -455,7 +531,7 @@ scenario('assertion retries handle missing matches and report timeout once with 
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', timeout: 0.05, assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', timeout: 0.05, record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$element = $browser->find('#status')->textEquals('Saved', wait: true, timeout: 1000);
 	foreach ([20, null] as $timeout):
 		$start = microtime(true);
@@ -482,7 +558,7 @@ scenario('selectorless focus and script references poll live nodes but fail imme
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; });
 	$element = $browser->activeElement()->textEquals('Done', wait: true, timeout: 1000);
 	expectError(fn() => $element->textEquals('Done', wait: true, timeout: 1000), 'focus removed');
 	$script = $browser->script('return node;');
@@ -554,7 +630,7 @@ scenario('waiting counts refresh empty searches and positional members retain th
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; });
 	$set = $browser->findAll('.row');
 	verify($set->countEquals(2, wait: true, timeout: 1000) === $set && $set->count() === 2, 'Successful count did not update the snapshot.');
 	$set->get(1)->textEquals('Done', wait: true, timeout: 1000)->click();
@@ -579,7 +655,7 @@ scenario('stale selectorless search ancestors fail without retrying or recording
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; });
 	$parent = $browser->activeElement();
 	$child = $parent->find('.child');
 	$set = $parent->findAll('.child');
@@ -605,7 +681,7 @@ scenario('count timeouts preserve the snapshot and context errors propagate', fu
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', timeout: 0.05, assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', timeout: 0.05, record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$set = $browser->switchFrame(0)->findAll('.row');
 	foreach ([20, null] as $timeout):
 		$start = microtime(true);
@@ -639,7 +715,7 @@ scenario('consolidated find reports once and still throws when a prerequisite fa
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; return false; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; return false; });
 	verify($browser->find('#new', wait: true, assert: true, timeout: 1000)->id() === 'new', 'Find lost its match.');
 	expectError(fn() => $browser->find('#new', visible: true, assert: true, timeout: -1), 'WebDriver find failed');
 	verify($browser->find('#new', wait: true, invert: true, assert: true, timeout: 1000) === null, 'Inverse presence did not return null.');
@@ -661,7 +737,7 @@ scenario('URL assertion retries report once and preserve timeout/default and cal
 	$results = [];
 	$throw = false;
 	$expected = new RuntimeException('WebDriver HTTP 404 no such element: recorder failure');
-	$browser = new Browser($url, 'firefox', timeout: 0.05, assert: function ($condition, $message) use (&$results, &$throw, $expected) {
+	$browser = new RecordingBrowser($url, 'firefox', timeout: 0.05, record: function ($condition, $message) use (&$results, &$throw, $expected) {
 		$results[] = [$condition, $message];
 		if ($throw) throw $expected;
 	});
@@ -1520,7 +1596,7 @@ foreach ([[false, false], [true, false], [false, true], [true, true]] as [$visib
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($visible, $invert) {
 		$results = [];
-		$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+		$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 		$element = $browser->find('#node');
 		verify($element->wait(visible: $visible, invert: $invert, assert: true, timeout: 1000) === $element, 'Wait lost its original receiver.');
 		verify($element->id() === 'original' && array_column($results, 0) === [true], 'Wait re-found a replacement or reported intermediate results.');
@@ -1539,7 +1615,7 @@ scenario('positive element waits propagate stale references without re-finding o
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; });
 	$element = $browser->find('#node');
 	expectError(fn() => $element->wait(assert: true, timeout: 1000), 'original removed');
 	expectError(fn() => $element->wait(visible: true, assert: true, timeout: 1000), 'original removed');
@@ -1557,7 +1633,7 @@ scenario('element wait reports expiry before throwing and propagates recorder ex
 	$results = [];
 	$throw = false;
 	$expected = new RuntimeException('WebDriver HTTP 404 stale element reference: recorder failure');
-	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results, &$throw, $expected) {
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results, &$throw, $expected) {
 		$results[] = [$condition, $message];
 		if ($throw) throw $expected;
 		return false;

@@ -9,7 +9,7 @@
 	 * Script/focus references have no lookup: they can be polled but staleness propagates.
 	 * Original-node disappearance waits never re-find. isNotVisible() also accepts a stale
 	 * original reference when no lookup is being retried. Assertions return this element
-	 * and report once through Browser's callback; without it, failed assertions throw.
+	 * and report once to the active Test. Failed assertions always throw.
 	 * Assertion $timeout is positive, finite milliseconds, null for the browser default,
 	 * and ignored without $wait. Polling is every 100 ms; commands retain their own timeouts.
 	 */
@@ -225,8 +225,8 @@
 		 * re-find replacements. Return this element on success; a stale reference stays unusable.
 		 * Poll every 100 ms. $timeout is positive, finite milliseconds; null uses the browser
 		 * constructor timeout. In-flight commands retain their own timeouts. $assert reports
-		 * one final result. Expiry throws even if the recorder continues. Staleness immediately
-		 * fails positive conditions; context and unrelated driver errors always propagate.
+		 * one final result. Expiry always throws. Staleness immediately fails positive
+		 * conditions; context and unrelated driver errors always propagate.
 		 */
 		public function wait(bool $visible = false, bool $invert = false, bool $assert = false, ?float $timeout = null): self
 		{

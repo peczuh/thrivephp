@@ -7,6 +7,7 @@ namespace ThriveData\ThrivePHP;
 /** Runs callable check files and reports accumulated assertions. */
 class Test
 {
+    private static ?self $active = null;
     private int $passed = 0;
     private int $failed = 0;
     private array $failures = [];
@@ -48,8 +49,25 @@ class Test
         }
     }
 
-    /** Record an assertion without throwing; return its condition for prerequisite guards. */
+    /** The recorder for the currently executing check, or null outside run(). */
+    public static function active(): ?self
+    {
+        return self::$active;
+    }
+
+    /** Record a result; failure throws Test\AssertionFailure to stop the current check. */
     public function assert(bool $condition, string $message): bool
+    {
+        $this->verify($condition, $message);
+        if (!$condition) {
+            throw new Test\AssertionFailure($message);
+        }
+
+        return $condition;
+    }
+
+    /** Record a result and continue, returning the condition for prerequisite guards. */
+    public function verify(bool $condition, string $message): bool
     {
         if ($condition) {
             $this->passed++;
@@ -207,6 +225,8 @@ class Test
     /**
      * Run checks and print results. Return 0 only when every selected check passes.
      * Check files return callables accepting this Test; their return values are ignored.
+     * Register this instance as the process-wide active recorder during each check,
+     * restoring the previous recorder afterward. Assertion failures stop only that check.
      *
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
      */
@@ -259,6 +279,8 @@ class Test
                 throw new \ErrorException($message, 0, $severity, $file, $line);
             });
 
+            $previous = self::$active;
+            self::$active = $this;
             try {
                 // Keep variables declared by a check file out of the runner's scope.
                 $check = (static fn (string $path) => require($path))($files[$name]);
@@ -271,9 +293,12 @@ class Test
                 if ($this->passed + $this->failed === 0) {
                     $this->failures[] = 'No assertions ran.';
                 }
+            } catch (Test\AssertionFailure $error) {
+                // assert() already recorded this failure before stopping the check.
             } catch (\Throwable $error) {
                 $this->failures[] = 'Execution error: ' . get_class($error) . ': ' . $error->getMessage();
             } finally {
+                self::$active = $previous;
                 restore_error_handler();
                 // Application::init installs a shutdown handler that rethrows even suppressed errors.
                 error_clear_last();

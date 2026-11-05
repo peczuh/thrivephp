@@ -149,11 +149,10 @@
 		 * arguments/preferences are retained, but the detected binary cannot be replaced.
 		 * Failure during session creation stops the owned service: a lost response may
 		 * have left a remote session that this client cannot identify for deletion.
-		 * $assert receives (bool $condition, string $message) once per fluent assertion;
-		 * pass [$test, 'assert'] to record results. Its return value is ignored and its
-		 * exceptions propagate. Null makes failed assertions throw. Assertions retry only with $wait.
+		 * Assertions report automatically to the active Test and stop its check on failure.
+		 * Outside Test::run(), failures throw. Assertions retry only with $wait.
 		 */
-		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = [], ?callable $assert = null): Browser
+		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = []): Browser
 		{
 			if ($this->process === null || !$this->process->running()):
 				throw new \LogicException('WebDriver service is not running. Construct a new WebDriver to restart it.');
@@ -193,7 +192,7 @@
 				default => $name,
 			};
 			try {
-				return $this->session = new Browser($this->endpoint, $protocolName, $bidi, $timeout, $capabilities, $assert);
+				return $this->session = new Browser($this->endpoint, $protocolName, $bidi, $timeout, $capabilities);
 			} catch (\Throwable $error) {
 				try {
 					$this->stop();

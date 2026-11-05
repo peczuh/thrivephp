@@ -2,6 +2,7 @@
 	namespace ThriveData\ThrivePHP\WebDriver;
 
 	use ThriveData\ThrivePHP\WebSocket;
+	use ThriveData\ThrivePHP\Test;
 
 	/**
 	 * One browser session using classic HTTP WebDriver and optional WebDriver BiDi.
@@ -62,8 +63,6 @@
 		private ?Window $currentWindow = null;
 		/** Selected frame path; null means a failed switch left the context uncertain. */
 		private ?array $currentFrames = [];
-		/** Shared assertion recorder; null makes failed assertions throw. */
-		private ?\Closure $assertion = null;
 
 		/**
 		 * Create a session immediately, connecting BiDi if requested. $endpoint is the
@@ -72,10 +71,8 @@
 		 * Chrome; $browser and $bidi determine browserName and webSocketUrl themselves.
 		 * $timeout is positive seconds: an HTTP stream I/O timeout and a BiDi command/
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
-		 * $assert optionally receives (bool $condition, string $message) once per fluent
-		 * assertion, including successes. Its return value is ignored; exceptions propagate.
-		 * Without it, failed assertions throw RuntimeException. Assertions retry only with $wait.
-		 * For a test recorder, pass assert: [$test, 'assert'].
+		 * Assertions report automatically to the active Test and stop its check on failure.
+		 * Outside Test::run(), failures throw RuntimeException. Assertions retry only with $wait.
 		 */
 		public function __construct(
 			private string $endpoint,
@@ -83,9 +80,7 @@
 			bool $bidi = false,
 			private float $timeout = 10,
 			array $capabilities = [],
-			?callable $assert = null,
 		) {
-			$this->assertion = $assert === null ? null : \Closure::fromCallable($assert);
 			$this->deadline($timeout);
 			$this->endpoint = self::baseUrl($endpoint);
 			$capabilities['browserName'] = $browser;
@@ -384,8 +379,8 @@
 		/**
 		 * Assert that the current window URL matches a delimited PHP regex. $wait polls;
 		 * $timeout is positive milliseconds or null for the browser default, ignored without waiting.
-		 * Return this browser. Invalid patterns throw; results use the constructor's
-		 * assertion callback, or throw on failure when none was supplied.
+		 * Return this browser. Invalid patterns throw. Results report to the active Test;
+		 * failures throw both inside and outside Test::run().
 		 */
 		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null): self
 		{
@@ -393,11 +388,11 @@
 			return $this;
 		}
 
-		/** @internal Report one assertion result; callback return values do not control the chain. */
+		/** @internal Report once to the active Test; failed assertions always throw. */
 		public function reportAssertion(bool $condition, string $message): void
 		{
-			if ($this->assertion !== null):
-				($this->assertion)($condition, $message);
+			if (($test = Test::active()) !== null):
+				$test->assert($condition, $message);
 			elseif (!$condition):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);
 			endif;

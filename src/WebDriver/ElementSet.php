@@ -13,12 +13,12 @@
 	{
 		/** @var Element[] */
 		private array $elements;
-		/** Search owner for reporting assertions, including searches with no matches. */
+		/** Search owner for polling and reporting, including searches with no matches. */
 		private ?Browser $browser = null;
 		/** Retained collection query; explicitly constructed snapshots have none. */
 		private ?Lookup $lookup = null;
 
-		/** Explicit snapshots use the first element's assertion recorder, if any. */
+		/** Explicit snapshots retain the first element's browser, if any. */
 		public function __construct(Element ...$elements)
 		{
 			$this->elements = array_values($elements);
@@ -48,7 +48,7 @@
 		 * 100 ms and adopts membership on success; snapshots without a lookup cannot wait.
 		 * $timeout is positive, finite milliseconds, null for the browser default, and
 		 * ignored without waiting. Report once after success or expiry. Driver errors propagate.
-		 * Use Browser's assertion callback, or throw on failure when none was supplied.
+		 * Report to the active Test, including empty explicit snapshots. Failures always throw.
 		 */
 		public function countEquals(int $expected, bool $wait = false, ?float $timeout = null): self
 		{
@@ -80,6 +80,8 @@
 			$message = 'Element count: expected ' . $expected . ', got ' . $actual . '.';
 			if ($this->browser !== null):
 				$this->browser->reportAssertion($passed, $message);
+			elseif (($test = \ThriveData\ThrivePHP\Test::active()) !== null):
+				$test->assert($passed, $message);
 			elseif (!$passed):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);
 			endif;

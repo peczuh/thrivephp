@@ -2,6 +2,7 @@
 
 // Run with: php test/webdriver-runtime.php. Uses PHP child processes, never real browsers.
 require dirname(__DIR__) . '/src/WebSocket.php';
+require __DIR__ . '/fixtures/test-runner.php';
 spl_autoload_register(function ($class) {
 	$prefix = 'ThriveData\\ThrivePHP\\WebDriver\\';
 	if (str_starts_with($class, $prefix)) require dirname(__DIR__) . '/src/WebDriver/' . substr($class, strlen($prefix)) . '.php';
@@ -11,6 +12,7 @@ use ThriveData\ThrivePHP\WebDriver\Browser;
 use ThriveData\ThrivePHP\WebDriver\Discovery;
 use ThriveData\ThrivePHP\WebDriver\DriverProcess;
 use ThriveData\ThrivePHP\WebDriver\WebDriver;
+use ThriveData\ThrivePHP\Test;
 
 function check(bool $condition, string $message): void
 {
@@ -346,21 +348,27 @@ try {
 		raises(fn() => $driver->browser(), 'not running', LogicException::class);
 	});
 
-	scenario('session factory forwards assertion callbacks without retaining them for later sessions', function () {
+	scenario('session factory reports to the active Test across sessions without retaining a recorder', function () {
 		FixtureDriver::$source = installation(['firefox']);
 		$driver = new FixtureDriver(browser: 'firefox');
-		$results = [];
 		try {
-			$first = $driver->browser(assert: function (bool $condition, string $message) use (&$results): bool {
-				$results[] = [$condition, $message];
-				return $condition;
-			});
-			check($first->urlMatches('~/fixture$~')->urlMatches('~/missing$~') === $first, 'Factory callback did not preserve the chain.');
-			check(array_column($results, 0) === [true, false], 'Factory did not forward assertion results.');
+			$first = $driver->browser();
+			$continued = false;
+			[$status, $output] = runChecks(['check' => function () use ($first, &$continued) {
+				check($first->urlMatches('~/fixture$~') === $first, 'Successful assertion lost its receiver.');
+				$first->urlMatches('~/missing$~');
+				$continued = true;
+			}]);
+			check($status === 1 && !$continued && str_contains($output, 'Assertions: 1 passed, 1 failed') && !str_contains($output, 'Execution error'), $output);
+			raises(fn() => $first->urlMatches('~/missing$~'), 'WebDriver assertion failed');
 			$first->quit();
 			$second = $driver->browser();
+			[$status, $output] = runChecks(['check' => function () use ($second) {
+				$second->urlMatches('~/fixture$~');
+			}]);
+			check($status === 0 && str_contains($output, 'Assertions: 1 passed, 0 failed'), $output);
 			raises(fn() => $second->urlMatches('~/missing$~'), 'WebDriver assertion failed');
-			check(count($results) === 2, 'New session retained the previous recorder.');
+			check(Test::active() === null, 'Factory assertion leaked a recorder.');
 		} finally {
 			$driver->stop();
 		}
