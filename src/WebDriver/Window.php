@@ -59,13 +59,22 @@
 		}
 
 		/**
-		 * Assert once that this window's top-level URL matches a delimited PHP regex.
+		 * Assert this window's top-level URL matches a delimited PHP regex. $wait polls
+		 * every 100 ms; $timeout is positive milliseconds or null for the browser default,
+		 * ignored without waiting. Report once after success or expiry.
 		 * Return this window. Invalid patterns throw; results use Browser's assertion
 		 * callback, or throw on failure when none was supplied.
 		 */
-		public function urlMatches(string $pattern): self
+		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null): self
 		{
-			$this->browser->assertMatches($pattern, $this->url(), 'Window ' . var_export($this->handle, true) . ' URL');
+			Browser::matches($pattern, '');
+			$actual = null;
+			$passed = $this->browser->evaluate(function () use ($pattern, &$actual) {
+				$actual = $this->url();
+				return Browser::matches($pattern, $actual);
+			}, $wait, $timeout);
+			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' URL: expected a match for '
+				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.');
 			return $this;
 		}
 
@@ -94,100 +103,24 @@
 		}
 
 		/**
-		 * Find the first match in the selected frame. Strategies: css selector, xpath,
-		 * tag name, link text, partial link text. Missing elements throw driver errors.
+		 * Find in this window's captured frame using Browser::find() conditions and strategies.
+		 * $visible requires the first match to be displayed. $invert requires no matches,
+		 * or no displayed matches with $visible. Positive success returns an Element;
+		 * inverted success returns null. Unmet conditions throw, after reporting if $assert.
+		 * $wait repeats the search every 100 ms, including replacement nodes. $timeout is
+		 * positive, finite milliseconds or null for the browser default; ignored without waiting.
+		 * Commands retain their own timeouts. Driver/context errors propagate; only missing
+		 * matches and recoverable stale references are retried. The result retains its lookup.
 		 */
-		public function find(string $selector, string $using = 'css selector'): Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
-			return Element::fromReference($this, $this->frames, $this->request('POST', '/element', [
-				'using' => $using, 'value' => $selector,
-			]));
-		}
-
-		/**
-		 * Re-find in this window/frame every 100 ms until the first match exists, then return it.
-		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
-		 * the browser constructor timeout. Throws on expiry; only missing/stale element
-		 * errors are retried. As with wait(), in-flight commands retain their own timeouts.
-		 */
-		public function findWaitPresent(string $selector, string $using = 'css selector', ?float $timeout = null): Element
-		{
-			return $this->wait(fn() => $this->find($selector, $using), $timeout === null ? null : $timeout / 1000);
-		}
-
-		/**
-		 * Re-find until the first match is displayed, then return it; later matches are ignored.
-		 * Visibility does not guarantee clickability. Uses find() strategies and
-		 * findWaitPresent() polling/error semantics. $timeout is positive, finite
-		 * milliseconds; null uses the browser constructor timeout. Throws on expiry.
-		 */
-		public function findWaitVisible(string $selector, string $using = 'css selector', ?float $timeout = null): Element
-		{
-			return $this->wait(function () use ($selector, $using) {
-				$element = $this->find($selector, $using);
-				return $element->displayed() ? $element : false;
-			}, $timeout === null ? null : $timeout / 1000);
-		}
-
-		/**
-		 * Re-query until no matches remain, including replacements; return this window.
-		 * An empty search succeeds immediately. Uses find() strategies and
-		 * findWaitPresent() polling/error semantics. $timeout is positive, finite
-		 * milliseconds; null uses the browser constructor timeout. Throws on expiry.
-		 */
-		public function waitNotPresent(string $selector, string $using = 'css selector', ?float $timeout = null): self
-		{
-			$this->wait(fn() => $this->findAll($selector, $using)->count() === 0, $timeout === null ? null : $timeout / 1000);
-			return $this;
-		}
-
-		/**
-		 * Re-query until no matches are displayed, including replacements; return this window.
-		 * An empty search succeeds immediately. Uses find() strategies and
-		 * findWaitPresent() polling/error semantics; a stale match triggers a fresh search.
-		 * $timeout is positive, finite milliseconds; null uses the browser constructor
-		 * timeout. Throws on expiry.
-		 */
-		public function waitNotVisible(string $selector, string $using = 'css selector', ?float $timeout = null): self
-		{
-			$this->wait(function () use ($selector, $using) {
-				foreach ($this->findAll($selector, $using) as $element):
-					if ($element->displayed()):
-						return false;
-					endif;
-				endforeach;
-				return true;
-			}, $timeout === null ? null : $timeout / 1000);
-			return $this;
+			return (new Lookup($this, $this->frames, $selector, $using))->find($visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return a snapshot in document order, including an empty set when nothing matches. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
-			$references = $this->request('POST', '/elements', ['using' => $using, 'value' => $selector]);
-			return ElementSet::fromReferences($this, $this->frames, $references);
-		}
-
-		/**
-		 * Assert once that no matching element is displayed in this window/frame.
-		 * An empty search passes; any visible match fails. Uses find() strategies.
-		 * Stale matches propagate rather than pass, since a replacement may be visible.
-		 * Other driver errors also propagate. Report once through Browser's assertion
-		 * callback, or throw on failure without one. Return this window; no retries.
-		 */
-		public function isNotVisible(string $selector, string $using = 'css selector'): self
-		{
-			$visible = null;
-			foreach ($this->findAll($selector, $using) as $element):
-				if ($element->displayed()):
-					$visible = $element->id();
-					break;
-				endif;
-			endforeach;
-			$this->browser->reportAssertion($visible === null,
-				'Selector ' . var_export($selector, true) . ' using ' . var_export($using, true)
-				. ': expected no visible matches, got ' . ($visible === null ? 'none' : 'visible element ' . var_export($visible, true)) . '.');
-			return $this;
+			return (new Lookup($this, $this->frames, $selector, $using))->all(false);
 		}
 
 		/** Return the focused element in the selected frame. */
@@ -502,7 +435,8 @@
 
 		/**
 		 * Poll condition($this) with Browser::wait() semantics, reselecting the original
-		 * frame each time. Return first() or test count() when waiting for an ElementSet:
+		 * frame each time. $timeout is positive, finite milliseconds; null uses the browser
+		 * constructor timeout. Return first() or test count() when waiting for an ElementSet:
 		 * an empty collection object is still truthy in PHP.
 		 */
 		public function wait(callable $condition, ?float $timeout = null): mixed

@@ -2,9 +2,11 @@
 	namespace ThriveData\ThrivePHP\WebDriver;
 
 	/**
-	 * Ordered, fixed-membership search results. Elements remain live remote references
-	 * and may become stale; repeat the search to refresh membership. Empty sets are
-	 * truthy PHP objects: use count() or first() in wait conditions.
+	 * Ordered search snapshots. Elements remain live remote references
+	 * and may become stale. A waiting count assertion refreshes membership on success.
+	 * Other operations keep the snapshot. Waiting assertions on individual members
+	 * re-find their original position in the query, so reordered results follow position.
+	 * Empty sets are truthy PHP objects: use count() or first() in wait conditions.
 	 * @implements \IteratorAggregate<int, Element>
 	 */
 	class ElementSet implements \IteratorAggregate, \Countable
@@ -13,6 +15,8 @@
 		private array $elements;
 		/** Search owner for reporting assertions, including searches with no matches. */
 		private ?Browser $browser = null;
+		/** Retained collection query; explicitly constructed snapshots have none. */
+		private ?Lookup $lookup = null;
 
 		/** Explicit snapshots use the first element's assertion recorder, if any. */
 		public function __construct(Element ...$elements)
@@ -22,10 +26,15 @@
 		}
 
 		/** @internal Bind search results to their owner even when there are no element references. */
-		public static function fromReferences(Window $window, array $frames, array $references): self
+		public static function fromReferences(Window $window, array $frames, array $references, ?Lookup $lookup = null): self
 		{
-			$set = new self(...array_map(fn($reference) => Element::fromReference($window, $frames, $reference), $references));
+			$elements = [];
+			foreach (array_values($references) as $index => $reference):
+				$elements[] = Element::fromReference($window, $frames, $reference, $lookup?->at($index));
+			endforeach;
+			$set = new self(...$elements);
 			$set->browser = $window->browser();
+			$set->lookup = $lookup;
 			return $set;
 		}
 
@@ -35,16 +44,43 @@
 		}
 
 		/**
-		 * Assert this snapshot's count once and return this set; the search is not repeated.
+		 * Assert the count and return this set. $wait repeats the retained search every
+		 * 100 ms and adopts membership on success; snapshots without a lookup cannot wait.
+		 * $timeout is positive, finite milliseconds, null for the browser default, and
+		 * ignored without waiting. Report once after success or expiry. Driver errors propagate.
 		 * Use Browser's assertion callback, or throw on failure when none was supplied.
 		 */
-		public function countEquals(int $expected): self
+		public function countEquals(int $expected, bool $wait = false, ?float $timeout = null): self
 		{
-			$actual = $this->count();
+			if ($wait && $this->lookup === null):
+				throw new \LogicException('Cannot wait for an ElementSet count without a retained search.');
+			endif;
+			$actual = (string)$this->count();
+			$condition = function () use ($expected, $wait, &$actual) {
+				if ($wait):
+					$this->lookup->activate();
+				endif;
+				try {
+					$set = $wait ? $this->lookup->all() : $this;
+					$actual = (string)$set->count();
+					if ($set->count() !== $expected):
+						return false;
+					endif;
+					$this->elements = $set->elements;
+					return true;
+				} catch (\RuntimeException $error) {
+					if (!$wait || !$this->lookup->retryable($error)):
+						throw $error;
+					endif;
+					$actual = $error->getMessage();
+					return false;
+				}
+			};
+			$passed = $this->browser === null ? $condition() : $this->browser->evaluate($condition, $wait, $timeout);
 			$message = 'Element count: expected ' . $expected . ', got ' . $actual . '.';
 			if ($this->browser !== null):
-				$this->browser->reportAssertion($actual === $expected, $message);
-			elseif ($actual !== $expected):
+				$this->browser->reportAssertion($passed, $message);
+			elseif (!$passed):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);
 			endif;
 			return $this;

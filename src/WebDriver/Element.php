@@ -4,11 +4,14 @@
 	/**
 	 * A DOM element bound to its browser window and original frame path. Commands
 	 * select that context automatically and return this element for fluent chaining.
-	 * References are never silently re-found: stale-element errors propagate except
-	 * when completing waitNotPresent(), waitNotVisible(), or isNotVisible().
-	 * Fluent assertions evaluate once, return this element, and report through Browser's
-	 * assertion callback. Without a callback, failed assertions throw RuntimeException.
-	 * Driver errors propagate, except that isNotVisible() accepts a stale element.
+	 * Actions and observations use the current reference. Assertions with $wait re-find
+	 * retained selectors, including ancestor scopes, and adopt the successful reference.
+	 * Script/focus references have no lookup: they can be polled but staleness propagates.
+	 * Original-node disappearance waits never re-find. isNotVisible() also accepts a stale
+	 * original reference when no lookup is being retried. Assertions return this element
+	 * and report once through Browser's callback; without it, failed assertions throw.
+	 * Assertion $timeout is positive, finite milliseconds, null for the browser default,
+	 * and ignored without $wait. Polling is every 100 ms; commands retain their own timeouts.
 	 */
 	class Element
 	{
@@ -16,7 +19,7 @@
 		public const REFERENCE = 'element-6066-11e4-a52e-4f735466cecf';
 
 		/** @internal Elements are normally obtained through find(), findAll(), or script(). */
-		public function __construct(private Window $window, private string $id, private array $frames = [])
+		public function __construct(private Window $window, private string $id, private array $frames = [], private ?Lookup $lookup = null)
 		{
 			if ($id === ''):
 				throw new \InvalidArgumentException('Element ID must not be empty.');
@@ -34,25 +37,26 @@
 			return $this->window;
 		}
 
-		/** Find a descendant. Scoped XPath expressions should be relative, e.g. .//input. */
-		public function find(string $selector, string $using = 'css selector'): self
+		/**
+		 * Find a descendant using Browser::find() conditions, millisecond timeouts and reporting.
+		 * Scoped XPath should be relative, e.g. .//input. Waiting re-finds this parent when
+		 * it has a retained lookup. Positive success returns a child; inverted success null.
+		 */
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?self
 		{
-			return self::fromReference($this->window, $this->frames, $this->request('POST', '/element', [
-				'using' => $using, 'value' => $selector,
-			]));
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return matching descendants in document order, possibly an empty collection. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
-			$references = $this->request('POST', '/elements', ['using' => $using, 'value' => $selector]);
-			return ElementSet::fromReferences($this->window, $this->frames, $references);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->all(false);
 		}
 
 		/** Return the accessible shadow root; throws if the host has none. */
 		public function shadowRoot(): ShadowRoot
 		{
-			return ShadowRoot::fromReference($this->window, $this->frames, $this->request('GET', '/shadow'));
+			return ShadowRoot::fromReference($this->window, $this->frames, $this->request('GET', '/shadow'), $this);
 		}
 
 		/** Pause locally for seconds (including fractions), preserving this element and its context. */
@@ -216,126 +220,102 @@
 		}
 
 		/**
-		 * Poll the original node every 100 ms until stale, then return this same (unusable)
-		 * element, without finding replacements. $timeout is positive, finite milliseconds;
-		 * null uses the browser constructor timeout. Throws on expiry; other errors follow
-		 * Browser::wait() semantics. In-flight commands retain their own timeouts.
+		 * Wait for the original node's presence, or displayedness with $visible. $invert
+		 * requires staleness for presence, or hiddenness/staleness for visibility. Never
+		 * re-find replacements. Return this element on success; a stale reference stays unusable.
+		 * Poll every 100 ms. $timeout is positive, finite milliseconds; null uses the browser
+		 * constructor timeout. In-flight commands retain their own timeouts. $assert reports
+		 * one final result. Expiry throws even if the recorder continues. Staleness immediately
+		 * fails positive conditions; context and unrelated driver errors always propagate.
 		 */
-		public function waitNotPresent(?float $timeout = null): self
+		public function wait(bool $visible = false, bool $invert = false, bool $assert = false, ?float $timeout = null): self
 		{
 			$browser = $this->window->browser();
-			$browser->wait(function () use ($browser) {
+			$actual = 'not observed';
+			$passed = $browser->evaluate(function () use ($browser, $visible, $invert, &$actual) {
 				// A stale frame during context restoration is not proof that this node is stale.
 				$browser->activate($this->window, $this->frames);
 				try {
-					$this->tag();
-					return false;
+					if ($visible):
+						$condition = $this->displayed();
+						$actual = $condition ? 'visible' : 'hidden';
+					else:
+						$this->tag();
+						$condition = true;
+						$actual = 'present';
+					endif;
+					return $invert ? !$condition : $condition;
 				} catch (\RuntimeException $error) {
-					if (!preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
+					if (!$invert || !preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
 						throw $error;
 					endif;
+					$actual = 'stale';
 					return true;
 				}
-			}, $timeout === null ? null : $timeout / 1000);
+			}, true, $timeout);
+			$expected = $invert ? ($visible ? 'hidden or stale' : 'stale') : ($visible ? 'visible' : 'present');
+			$message = 'Element ' . var_export($this->id, true) . ': expected ' . $expected . ', got ' . $actual . '.';
+			if ($assert):
+				$browser->reportAssertion($passed, $message);
+			endif;
+			if (!$passed):
+				throw new \RuntimeException('WebDriver wait timed out. ' . $message);
+			endif;
 			return $this;
 		}
 
-		/**
-		 * Poll the original node until hidden or stale; replacements are not re-found.
-		 * Return this same element; a stale reference remains unusable. Uses waitNotPresent()
-		 * polling/error semantics. $timeout is positive, finite milliseconds; null uses
-		 * the browser constructor timeout. Throws on expiry.
-		 */
-		public function waitNotVisible(?float $timeout = null): self
+		/** Assert displayedness, optionally waiting; visibility does not guarantee clickability. */
+		public function isVisible(bool $wait = false, ?float $timeout = null): self
 		{
-			$browser = $this->window->browser();
-			$browser->wait(function () use ($browser) {
-				$browser->activate($this->window, $this->frames);
-				try {
-					return !$this->displayed();
-				} catch (\RuntimeException $error) {
-					if (!preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
-						throw $error;
-					endif;
-					return true;
-				}
-			}, $timeout === null ? null : $timeout / 1000);
-			return $this;
+			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === true,
+				'visibility: expected true', $wait, $timeout);
 		}
 
-		/** Assert displayedness once; visibility does not guarantee clickability. Return this element. */
-		public function isVisible(): self
+		/** Assert hiddenness; waiting re-finds retained lookups. Missing matches or stale original nodes pass. */
+		public function isNotVisible(bool $wait = false, ?float $timeout = null): self
 		{
-			$actual = $this->displayed();
-			$this->window->browser()->reportAssertion($actual,
-				'Element ' . var_export($this->id, true) . ' visibility: expected true, got ' . var_export($actual, true) . '.');
-			return $this;
-		}
-
-		/** Assert once that this original node is hidden or stale; return this element without re-finding it. */
-		public function isNotVisible(): self
-		{
-			$browser = $this->window->browser();
-			// Context errors must not be mistaken for this element becoming stale.
-			$browser->activate($this->window, $this->frames);
-			try {
-				$actual = $this->displayed();
-			} catch (\RuntimeException $error) {
-				if (!preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
-					throw $error;
-				endif;
-				$actual = null;
-			}
-			$browser->reportAssertion($actual !== true,
-				'Element ' . var_export($this->id, true) . ' visibility: expected false or stale, got ' . ($actual === null ? 'stale' : var_export($actual, true)) . '.');
-			return $this;
+			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === false,
+				'visibility: expected false or stale', $wait, $timeout, true);
 		}
 
 		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */
-		public function valueEquals(string $expected): self
+		public function valueEquals(string $expected, bool $wait = false, ?float $timeout = null): self
 		{
-			$actual = $this->property('value');
-			$this->window->browser()->reportAssertion($actual === $expected,
-				'Element ' . var_export($this->id, true) . ' value: expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
-			return $this;
+			return $this->assertObservation(fn($element) => $element->property('value'), fn($actual) => $actual === $expected,
+				'value: expected ' . var_export($expected, true), $wait, $timeout);
 		}
 
-		/** Assert strict equality with rendered text once; return this element. */
-		public function textEquals(string $expected): self
+		/** Assert strict equality with rendered text, optionally waiting; return this element. */
+		public function textEquals(string $expected, bool $wait = false, ?float $timeout = null): self
 		{
-			$actual = $this->text();
-			$this->window->browser()->reportAssertion($actual === $expected,
-				'Element ' . var_export($this->id, true) . ' text: expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
-			return $this;
+			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => $actual === $expected,
+				'text: expected ' . var_export($expected, true), $wait, $timeout);
 		}
 
-		/** Assert a case-sensitive substring of rendered text once; return this element. */
-		public function textContains(string $expected): self
+		/** Assert a case-sensitive substring of rendered text, optionally waiting; return this element. */
+		public function textContains(string $expected, bool $wait = false, ?float $timeout = null): self
 		{
-			$actual = $this->text();
-			$this->window->browser()->reportAssertion(str_contains($actual, $expected),
-				'Element ' . var_export($this->id, true) . ' text: expected to contain ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
-			return $this;
+			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => str_contains($actual, $expected),
+				'text: expected to contain ' . var_export($expected, true), $wait, $timeout);
 		}
 
-		/** Assert strict attribute equality once; null expects an absent attribute. Return this element. */
-		public function attributeEquals(string $name, ?string $expected): self
+		/** Assert strict attribute equality, optionally waiting; null expects absence. Return this element. */
+		public function attributeEquals(string $name, ?string $expected, bool $wait = false, ?float $timeout = null): self
 		{
-			$actual = $this->attribute($name);
-			$this->window->browser()->reportAssertion($actual === $expected,
-				'Element ' . var_export($this->id, true) . ' attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
-			return $this;
+			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual === $expected,
+				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout);
 		}
 
 		/**
-		 * Assert an attribute matches a delimited PHP regex once; absence never matches.
+		 * Assert an attribute matches a delimited PHP regex, optionally waiting; absence never matches.
 		 * Invalid patterns throw. Return this element.
 		 */
-		public function attributeMatches(string $name, string $pattern): self
+		public function attributeMatches(string $name, string $pattern, bool $wait = false, ?float $timeout = null): self
 		{
-			$this->window->browser()->assertMatches($pattern, $this->attribute($name),
-				'Element ' . var_export($this->id, true) . ' attribute ' . var_export($name, true));
-			return $this;
+			// Validate before polling, even when no element can currently be found.
+			Browser::matches($pattern, '');
+			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => Browser::matches($pattern, $actual),
+				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout);
 		}
 
 		/** Return enabled state according to WebDriver's form-control rules. */
@@ -369,13 +349,62 @@
 		}
 
 		/** @internal Validate references consistently for searches, focus, and script results. */
-		public static function fromReference(Window $window, array $frames, mixed $reference): self
+		public static function fromReference(Window $window, array $frames, mixed $reference, ?Lookup $lookup = null): self
 		{
 			$id = is_array($reference) ? ($reference[self::REFERENCE] ?? null) : null;
 			if (!is_string($id) || $id === ''):
 				throw new \RuntimeException('WebDriver did not return an element ID.');
 			endif;
-			return new self($window, $id, $frames);
+			return new self($window, $id, $frames, $lookup);
+		}
+
+		/** @internal Whether this node and all its search ancestors can be re-found. */
+		public function canRefresh(): bool
+		{
+			return $this->lookup !== null && $this->lookup->canRefresh();
+		}
+
+		/** @internal Resolve a search ancestor without changing the original node's identity. */
+		public function resolve(): ?self
+		{
+			return $this->lookup === null ? $this : $this->lookup->element();
+		}
+
+		/** Poll observations and report once; only successful retries replace this element's reference. */
+		private function assertObservation(callable $observe, callable $matches, string $expectation, bool $wait, ?float $timeout, bool $absencePasses = false): self
+		{
+			$browser = $this->window->browser();
+			$refresh = $wait && $this->lookup !== null;
+			$actual = 'no observation';
+			$passed = $browser->evaluate(function () use ($browser, $observe, $matches, $refresh, $absencePasses, &$actual) {
+				$browser->activate($this->window, $this->frames);
+				try {
+					$element = $refresh ? $this->lookup->element() : $this;
+					if ($element === null):
+						$actual = 'no matching element';
+						return $absencePasses;
+					endif;
+					$value = $observe($element);
+					$actual = var_export($value, true);
+					if (!$matches($value)):
+						return false;
+					endif;
+					$this->id = $element->id;
+					return true;
+				} catch (\RuntimeException $error) {
+					if (!$refresh && $absencePasses && preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
+						$actual = 'stale';
+						return true;
+					endif;
+					if (!$refresh || !$this->lookup->retryable($error)):
+						throw $error;
+					endif;
+					$actual = $error->getMessage();
+					return $absencePasses && (bool)preg_match('/^WebDriver HTTP [45][0-9]{2} no such element: /', $actual);
+				}
+			}, $wait, $timeout);
+			$browser->reportAssertion($passed, 'Element ' . var_export($this->id, true) . ' ' . $expectation . ', got ' . $actual . '.');
+			return $this;
 		}
 
 		/** Route an element-relative command through its captured context. */

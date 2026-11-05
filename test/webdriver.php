@@ -294,14 +294,15 @@ foreach (['browser', 'window'] as $receiver):
 			return $condition;
 		});
 		$target = $receiver === 'browser' ? $browser : $browser->window();
-		foreach (range(1, 3) as $ignored):
-			verify($target->isNotVisible('.error') === $target, 'Selector visibility assertion lost its receiver.');
+		foreach (range(1, 2) as $ignored):
+			verify($target->find('.error', visible: true, invert: true, assert: true) === null, 'Inverted find should return null.');
 		endforeach;
+		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'WebDriver find failed');
 		verify(array_column($results, 0) === [true, true, false], 'Absent, hidden, or mixed visibility was reported incorrectly.');
 		verify($results[2][1] === "Selector '.error' using 'css selector': expected no visible matches, got visible element 'second'.", 'Selector failure lacks expected/actual diagnostics.');
-		expectError(fn() => $target->isNotVisible('[broken'), 'invalid selector');
-		expectError(fn() => $target->isNotVisible('.error'), 'stale element reference');
-		expectError(fn() => $target->isNotVisible('.error'), 'unknown error');
+		expectError(fn() => $target->find('[broken', visible: true, invert: true, assert: true), 'invalid selector');
+		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'stale element reference');
+		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'unknown error');
 		verify(count($results) === 3, 'Driver errors were converted to assertion results.');
 		$browser->quit();
 	});
@@ -321,8 +322,8 @@ scenario('selector visibility assertions restore window/frame context and throw 
 	$browser = new Browser($url, 'firefox');
 	$window = $browser->window()->switchFrame(0);
 	$browser->switch('other');
-	expectError(fn() => $window->isNotVisible('//aside', 'xpath'), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible element 'visible'.");
-	verify($browser->isNotVisible('.gone') === $browser, 'Successful assertion without a recorder lost its receiver.');
+	expectError(fn() => $window->find('//aside', 'xpath', visible: true, invert: true, assert: true), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible element 'visible'.");
+	verify($browser->find('.gone', visible: true, invert: true, assert: true) === null, 'Inverted find should return null.');
 	$browser->quit();
 });
 
@@ -380,8 +381,6 @@ scenario('element assertions restore captured context and distinguish stale refe
 scenario('invalid assertion patterns and callback exceptions propagate without extra reports', function ($listener) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
-	exchange($listener, 'GET', '/session/session%2F1/element/input/attribute/missing', null, null);
-	exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/');
 	exchange($listener, 'GET', '/session/session%2F1/element/input/displayed', null, false);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
@@ -391,6 +390,8 @@ scenario('invalid assertion patterns and callback exceptions propagate without e
 	$element = $browser->find('#name');
 	expectError(fn() => $element->attributeMatches('missing', '/[/'), 'Could not evaluate assertion pattern');
 	expectError(fn() => $browser->urlMatches('not delimited'), 'Could not evaluate assertion pattern');
+	expectError(fn() => $element->attributeMatches('missing', '/[/', wait: true), 'Could not evaluate assertion pattern');
+	expectError(fn() => $browser->urlMatches('not delimited', wait: true), 'Could not evaluate assertion pattern');
 	verify($calls === 0, 'Invalid patterns reached the assertion recorder.');
 	try {
 		$element->isNotVisible();
@@ -399,6 +400,286 @@ scenario('invalid assertion patterns and callback exceptions propagate without e
 		verify($error === $expected, 'Callback exception was replaced.');
 	}
 	verify($calls === 1, 'Callback was called more than once.');
+	$browser->quit();
+});
+
+$retryAssertions = [
+	['isVisible', [], '/displayed', false, true],
+	['isNotVisible', [], '/displayed', true, false],
+	['valueEquals', ['Jane'], '/property/value', 'Pending', 'Jane'],
+	['textEquals', ['Saved'], '/text', 'Saving', 'Saved'],
+	['textContains', ['Saved'], '/text', 'Saving', 'Saved successfully'],
+	['attributeEquals', ['data-state', 'saved'], '/attribute/data-state', 'saving', 'saved'],
+	['attributeMatches', ['data-state', '/^saved$/'], '/attribute/data-state', 'saving', 'saved'],
+];
+foreach ($retryAssertions as [$method, $arguments, $path, $pending, $ready]):
+	scenario("waiting $method re-finds replacements in the captured context and updates chained actions", function ($listener) use ($path, $pending, $ready) {
+		createSession($listener);
+		$selector = ['using' => 'xpath', 'value' => '//status'];
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'original']);
+		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
+		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		foreach (['original' => $pending, 'removed' => null, 'replacement' => $ready] as $id => $value):
+			exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => $id]);
+			exchange($listener, 'GET', "/session/session%2F1/element/$id$path", null,
+				$value ?? ['error' => 'stale element reference', 'message' => 'replaced'], $value === null ? 404 : 200);
+		endforeach;
+		exchange($listener, 'POST', '/session/session%2F1/element/replacement/click', [], null);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($method, $arguments) {
+		$results = [];
+		$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+		$element = $browser->switchFrame(0)->find('//status', 'xpath');
+		$browser->switch('other');
+		verify($element->$method(...[...$arguments, 'wait' => true, 'timeout' => 1000])->click() === $element, 'Retry lost its fluent receiver.');
+		verify($element->id() === 'replacement', 'Successful retry did not adopt the replacement reference.');
+		verify(array_column($results, 0) === [true], 'Retry reported intermediate assertion results.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('assertion retries handle missing matches and report timeout once with the final observation', function ($listener) {
+	createSession($listener);
+	$selector = ['using' => 'css selector', 'value' => '#status'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'original']);
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, ['error' => 'no such element', 'message' => 'between renders'], 404);
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'ready']);
+	exchange($listener, 'GET', '/session/session%2F1/element/ready/text', null, 'Saved');
+	foreach (range(1, 2) as $ignored):
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'pending']);
+		exchange($listener, 'GET', '/session/session%2F1/element/pending/text', null, 'Pending');
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, ['error' => 'no such element', 'message' => 'removed'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', timeout: 0.05, assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$element = $browser->find('#status')->textEquals('Saved', wait: true, timeout: 1000);
+	foreach ([20, null] as $timeout):
+		$start = microtime(true);
+		verify($element->textEquals('Done', wait: true, timeout: $timeout) === $element, 'Recorded timeout should preserve chaining.');
+		$elapsed = microtime(true) - $start;
+		verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'Assertion timeout units/default changed.');
+		verify($element->id() === 'ready', 'Failed assertion replaced the last successful reference.');
+	endforeach;
+	$element->isNotVisible(wait: true, timeout: 1000);
+	verify(array_column($results, 0) === [true, false, false, true], 'Missing match or timeout reported the wrong result.');
+	verify(str_contains($results[1][1], "expected 'Done', got 'Pending'"), 'Timeout lost its last observation.');
+	$browser->quit();
+});
+
+scenario('selectorless focus and script references poll live nodes but fail immediately when stale', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'GET', '/session/session%2F1/element/active', null, [Element::REFERENCE => 'focused']);
+	exchange($listener, 'GET', '/session/session%2F1/element/focused/text', null, 'Pending');
+	exchange($listener, 'GET', '/session/session%2F1/element/focused/text', null, 'Done');
+	exchange($listener, 'GET', '/session/session%2F1/element/focused/text', null, ['error' => 'stale element reference', 'message' => 'focus removed'], 404);
+	exchange($listener, 'GET', '/session/session%2F1/timeouts', null, ['script' => 30000]);
+	exchange($listener, 'POST', '/session/session%2F1/execute/sync', ['script' => 'return node;', 'args' => []], [Element::REFERENCE => 'script']);
+	exchange($listener, 'GET', '/session/session%2F1/element/script/property/value', null, ['error' => 'stale element reference', 'message' => 'script node removed'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$element = $browser->activeElement()->textEquals('Done', wait: true, timeout: 1000);
+	expectError(fn() => $element->textEquals('Done', wait: true, timeout: 1000), 'focus removed');
+	$script = $browser->script('return node;');
+	expectError(fn() => $script->valueEquals('Done', wait: true, timeout: 1000), 'script node removed');
+	verify($results === [true], 'Stale references without lookups should not become assertion failures.');
+	$browser->quit();
+});
+
+scenario('descendant retries re-find replaced ancestors and count an absent parent as an empty search', function ($listener) {
+	createSession($listener);
+	$parent = ['using' => 'css selector', 'value' => '#parent'];
+	$child = ['using' => 'xpath', 'value' => './/span'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => 'parent-old']);
+	exchange($listener, 'POST', '/session/session%2F1/element/parent-old/element', $child, [Element::REFERENCE => 'child-old']);
+	exchange($listener, 'POST', '/session/session%2F1/element/parent-old/elements', $child, [[Element::REFERENCE => 'child-old']]);
+	foreach (['old' => 'Pending', 'new' => 'Done'] as $suffix => $text):
+		exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => "parent-$suffix"]);
+		exchange($listener, 'POST', "/session/session%2F1/element/parent-$suffix/element", $child, [Element::REFERENCE => "child-$suffix"]);
+		exchange($listener, 'GET', "/session/session%2F1/element/child-$suffix/text", null, $text);
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/element/child-new/click', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element', $parent, ['error' => 'no such element', 'message' => 'parent removed'], 404);
+	exchange($listener, 'POST', '/session/session%2F1/element', $parent, ['error' => 'no such element', 'message' => 'parent removed'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$parent = $browser->find('#parent');
+	$child = $parent->find('.//span', 'xpath');
+	$set = $parent->findAll('.//span', 'xpath');
+	$child->textEquals('Done', wait: true, timeout: 1000)->click();
+	verify($parent->id() === 'parent-old', 'Re-finding a scope changed an independently held reference.');
+	verify($set->countEquals(0, wait: true)->count() === 0, 'Absent parent did not produce an empty refreshed set.');
+	verify($parent->find('.//span', 'xpath', wait: true, invert: true) === null, 'Absent parent did not satisfy inverted find.');
+	$browser->quit();
+});
+
+scenario('shadow descendant retries reacquire replaced hosts and roots', function ($listener) {
+	createSession($listener);
+	$host = ['using' => 'css selector', 'value' => '#host'];
+	$child = ['using' => 'css selector', 'value' => '.status'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $host, [Element::REFERENCE => 'host-old']);
+	exchange($listener, 'GET', '/session/session%2F1/element/host-old/shadow', null, [ShadowRoot::REFERENCE => 'root-old']);
+	exchange($listener, 'POST', '/session/session%2F1/shadow/root-old/element', $child, [Element::REFERENCE => 'child-old']);
+	foreach (['old' => 'Pending', 'new' => 'Done'] as $suffix => $text):
+		exchange($listener, 'POST', '/session/session%2F1/element', $host, [Element::REFERENCE => "host-$suffix"]);
+		exchange($listener, 'GET', "/session/session%2F1/element/host-$suffix/shadow", null, [ShadowRoot::REFERENCE => "root-$suffix"]);
+		exchange($listener, 'POST', "/session/session%2F1/shadow/root-$suffix/element", $child, [Element::REFERENCE => "child-$suffix"]);
+		exchange($listener, 'GET', "/session/session%2F1/element/child-$suffix/text", null, $text);
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/element/child-new/click', [], null);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$browser->find('#host')->shadowRoot()->find('.status')->textEquals('Done', wait: true, timeout: 1000)->click();
+	$browser->quit();
+});
+
+scenario('waiting counts refresh empty searches and positional members retain their lookup', function ($listener) {
+	createSession($listener);
+	$selector = ['using' => 'css selector', 'value' => '.row'];
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, []);
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'one']]);
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'one'], [Element::REFERENCE => 'two']]);
+	foreach (['two' => 'Pending', 'new' => 'Done'] as $id => $text):
+		exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'one'], [Element::REFERENCE => $id]]);
+		exchange($listener, 'GET', "/session/session%2F1/element/$id/text", null, $text);
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/element/new/click', [], null);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$set = $browser->findAll('.row');
+	verify($set->countEquals(2, wait: true, timeout: 1000) === $set && $set->count() === 2, 'Successful count did not update the snapshot.');
+	$set->get(1)->textEquals('Done', wait: true, timeout: 1000)->click();
+	verify($set->get(1)->id() === 'new', 'Positional member did not adopt the replacement.');
+	expectError(fn() => (new ElementSet(...$set->all()))->countEquals(3, wait: true), 'without a retained search');
+	verify($results === [true, true], 'Count/member retries reported intermediate results.');
+	$browser->quit();
+});
+
+scenario('stale selectorless search ancestors fail without retrying or recording a mismatch', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'GET', '/session/session%2F1/element/active', null, [Element::REFERENCE => 'parent']);
+	$selector = ['using' => 'css selector', 'value' => '.child'];
+	exchange($listener, 'POST', '/session/session%2F1/element/parent/element', $selector, [Element::REFERENCE => 'child']);
+	exchange($listener, 'POST', '/session/session%2F1/element/parent/elements', $selector, [[Element::REFERENCE => 'child']]);
+	exchange($listener, 'POST', '/session/session%2F1/element/parent/element', $selector, ['error' => 'stale element reference', 'message' => 'unrecoverable parent'], 404);
+	exchange($listener, 'POST', '/session/session%2F1/element/parent/elements', $selector, ['error' => 'stale element reference', 'message' => 'unrecoverable parent'], 404);
+	exchange($listener, 'GET', '/session/session%2F1/timeouts', null, ['script' => 30000]);
+	exchange($listener, 'POST', '/session/session%2F1/execute/sync', ['script' => 'return root;', 'args' => []], [ShadowRoot::REFERENCE => 'root']);
+	exchange($listener, 'POST', '/session/session%2F1/shadow/root/element', $selector, [Element::REFERENCE => 'shadow-child']);
+	exchange($listener, 'POST', '/session/session%2F1/shadow/root/element', $selector, ['error' => 'detached shadow root', 'message' => 'unrecoverable root'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$parent = $browser->activeElement();
+	$child = $parent->find('.child');
+	$set = $parent->findAll('.child');
+	expectError(fn() => $child->isNotVisible(wait: true, timeout: 1000), 'unrecoverable parent');
+	expectError(fn() => $set->countEquals(0, wait: true, timeout: 1000), 'unrecoverable parent');
+	$shadowChild = $browser->script('return root;')->find('.child');
+	expectError(fn() => $shadowChild->textEquals('Done', wait: true, timeout: 1000), 'unrecoverable root');
+	verify($results === [], 'Unrecoverable ancestors were treated as assertion mismatches.');
+	$browser->quit();
+});
+
+scenario('count timeouts preserve the snapshot and context errors propagate', function ($listener) {
+	createSession($listener);
+	$selector = ['using' => 'css selector', 'value' => '.row'];
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'old']]);
+	foreach (range(1, 2) as $ignored):
+		exchange($listener, 'POST', '/session/session%2F1/elements', $selector, []);
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, ['error' => 'invalid selector', 'message' => 'bad selector'], 400);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => null], null);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], ['error' => 'stale element reference', 'message' => 'frame removed'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', timeout: 0.05, assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$set = $browser->switchFrame(0)->findAll('.row');
+	foreach ([20, null] as $timeout):
+		$start = microtime(true);
+		$set->countEquals(2, wait: true, timeout: $timeout);
+		$elapsed = microtime(true) - $start;
+		verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'Count timeout units/default changed.');
+		verify($set->count() === 1 && $set->first()->id() === 'old', 'Timed-out count replaced the snapshot.');
+	endforeach;
+	foreach ([0, -1, INF, NAN] as $timeout):
+		expectError(fn() => $set->countEquals(2, wait: true, timeout: $timeout), 'positive and finite');
+		expectError(fn() => $set->first()->textEquals('Done', wait: true, timeout: $timeout), 'positive and finite');
+		expectError(fn() => $browser->urlMatches('/done/', wait: true, timeout: $timeout), 'positive and finite');
+	endforeach;
+	expectError(fn() => $set->countEquals(2, wait: true), 'invalid selector');
+	$browser->defaultFrame();
+	expectError(fn() => $set->countEquals(0, wait: true), 'frame removed');
+	verify(array_column($results, 0) === [false, false] && str_contains($results[0][1], 'expected 2, got 0'), 'Count timeout diagnostics or reporting changed.');
+	$browser->quit();
+});
+
+scenario('consolidated find reports once and still throws when a prerequisite fails', function ($listener) {
+	createSession($listener);
+	$selector = ['using' => 'css selector', 'value' => '#new'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, ['error' => 'no such element', 'message' => 'not yet'], 404);
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'new']);
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'new']);
+	exchange($listener, 'GET', '/session/session%2F1/element/new/displayed', null, false);
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'new']]);
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, []);
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, ['error' => 'no such element', 'message' => 'gone'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; return false; });
+	verify($browser->find('#new', wait: true, assert: true, timeout: 1000)->id() === 'new', 'Find lost its match.');
+	expectError(fn() => $browser->find('#new', visible: true, assert: true, timeout: -1), 'WebDriver find failed');
+	verify($browser->find('#new', wait: true, invert: true, assert: true, timeout: 1000) === null, 'Inverse presence did not return null.');
+	expectError(fn() => $browser->find('#new', assert: true), 'no such element: gone');
+	verify($results === [true, false, true, false], 'Find recorded intermediate results or skipped failures.');
+	foreach (['findWaitPresent', 'findWaitVisible', 'waitNotPresent', 'waitNotVisible', 'isNotVisible'] as $removed):
+		verify(!method_exists($browser, $removed) && !method_exists($browser->window(), $removed), 'Overlapping selector helper still exists.');
+	endforeach;
+	$browser->quit();
+});
+
+scenario('URL assertion retries report once and preserve timeout/default and callback failure behavior', function ($listener) {
+	createSession($listener);
+	foreach (['pending', 'done', 'pending', 'pending', 'done'] as $path):
+		exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/' . $path);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$throw = false;
+	$expected = new RuntimeException('WebDriver HTTP 404 no such element: recorder failure');
+	$browser = new Browser($url, 'firefox', timeout: 0.05, assert: function ($condition, $message) use (&$results, &$throw, $expected) {
+		$results[] = [$condition, $message];
+		if ($throw) throw $expected;
+	});
+	$browser->urlMatches('~/done$~', wait: true, timeout: 1000);
+	foreach ([20, null] as $timeout):
+		$start = microtime(true);
+		$browser->window()->urlMatches('~/done$~', wait: true, timeout: $timeout);
+		$elapsed = microtime(true) - $start;
+		verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'URL timeout units/default changed.');
+	endforeach;
+	$throw = true;
+	try {
+		$browser->urlMatches('~/done$~', wait: true);
+		throw new RuntimeException('Recorder exception was swallowed.');
+	} catch (RuntimeException $error) {
+		verify($error === $expected, 'Recorder exception was replaced or retried.');
+	}
+	verify(array_column($results, 0) === [true, false, false, true], 'URL retry results are incorrect.');
 	$browser->quit();
 });
 
@@ -671,7 +952,7 @@ scenario('window waits restore their context and empty sets require an explicit 
 		$elements = $receiver->findAll('.ready');
 		if (++$calls === 1) $browser->switch('other');
 		return $elements->first();
-	}, timeout: 1)->click();
+	}, timeout: 1000)->click();
 	verify($calls === 2 && $browser->window() === $window, 'Wait did not restore its original window.');
 	$browser->quit();
 });
@@ -1030,7 +1311,7 @@ scenario('wait re-finds missing/stale elements and returns the ready element', f
 	$element = $driver->wait(function ($driver) {
 		$id = $driver->find('#ready');
 		return $id->displayed() && $id->enabled() ? $id : false;
-	}, timeout: 2);
+	}, timeout: 2000);
 	verify($element instanceof Element && $element->id() === 'ready', 'Wait did not return the callback result.');
 	$element->click();
 	$driver->quit();
@@ -1050,8 +1331,8 @@ scenario('find waits retry searches and return the first present or visible matc
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
-	verify($browser->findWaitPresent('//input', 'xpath', 1000)->id() === 'hidden', 'Presence should not require displayedness.');
-	verify($browser->window()->findWaitVisible('.ready', timeout: 1000)->id() === 'replacement', 'Visibility did not re-find after stale reference.');
+	verify($browser->find('//input', 'xpath', wait: true, timeout: 1000)->id() === 'hidden', 'Presence should not require displayedness.');
+	verify($browser->window()->find('.ready', visible: true, wait: true, timeout: 1000)->id() === 'replacement', 'Visibility did not re-find after stale reference.');
 	$browser->quit();
 });
 
@@ -1076,18 +1357,18 @@ scenario('selector negative waits track replacements and all matching elements',
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
-	verify($browser->waitNotPresent('//aside', 'xpath', 1000) === $browser, 'Browser negative wait lost receiver.');
-	verify($browser->waitNotVisible('.spinner', timeout: 1000) === $browser, 'Visible replacement was ignored.');
+	verify($browser->find('//aside', 'xpath', wait: true, invert: true, timeout: 1000) === null, 'Inverted find should return null.');
+	verify($browser->find('.spinner', visible: true, wait: true, invert: true, timeout: 1000) === null, 'Visible replacement was ignored.');
 	$window = $browser->window();
-	verify($window->waitNotPresent('.spinner') === $window, 'Window absence wait lost receiver.');
-	verify($window->waitNotVisible('.spinner') === $window, 'Window hidden wait lost receiver.');
-	verify($browser->waitNotPresent('.spinner') === $browser, 'Absent selector should succeed.');
-	verify($browser->waitNotVisible('.spinner') === $browser, 'Absent selector should be invisible.');
+	verify($window->find('.spinner', wait: true, invert: true) === null, 'Window absence wait failed.');
+	verify($window->find('.spinner', visible: true, wait: true, invert: true) === null, 'Window hidden wait failed.');
+	verify($browser->find('.spinner', wait: true, invert: true) === null, 'Absent selector should succeed.');
+	verify($browser->find('.spinner', visible: true, wait: true, invert: true) === null, 'Absent selector should be invisible.');
 	$browser->quit();
 });
 
-foreach (['waitNotPresent' => 'name', 'waitNotVisible' => 'displayed'] as $method => $endpoint):
-	scenario("element $method retains identity and restores its captured frame", function ($listener) use ($endpoint) {
+foreach (['name', 'displayed'] as $endpoint):
+	scenario("element inverted $endpoint wait retains identity and restores its captured frame", function ($listener) use ($endpoint) {
 		createSession($listener);
 		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
 		exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#old'], [Element::REFERENCE => 'old']);
@@ -1098,11 +1379,11 @@ foreach (['waitNotPresent' => 'name', 'waitNotVisible' => 'displayed'] as $metho
 		exchange($listener, 'GET', "/session/session%2F1/element/old/$endpoint", null, ['error' => 'stale element reference', 'message' => 'removed'], 404);
 		exchange($listener, 'GET', '/session/session%2F1/element/old/name', null, ['error' => 'stale element reference', 'message' => 'still removed'], 404);
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
-	}, function ($url) use ($method) {
+	}, function ($url) use ($endpoint) {
 		$browser = new Browser($url, 'firefox');
 		$element = $browser->switchFrame(0)->find('#old');
 		$browser->switch('other');
-		verify($element->$method(timeout: 1000) === $element, 'Element wait lost original receiver.');
+		verify($element->wait(visible: $endpoint === 'displayed', invert: true, timeout: 1000) === $element, 'Element wait lost original receiver.');
 		expectError(fn() => $element->tag(), 'still removed');
 		$browser->quit();
 	});
@@ -1139,45 +1420,45 @@ scenario('element visibility wait succeeds when the original node becomes hidden
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
-	$element = $browser->switchFrame(0)->findWaitPresent('#name');
-	verify($element->waitNotVisible(1000) === $element, 'Hidden element did not finish wait.');
+	$element = $browser->switchFrame(0)->find('#name', wait: true);
+	verify($element->wait(visible: true, invert: true, timeout: 1000) === $element, 'Hidden element did not finish wait.');
 	$browser->quit();
 });
 
-foreach (['findWaitPresent', 'findWaitVisible', 'waitNotPresent', 'waitNotVisible'] as $method):
-	scenario("$method uses millisecond and default timeouts and propagates selector errors", function ($listener) use ($method) {
+foreach ([[false, false], [true, false], [false, true], [true, true]] as [$visible, $invert]):
+	scenario('find timeout and errors: visible=' . (int)$visible . ', invert=' . (int)$invert, function ($listener) use ($visible, $invert) {
 		createSession($listener);
-		$positive = str_starts_with($method, 'find');
+		$positive = !$invert;
 		foreach (range(1, 2) as $ignored):
 			exchange($listener, 'POST', '/session/session%2F1/' . ($positive ? 'element' : 'elements'),
 				['using' => 'css selector', 'value' => '#pending'],
-				$method === 'findWaitPresent' ? ['error' => 'no such element', 'message' => 'not yet'] : ($positive ? [Element::REFERENCE => 'pending'] : [[Element::REFERENCE => 'pending']]),
-				$method === 'findWaitPresent' ? 404 : 200);
-			if (str_ends_with($method, 'Visible')):
+				!$visible && $positive ? ['error' => 'no such element', 'message' => 'not yet'] : ($positive ? [Element::REFERENCE => 'pending'] : [[Element::REFERENCE => 'pending']]),
+				!$visible && $positive ? 404 : 200);
+			if ($visible):
 				exchange($listener, 'GET', '/session/session%2F1/element/pending/displayed', null, !$positive);
 			endif;
 		endforeach;
 		exchange($listener, 'POST', '/session/session%2F1/' . ($positive ? 'element' : 'elements'),
 			['using' => 'css selector', 'value' => '[broken'], ['error' => 'invalid selector', 'message' => 'bad syntax'], 400);
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
-	}, function ($url) use ($method) {
+	}, function ($url) use ($visible, $invert) {
 		$browser = new Browser($url, 'firefox', timeout: 0.05);
 		foreach ([20, null] as $timeout):
 			$start = microtime(true);
-			expectError(fn() => $browser->$method('#pending', timeout: $timeout), 'wait timed out');
+			expectError(fn() => $browser->find('#pending', visible: $visible, wait: true, invert: $invert, timeout: $timeout), 'wait timed out');
 			$elapsed = microtime(true) - $start;
 			verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'Timeout was not milliseconds or constructor default.');
 		endforeach;
-		expectError(fn() => $browser->$method('[broken'), 'invalid selector');
+		expectError(fn() => $browser->find('[broken', visible: $visible, wait: true, invert: $invert), 'invalid selector');
 		foreach ([0, -1, INF, NAN] as $timeout):
-			expectError(fn() => $browser->$method('#pending', timeout: $timeout), 'positive and finite');
+			expectError(fn() => $browser->find('#pending', visible: $visible, wait: true, invert: $invert, timeout: $timeout), 'positive and finite');
 		endforeach;
 		$browser->quit();
 	});
 endforeach;
 
-foreach (['waitNotPresent' => 'name', 'waitNotVisible' => 'displayed'] as $method => $endpoint):
-	scenario("element $method timeout and unrelated errors", function ($listener) use ($endpoint) {
+foreach (['name', 'displayed'] as $endpoint):
+	scenario("element inverted $endpoint wait timeout and unrelated errors", function ($listener) use ($endpoint) {
 		createSession($listener);
 		exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#pending'], [Element::REFERENCE => 'pending']);
 		foreach (range(1, 2) as $ignored):
@@ -1187,38 +1468,133 @@ foreach (['waitNotPresent' => 'name', 'waitNotVisible' => 'displayed'] as $metho
 			exchange($listener, 'GET', "/session/session%2F1/element/pending/$endpoint", null, ['error' => $error, 'message' => 'stale element reference: not a stale error'], $status);
 		endforeach;
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
-	}, function ($url) use ($method) {
+	}, function ($url) use ($endpoint) {
 		$browser = new Browser($url, 'firefox', timeout: 0.05);
 		$element = $browser->find('#pending');
 		foreach ([20, null] as $timeout):
 			$start = microtime(true);
-			expectError(fn() => $element->$method($timeout), 'wait timed out');
+			expectError(fn() => $element->wait(visible: $endpoint === 'displayed', invert: true, timeout: $timeout), 'wait timed out');
 			$elapsed = microtime(true) - $start;
 			verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'Element timeout units/default changed.');
 		endforeach;
-		expectError(fn() => $element->$method(20), 'wait timed out');
-		expectError(fn() => $element->$method(), 'unknown error');
+		expectError(fn() => $element->wait(visible: $endpoint === 'displayed', invert: true, timeout: 1000), 'no such element');
+		expectError(fn() => $element->wait(visible: $endpoint === 'displayed', invert: true), 'unknown error');
 		foreach ([0, -1, INF, NAN] as $timeout):
-			expectError(fn() => $element->$method($timeout), 'positive and finite');
+			expectError(fn() => $element->wait(visible: $endpoint === 'displayed', invert: true, timeout: $timeout), 'positive and finite');
 		endforeach;
 		$browser->quit();
 	});
 
-	scenario("element $method does not treat a stale frame as a stale node", function ($listener) {
+	scenario("element inverted $endpoint wait propagates stale frames", function ($listener) {
 		createSession($listener);
 		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
 		exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'node']);
 		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => null], null);
 		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], ['error' => 'stale element reference', 'message' => 'frame removed'], 404);
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
-	}, function ($url) use ($method) {
+	}, function ($url) use ($endpoint) {
 		$browser = new Browser($url, 'firefox');
 		$element = $browser->switchFrame(0)->find('#node');
 		$browser->defaultFrame();
-		expectError(fn() => $element->$method(20), 'wait timed out');
+		expectError(fn() => $element->wait(visible: $endpoint === 'displayed', invert: true, timeout: 1000), 'frame removed');
 		$browser->quit();
 	});
 endforeach;
+
+foreach ([[false, false], [true, false], [false, true], [true, true]] as [$visible, $invert]):
+	scenario('original-element wait conditions: visible=' . (int)$visible . ', invert=' . (int)$invert, function ($listener) use ($visible, $invert) {
+		createSession($listener);
+		exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'original']);
+		$path = '/session/session%2F1/element/original/' . ($visible ? 'displayed' : 'name');
+		if ($visible || $invert):
+			exchange($listener, 'GET', $path, null, $visible ? $invert : 'input');
+		endif;
+		if (!$visible && $invert):
+			exchange($listener, 'GET', $path, null, ['error' => 'stale element reference', 'message' => 'removed'], 404);
+		else:
+			exchange($listener, 'GET', $path, null, $visible ? !$invert : 'input');
+		endif;
+		if (!$invert):
+			exchange($listener, 'POST', '/session/session%2F1/element/original/click', [], null);
+		endif;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($visible, $invert) {
+		$results = [];
+		$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+		$element = $browser->find('#node');
+		verify($element->wait(visible: $visible, invert: $invert, assert: true, timeout: 1000) === $element, 'Wait lost its original receiver.');
+		verify($element->id() === 'original' && array_column($results, 0) === [true], 'Wait re-found a replacement or reported intermediate results.');
+		if (!$invert) $element->click();
+		verify(!method_exists($element, 'waitNotPresent') && !method_exists($element, 'waitNotVisible'), 'Overlapping element waits remain.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('positive element waits propagate stale references without re-finding or assertion reports', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'original']);
+	foreach (['name', 'displayed'] as $endpoint):
+		exchange($listener, 'GET', '/session/session%2F1/element/original/' . $endpoint, null, ['error' => 'stale element reference', 'message' => 'original removed'], 404);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition) use (&$results) { $results[] = $condition; });
+	$element = $browser->find('#node');
+	expectError(fn() => $element->wait(assert: true, timeout: 1000), 'original removed');
+	expectError(fn() => $element->wait(visible: true, assert: true, timeout: 1000), 'original removed');
+	verify($results === [], 'Stale reference was recorded as a condition mismatch.');
+	$browser->quit();
+});
+
+scenario('element wait reports expiry before throwing and propagates recorder exceptions', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'original']);
+	exchange($listener, 'GET', '/session/session%2F1/element/original/displayed', null, false);
+	exchange($listener, 'GET', '/session/session%2F1/element/original/displayed', null, true);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$throw = false;
+	$expected = new RuntimeException('WebDriver HTTP 404 stale element reference: recorder failure');
+	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results, &$throw, $expected) {
+		$results[] = [$condition, $message];
+		if ($throw) throw $expected;
+		return false;
+	});
+	$element = $browser->find('#node');
+	expectError(fn() => $element->wait(visible: true, assert: true, timeout: 20), 'wait timed out');
+	verify($results === [[false, "Element 'original': expected visible, got hidden."]], 'Expiry did not report exactly one failure.');
+	$throw = true;
+	try {
+		$element->wait(visible: true, assert: true, timeout: 1000);
+		throw new RuntimeException('Recorder exception was swallowed.');
+	} catch (RuntimeException $error) {
+		verify($error === $expected, 'Recorder exception was replaced.');
+	}
+	verify(array_column($results, 0) === [false, true], 'Recorder was retried.');
+	$browser->quit();
+});
+
+scenario('callable browser and window waits use milliseconds and the configured default', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', timeout: 0.05);
+	foreach ([$browser, $browser->window()] as $receiver):
+		foreach ([20, null] as $timeout):
+			$start = microtime(true);
+			expectError(fn() => $receiver->wait(fn() => false, timeout: $timeout), 'wait timed out');
+			$elapsed = microtime(true) - $start;
+			verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'Callable wait timeout units/default changed.');
+		endforeach;
+		foreach ([0, -1, INF, NAN] as $timeout):
+			expectError(fn() => $receiver->wait(fn() => true, timeout: $timeout), 'positive and finite');
+		endforeach;
+		verify($receiver->wait(fn($actual) => $actual === $receiver ? ['ready'] : false, timeout: 1000) === ['ready'], 'Callable wait changed its callback receiver or result.');
+	endforeach;
+	$browser->quit();
+});
 
 scenario('window find wait restores selected window and frame', function ($listener) {
 	createSession($listener);
@@ -1233,7 +1609,7 @@ scenario('window find wait restores selected window and frame', function ($liste
 	$browser = new Browser($url, 'firefox');
 	$window = $browser->window()->switchFrame(0);
 	$browser->switch('other');
-	verify($window->findWaitVisible('//input', 'xpath')->window() === $window, 'Find wait lost window context.');
+	verify($window->find('//input', 'xpath', visible: true, wait: true)->window() === $window, 'Find wait lost window context.');
 	$browser->quit();
 });
 
@@ -1245,9 +1621,10 @@ scenario('wait timeout and nonretryable errors', function ($listener) {
 }, function ($url) {
 	$driver = new Browser($url, 'firefox');
 	$start = microtime(true);
-	expectError(fn() => $driver->wait(fn() => false, timeout: 0.04), 'wait timed out');
-	verify(microtime(true) - $start < 0.5, 'Wait slept beyond its polling deadline.');
-	expectError(fn() => $driver->wait(fn($d) => $d->find('[broken'), timeout: 1), 'invalid selector');
+	expectError(fn() => $driver->wait(fn() => false, timeout: 40), 'wait timed out');
+	$elapsed = microtime(true) - $start;
+	verify($elapsed >= 0.04 && $elapsed < 0.5, 'Wait did not use its millisecond polling deadline.');
+	expectError(fn() => $driver->wait(fn($d) => $d->find('[broken'), timeout: 1000), 'invalid selector');
 	$expected = new LogicException('callback failure');
 	try {
 		$driver->wait(function () use ($expected) { throw $expected; });

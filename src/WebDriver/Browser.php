@@ -21,7 +21,7 @@
 	 *     $input = $driver->wait(function ($driver) {
 	 *         $element = $driver->find('#name');
 	 *         return $element->displayed() && $element->enabled() ? $element : false;
-	 *     }, timeout: 10);
+	 *     }, timeout: 10000);
 	 *     $input->clear()->type('Hello')->key(\ThriveData\ThrivePHP\WebDriver\Browser::TAB);
 	 *     $value = $driver->script('return arguments[0].value;', arguments: [$input]);
 	 *     $title = $driver->title();
@@ -74,7 +74,7 @@
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
 		 * $assert optionally receives (bool $condition, string $message) once per fluent
 		 * assertion, including successes. Its return value is ignored; exceptions propagate.
-		 * Without it, failed assertions throw RuntimeException. Assertions do not retry.
+		 * Without it, failed assertions throw RuntimeException. Assertions retry only with $wait.
 		 * For a test recorder, pass assert: [$test, 'assert'].
 		 */
 		public function __construct(
@@ -163,73 +163,27 @@
 		}
 
 		/**
-		 * Return the first matching element in the current window/frame.
+		 * Find in the current window/frame. Presence is the default; $visible requires
+		 * the first match to be displayed. $invert instead requires no matches, or no
+		 * displayed matches when $visible is true. Positive success returns an Element;
+		 * inverted success returns null. Unmet conditions throw, even with a recorder.
+		 * $wait repeats the search every 100 ms. $timeout is positive, finite milliseconds,
+		 * defaulting to the constructor timeout; ignored without $wait. In-flight commands
+		 * retain their own timeouts. $assert reports one final result through the recorder.
+		 * Invalid selectors and unrelated driver errors propagate without assertion reports.
+		 * Returned elements retain this lookup for waiting assertions; see Window::find().
 		 * $using defaults to 'css selector'; other W3C strategies are 'xpath', 'tag name',
 		 * 'link text', and 'partial link text'. For scoped XPath, use a relative expression.
 		 */
-		public function find(string $selector, string $using = 'css selector'): Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
-			return $this->window()->find($selector, $using);
-		}
-
-		/**
-		 * Re-find in the current window/frame until the first match exists, then return it.
-		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
-		 * the constructor timeout. Throws on expiry; see Window::findWaitPresent().
-		 */
-		public function findWaitPresent(string $selector, string $using = 'css selector', ?float $timeout = null): Element
-		{
-			return $this->window()->findWaitPresent($selector, $using, $timeout);
-		}
-
-		/**
-		 * Re-find until the first match is displayed, then return it (not a clickability guarantee).
-		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
-		 * the constructor timeout. Throws on expiry; see Window::findWaitVisible().
-		 */
-		public function findWaitVisible(string $selector, string $using = 'css selector', ?float $timeout = null): Element
-		{
-			return $this->window()->findWaitVisible($selector, $using, $timeout);
-		}
-
-		/**
-		 * Re-query until no matches remain, including replacements; return this browser.
-		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
-		 * the constructor timeout. Throws on expiry; an empty search succeeds immediately.
-		 */
-		public function waitNotPresent(string $selector, string $using = 'css selector', ?float $timeout = null): self
-		{
-			$this->window()->waitNotPresent($selector, $using, $timeout);
-			return $this;
-		}
-
-		/**
-		 * Re-query until no matches are displayed, including replacements; return this browser.
-		 * Uses find() strategies. $timeout is positive, finite milliseconds; null uses
-		 * the constructor timeout. Throws on expiry; an empty search succeeds immediately.
-		 */
-		public function waitNotVisible(string $selector, string $using = 'css selector', ?float $timeout = null): self
-		{
-			$this->window()->waitNotVisible($selector, $using, $timeout);
-			return $this;
+			return $this->window()->find($selector, $using, $visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return a snapshot of matching elements in document order, possibly empty. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
 			return $this->window()->findAll($selector, $using);
-		}
-
-		/**
-		 * Assert once that no matching element is displayed in the current window/frame.
-		 * An empty search passes. Uses find() strategies; stale matches and other driver
-		 * errors propagate. Report through the assertion callback, or throw on failure
-		 * without one. Return this browser; see Window::isNotVisible().
-		 */
-		public function isNotVisible(string $selector, string $using = 'css selector'): self
-		{
-			$this->window()->isNotVisible($selector, $using);
-			return $this;
 		}
 
 		/** Return the focused element in the current browsing context. */
@@ -397,13 +351,13 @@
 		 * Poll $condition($this) every 100 ms until it returns a truthy value, then
 		 * return that value. Only missing/stale element errors are retried; all other
 		 * exceptions propagate. Re-find elements inside the callback to survive DOM changes.
-		 * $timeout is seconds, defaulting to the constructor timeout. Checked between
-		 * callbacks: synchronous callback work retains its own HTTP/BiDi timeouts.
+		 * $timeout is positive, finite milliseconds; null uses the constructor timeout.
+		 * Checked between callbacks: synchronous work retains its own HTTP/BiDi timeouts.
 		 * Empty ElementSet objects are truthy: return first() or explicitly test count().
 		 */
 		public function wait(callable $condition, ?float $timeout = null): mixed
 		{
-			$deadline = $this->deadline($timeout ?? $this->timeout);
+			$deadline = $this->deadline($timeout === null ? $this->timeout : $timeout / 1000);
 			$lastError = null;
 			do {
 				try {
@@ -428,13 +382,14 @@
 		}
 
 		/**
-		 * Assert once that the current window URL matches a delimited PHP regex.
+		 * Assert that the current window URL matches a delimited PHP regex. $wait polls;
+		 * $timeout is positive milliseconds or null for the browser default, ignored without waiting.
 		 * Return this browser. Invalid patterns throw; results use the constructor's
 		 * assertion callback, or throw on failure when none was supplied.
 		 */
-		public function urlMatches(string $pattern): self
+		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null): self
 		{
-			$this->window()->urlMatches($pattern);
+			$this->window()->urlMatches($pattern, $wait, $timeout);
 			return $this;
 		}
 
@@ -449,14 +404,33 @@
 		}
 
 		/** @internal Match a delimited PHP regex; null never matches, and regex errors throw. */
-		public function assertMatches(string $pattern, ?string $actual, string $subject): void
+		public static function matches(string $pattern, ?string $actual): bool
 		{
 			$matched = @preg_match($pattern, $actual ?? '');
 			if ($matched === false):
 				throw new \InvalidArgumentException('Could not evaluate assertion pattern ' . var_export($pattern, true) . ': ' . preg_last_error_msg());
 			endif;
-			$this->reportAssertion($actual !== null && $matched === 1,
-				$subject . ': expected a match for ' . var_export($pattern, true) . ', got ' . var_export($actual, true) . '.');
+			return $actual !== null && $matched === 1;
+		}
+
+		/**
+		 * @internal Evaluate once or poll every 100 ms; return false on expiry. Errors propagate.
+		 * The timeout is positive, finite milliseconds, or null for the constructor default.
+		 * Ignore timeout when not waiting. Each call gets its own deadline, checked between commands.
+		 */
+		public function evaluate(callable $condition, bool $wait, ?float $timeout): bool
+		{
+			$deadline = $wait ? $this->deadline($timeout === null ? $this->timeout : $timeout / 1000) : null;
+			do {
+				if ($condition()):
+					return true;
+				endif;
+				if (!$wait || ($remaining = $deadline - hrtime(true) / 1e9) <= 0):
+					return false;
+				endif;
+				usleep((int)(min(0.1, $remaining) * 1e6));
+			} while (hrtime(true) / 1e9 < $deadline);
+			return false;
 		}
 
 		/** Return the current window's document title. */

@@ -151,7 +151,7 @@
 		 * have left a remote session that this client cannot identify for deletion.
 		 * $assert receives (bool $condition, string $message) once per fluent assertion;
 		 * pass [$test, 'assert'] to record results. Its return value is ignored and its
-		 * exceptions propagate. Null makes failed assertions throw. Assertions do not retry.
+		 * exceptions propagate. Null makes failed assertions throw. Assertions retry only with $wait.
 		 */
 		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = [], ?callable $assert = null): Browser
 		{
