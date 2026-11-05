@@ -168,6 +168,28 @@
 			return ElementSet::fromReferences($this, $this->frames, $references);
 		}
 
+		/**
+		 * Assert once that no matching element is displayed in this window/frame.
+		 * An empty search passes; any visible match fails. Uses find() strategies.
+		 * Stale matches propagate rather than pass, since a replacement may be visible.
+		 * Other driver errors also propagate. Report once through Browser's assertion
+		 * callback, or throw on failure without one. Return this window; no retries.
+		 */
+		public function isNotVisible(string $selector, string $using = 'css selector'): self
+		{
+			$visible = null;
+			foreach ($this->findAll($selector, $using) as $element):
+				if ($element->displayed()):
+					$visible = $element->id();
+					break;
+				endif;
+			endforeach;
+			$this->browser->reportAssertion($visible === null,
+				'Selector ' . var_export($selector, true) . ' using ' . var_export($using, true)
+				. ': expected no visible matches, got ' . ($visible === null ? 'none' : 'visible element ' . var_export($visible, true)) . '.');
+			return $this;
+		}
+
 		/** Return the focused element in the selected frame. */
 		public function activeElement(): Element
 		{

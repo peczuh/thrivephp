@@ -271,6 +271,61 @@ scenario('count assertions report empty window, descendant and shadow searches w
 	$browser->quit();
 });
 
+foreach (['browser', 'window'] as $receiver):
+	scenario("$receiver selector visibility assertions check all matches and propagate driver errors", function ($listener) {
+		createSession($listener);
+		$selector = ['using' => 'css selector', 'value' => '.error'];
+		exchange($listener, 'POST', '/session/session%2F1/elements', $selector, []);
+		foreach ([false, true] as $visible):
+			exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'first'], [Element::REFERENCE => 'second']]);
+			exchange($listener, 'GET', '/session/session%2F1/element/first/displayed', null, false);
+			exchange($listener, 'GET', '/session/session%2F1/element/second/displayed', null, $visible);
+		endforeach;
+		exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '[broken'], ['error' => 'invalid selector', 'message' => 'bad syntax'], 400);
+		exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'old']]);
+		exchange($listener, 'GET', '/session/session%2F1/element/old/displayed', null, ['error' => 'stale element reference', 'message' => 'replaced'], 404);
+		exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'current']]);
+		exchange($listener, 'GET', '/session/session%2F1/element/current/displayed', null, ['error' => 'unknown error', 'message' => 'display query failed'], 500);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($receiver) {
+		$results = [];
+		$browser = new Browser($url, 'firefox', assert: function (bool $condition, string $message) use (&$results): bool {
+			$results[] = [$condition, $message];
+			return $condition;
+		});
+		$target = $receiver === 'browser' ? $browser : $browser->window();
+		foreach (range(1, 3) as $ignored):
+			verify($target->isNotVisible('.error') === $target, 'Selector visibility assertion lost its receiver.');
+		endforeach;
+		verify(array_column($results, 0) === [true, true, false], 'Absent, hidden, or mixed visibility was reported incorrectly.');
+		verify($results[2][1] === "Selector '.error' using 'css selector': expected no visible matches, got visible element 'second'.", 'Selector failure lacks expected/actual diagnostics.');
+		expectError(fn() => $target->isNotVisible('[broken'), 'invalid selector');
+		expectError(fn() => $target->isNotVisible('.error'), 'stale element reference');
+		expectError(fn() => $target->isNotVisible('.error'), 'unknown error');
+		verify(count($results) === 3, 'Driver errors were converted to assertion results.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('selector visibility assertions restore window/frame context and throw without a recorder', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'xpath', 'value' => '//aside'], [[Element::REFERENCE => 'visible']]);
+	exchange($listener, 'GET', '/session/session%2F1/element/visible/displayed', null, true);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.gone'], []);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$window = $browser->window()->switchFrame(0);
+	$browser->switch('other');
+	expectError(fn() => $window->isNotVisible('//aside', 'xpath'), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible element 'visible'.");
+	verify($browser->isNotVisible('.gone') === $browser, 'Successful assertion without a recorder lost its receiver.');
+	$browser->quit();
+});
+
 scenario('URL assertions retain receivers and select the top-level window without restoring frames', function ($listener) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);

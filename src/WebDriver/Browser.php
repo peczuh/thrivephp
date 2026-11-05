@@ -220,6 +220,18 @@
 			return $this->window()->findAll($selector, $using);
 		}
 
+		/**
+		 * Assert once that no matching element is displayed in the current window/frame.
+		 * An empty search passes. Uses find() strategies; stale matches and other driver
+		 * errors propagate. Report through the assertion callback, or throw on failure
+		 * without one. Return this browser; see Window::isNotVisible().
+		 */
+		public function isNotVisible(string $selector, string $using = 'css selector'): self
+		{
+			$this->window()->isNotVisible($selector, $using);
+			return $this;
+		}
+
 		/** Return the focused element in the current browsing context. */
 		public function activeElement(): Element
 		{
