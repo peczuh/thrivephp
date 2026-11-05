@@ -68,6 +68,8 @@ while (true):
 		$value = [];
 	elseif (str_ends_with($path, '/title')):
 		$value = 'Fixture';
+	elseif (str_ends_with($path, '/url') && $method === 'GET'):
+		$value = 'https://example.test/fixture';
 	elseif (preg_match('#^/session/[^/]+$#', $path) && $method === 'DELETE' && $mode === 'delete-error'):
 		$status = 500;
 		$value = ['error' => 'unknown error', 'message' => 'fixture session deletion failed'];

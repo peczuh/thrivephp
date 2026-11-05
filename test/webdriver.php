@@ -177,6 +177,176 @@ foreach (['chrome', 'firefox', 'safari'] as $browser):
 	});
 endforeach;
 
+$assertionCases = [
+	['isVisible', [], '/displayed', true, true, 'expected true, got true'],
+	['isVisible', [], '/displayed', false, false, 'expected true, got false'],
+	['isNotVisible', [], '/displayed', false, true, 'expected false or stale, got false'],
+	['isNotVisible', [], '/displayed', true, false, 'expected false or stale, got true'],
+	['valueEquals', ['Jane'], '/property/value', 'Jane', true, "expected 'Jane', got 'Jane'"],
+	['valueEquals', ['0'], '/property/value', 0, false, "expected '0', got 0"],
+	['textEquals', ['Hello €'], '/text', 'Hello €', true, "expected 'Hello €', got 'Hello €'"],
+	['textEquals', ['Hello'], '/text', 'hello', false, "expected 'Hello', got 'hello'"],
+	['textContains', ['€'], '/text', 'Hello €', true, "expected to contain '€', got 'Hello €'"],
+	['textContains', ['Hello'], '/text', 'hello', false, "expected to contain 'Hello', got 'hello'"],
+	['attributeEquals', ['data/name', '0'], '/attribute/data%2Fname', '0', true, "expected '0', got '0'"],
+	['attributeEquals', ['missing', null], '/attribute/missing', null, true, 'expected NULL, got NULL'],
+	['attributeEquals', ['missing', ''], '/attribute/missing', null, false, "expected '', got NULL"],
+	['attributeMatches', ['data/name', '/^item-[0-9]+$/'], '/attribute/data%2Fname', 'item-42', true, "expected a match for '/^item-[0-9]+$/', got 'item-42'"],
+	['attributeMatches', ['data/name', '/^item-[0-9]+$/'], '/attribute/data%2Fname', 'other', false, "expected a match for '/^item-[0-9]+$/', got 'other'"],
+	['attributeMatches', ['missing', '/^$/'], '/attribute/missing', null, false, "expected a match for '/^$/', got NULL"],
+];
+
+scenario('fluent element assertions report each result once and continue after recorded failures', function ($listener) use ($assertionCases) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
+	foreach ($assertionCases as [$method, $arguments, $path, $actual]):
+		exchange($listener, 'GET', '/session/session%2F1/element/input' . $path, null, $actual);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) use ($assertionCases) {
+	$recorder = new class {
+		public array $results = [];
+		public function assert(bool $condition, string $message): bool
+		{
+			$this->results[] = [$condition, $message];
+			return $condition;
+		}
+	};
+	$browser = new Browser($url, 'firefox', assert: [$recorder, 'assert']);
+	$element = $browser->find('#name');
+	foreach ($assertionCases as $index => [$method, $arguments, $path, $actual, $expected, $message]):
+		verify($element->$method(...$arguments) === $element, "$method lost the fluent receiver.");
+		verify(count($recorder->results) === $index + 1, "$method did not record exactly once.");
+		verify($recorder->results[$index][0] === $expected, "$method reported the wrong result.");
+		verify(str_contains($recorder->results[$index][1], "Element 'input'") && str_contains($recorder->results[$index][1], $message), "$method lost expected/actual diagnostics.");
+	endforeach;
+	$browser->quit();
+});
+
+scenario('assertions throw on failure without a recorder and preserve the session', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/value', ['text' => 'Jane'], null);
+	exchange($listener, 'GET', '/session/session%2F1/element/input/property/value', null, 'Jane');
+	exchange($listener, 'GET', '/session/session%2F1/element/input/displayed', null, true);
+	exchange($listener, 'GET', '/session/session%2F1/element/input/text', null, 'Actual');
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+	exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/actual');
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$element = $browser->find('#name');
+	verify($element->setValue('Jane')->valueEquals('Jane')->isVisible() === $element, 'Action/assertion chain failed.');
+	expectError(fn() => $element->textEquals('Expected'), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
+	expectError(fn() => $browser->findAll('.missing')->countEquals(1), 'expected 1, got 0');
+	expectError(fn() => $browser->urlMatches('~/expected$~'), "got 'https://example.test/actual'");
+	$browser->quit();
+});
+
+scenario('count assertions report empty window, descendant and shadow searches without re-querying', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => 'input'], [[Element::REFERENCE => 'one'], [Element::REFERENCE => 'two']]);
+	exchange($listener, 'POST', '/session/session%2F1/element/one/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+	exchange($listener, 'GET', '/session/session%2F1/element/one/shadow', null, [ShadowRoot::REFERENCE => 'shadow']);
+	exchange($listener, 'POST', '/session/session%2F1/shadow/shadow/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$empty = $browser->findAll('.missing');
+	verify($empty->countEquals(0)->countEquals(1) === $empty, 'Empty count assertion lost its set.');
+	$set = $browser->findAll('input');
+	verify($set->countEquals(2)->countEquals(1) === $set, 'Count assertion refreshed membership or lost its set.');
+	$set->first()->findAll('.missing')->countEquals(0);
+	$set->first()->shadowRoot()->findAll('.missing')->countEquals(0);
+	$explicit = new ElementSet(...$set->all());
+	verify($explicit->countEquals(2) === $explicit, 'Explicit snapshot lost its element recorder.');
+	$standalone = new ElementSet();
+	verify($standalone->countEquals(0) === $standalone, 'Standalone empty snapshot cannot assert its count.');
+	expectError(fn() => $standalone->countEquals(1), 'expected 1, got 0');
+	verify(array_column($results, 0) === [true, false, true, false, true, true, true], 'Count results were not shared with the browser recorder.');
+	verify($results[1][1] === 'Element count: expected 1, got 0.', 'Count failure lacks expected/actual values.');
+	$browser->quit();
+});
+
+scenario('URL assertions retain receivers and select the top-level window without restoring frames', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
+	exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/projects/42');
+	exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/projects/42');
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$window = $browser->window()->switchFrame(0);
+	$browser->switch('other');
+	verify($window->urlMatches('~/projects/\d+$~') === $window, 'URL assertion lost its window.');
+	verify($browser->urlMatches('~/missing$~') === $browser, 'URL assertion lost its browser.');
+	verify(array_column($results, 0) === [true, false], 'URL assertions reported incorrect results.');
+	verify(str_contains($results[1][1], "'~/missing$~'") && str_contains($results[1][1], 'https://example.test/projects/42'), 'URL diagnostics lost expected/actual values.');
+	$browser->quit();
+});
+
+scenario('element assertions restore captured context and distinguish stale references from driver errors', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#original'], [Element::REFERENCE => 'original']);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'GET', '/session/session%2F1/element/original/displayed', null, true);
+	foreach (['stale element reference', 'stale element reference', 'no such element', 'unknown error'] as $error):
+		exchange($listener, 'GET', '/session/session%2F1/element/original/displayed', null, ['error' => $error, 'message' => 'stale element reference: detail'], 404);
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => null], null);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], ['error' => 'stale element reference', 'message' => 'frame removed'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new Browser($url, 'firefox', assert: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$element = $browser->switchFrame(0)->find('#original');
+	$browser->switch('other');
+	$element->isVisible();
+	verify($element->isNotVisible() === $element, 'Stale visibility assertion lost original identity.');
+	expectError(fn() => $element->isVisible(), 'stale element reference');
+	expectError(fn() => $element->isNotVisible(), 'no such element');
+	expectError(fn() => $element->isNotVisible(), 'unknown error');
+	$browser->defaultFrame();
+	expectError(fn() => $element->isNotVisible(), 'frame removed');
+	verify(array_column($results, 0) === [true, true], 'Driver/context errors were reported as assertions.');
+	verify(str_contains($results[1][1], 'got stale'), 'Stale assertion diagnostics were lost.');
+	$browser->quit();
+});
+
+scenario('invalid assertion patterns and callback exceptions propagate without extra reports', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
+	exchange($listener, 'GET', '/session/session%2F1/element/input/attribute/missing', null, null);
+	exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/');
+	exchange($listener, 'GET', '/session/session%2F1/element/input/displayed', null, false);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$calls = 0;
+	$expected = new RuntimeException('WebDriver HTTP 404 stale element reference: recorder failure');
+	$browser = new Browser($url, 'firefox', assert: function () use (&$calls, $expected) { $calls++; throw $expected; });
+	$element = $browser->find('#name');
+	expectError(fn() => $element->attributeMatches('missing', '/[/'), 'Could not evaluate assertion pattern');
+	expectError(fn() => $browser->urlMatches('not delimited'), 'Could not evaluate assertion pattern');
+	verify($calls === 0, 'Invalid patterns reached the assertion recorder.');
+	try {
+		$element->isNotVisible();
+		throw new RuntimeException('Callback exception was swallowed.');
+	} catch (RuntimeException $error) {
+		verify($error === $expected, 'Callback exception was replaced.');
+	}
+	verify($calls === 1, 'Callback was called more than once.');
+	$browser->quit();
+});
+
 scenario('endpoint prefix and browser capabilities', function ($listener) {
 	exchange($listener, 'POST', '/wd/hub/session', ['capabilities' => ['alwaysMatch' => [
 		'goog:chromeOptions' => ['args' => ['--headless=new']], 'browserName' => 'chrome',

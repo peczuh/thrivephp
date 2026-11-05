@@ -58,6 +58,17 @@
 			return $this->request('GET', '/url', topLevel: true);
 		}
 
+		/**
+		 * Assert once that this window's top-level URL matches a delimited PHP regex.
+		 * Return this window. Invalid patterns throw; results use Browser's assertion
+		 * callback, or throw on failure when none was supplied.
+		 */
+		public function urlMatches(string $pattern): self
+		{
+			$this->browser->assertMatches($pattern, $this->url(), 'Window ' . var_export($this->handle, true) . ' URL');
+			return $this;
+		}
+
 		/** Navigate one entry backward in this window's history. */
 		public function back(): self
 		{
@@ -154,7 +165,7 @@
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
 			$references = $this->request('POST', '/elements', ['using' => $using, 'value' => $selector]);
-			return new ElementSet(...array_map(fn($reference) => Element::fromReference($this, $this->frames, $reference), $references));
+			return ElementSet::fromReferences($this, $this->frames, $references);
 		}
 
 		/** Return the focused element in the selected frame. */

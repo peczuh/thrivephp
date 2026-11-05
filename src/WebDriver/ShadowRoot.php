@@ -31,7 +31,7 @@
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
 			$references = $this->request('/elements', $selector, $using);
-			return new ElementSet(...array_map(fn($reference) => Element::fromReference($this->window, $this->frames, $reference), $references));
+			return ElementSet::fromReferences($this->window, $this->frames, $references);
 		}
 
 		/** Return the W3C reference, optionally checking its destination context. */

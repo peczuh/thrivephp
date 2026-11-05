@@ -346,6 +346,26 @@ try {
 		raises(fn() => $driver->browser(), 'not running', LogicException::class);
 	});
 
+	scenario('session factory forwards assertion callbacks without retaining them for later sessions', function () {
+		FixtureDriver::$source = installation(['firefox']);
+		$driver = new FixtureDriver(browser: 'firefox');
+		$results = [];
+		try {
+			$first = $driver->browser(assert: function (bool $condition, string $message) use (&$results): bool {
+				$results[] = [$condition, $message];
+				return $condition;
+			});
+			check($first->urlMatches('~/fixture$~')->urlMatches('~/missing$~') === $first, 'Factory callback did not preserve the chain.');
+			check(array_column($results, 0) === [true, false], 'Factory did not forward assertion results.');
+			$first->quit();
+			$second = $driver->browser();
+			raises(fn() => $second->urlMatches('~/missing$~'), 'WebDriver assertion failed');
+			check(count($results) === 2, 'New session retained the previous recorder.');
+		} finally {
+			$driver->stop();
+		}
+	});
+
 	scenario('Chromium uses chrome protocol name and the selected binary', function () use ($log) {
 		FixtureDriver::$source = installation(['chromium']);
 		$driver = new FixtureDriver(browser: 'chromium');

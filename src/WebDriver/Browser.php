@@ -62,6 +62,8 @@
 		private ?Window $currentWindow = null;
 		/** Selected frame path; null means a failed switch left the context uncertain. */
 		private ?array $currentFrames = [];
+		/** Shared assertion recorder; null makes failed assertions throw. */
+		private ?\Closure $assertion = null;
 
 		/**
 		 * Create a session immediately, connecting BiDi if requested. $endpoint is the
@@ -70,6 +72,10 @@
 		 * Chrome; $browser and $bidi determine browserName and webSocketUrl themselves.
 		 * $timeout is positive seconds: an HTTP stream I/O timeout and a BiDi command/
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
+		 * $assert optionally receives (bool $condition, string $message) once per fluent
+		 * assertion, including successes. Its return value is ignored; exceptions propagate.
+		 * Without it, failed assertions throw RuntimeException. Assertions do not retry.
+		 * For a test recorder, pass assert: [$test, 'assert'].
 		 */
 		public function __construct(
 			private string $endpoint,
@@ -77,7 +83,9 @@
 			bool $bidi = false,
 			private float $timeout = 10,
 			array $capabilities = [],
+			?callable $assert = null,
 		) {
+			$this->assertion = $assert === null ? null : \Closure::fromCallable($assert);
 			$this->deadline($timeout);
 			$this->endpoint = self::baseUrl($endpoint);
 			$capabilities['browserName'] = $browser;
@@ -405,6 +413,38 @@
 				usleep((int)(min(0.1, $remaining) * 1e6));
 			} while (hrtime(true) / 1e9 < $deadline);
 			throw new \RuntimeException('WebDriver wait timed out.', 0, $lastError);
+		}
+
+		/**
+		 * Assert once that the current window URL matches a delimited PHP regex.
+		 * Return this browser. Invalid patterns throw; results use the constructor's
+		 * assertion callback, or throw on failure when none was supplied.
+		 */
+		public function urlMatches(string $pattern): self
+		{
+			$this->window()->urlMatches($pattern);
+			return $this;
+		}
+
+		/** @internal Report one assertion result; callback return values do not control the chain. */
+		public function reportAssertion(bool $condition, string $message): void
+		{
+			if ($this->assertion !== null):
+				($this->assertion)($condition, $message);
+			elseif (!$condition):
+				throw new \RuntimeException('WebDriver assertion failed: ' . $message);
+			endif;
+		}
+
+		/** @internal Match a delimited PHP regex; null never matches, and regex errors throw. */
+		public function assertMatches(string $pattern, ?string $actual, string $subject): void
+		{
+			$matched = @preg_match($pattern, $actual ?? '');
+			if ($matched === false):
+				throw new \InvalidArgumentException('Could not evaluate assertion pattern ' . var_export($pattern, true) . ': ' . preg_last_error_msg());
+			endif;
+			$this->reportAssertion($actual !== null && $matched === 1,
+				$subject . ': expected a match for ' . var_export($pattern, true) . ', got ' . var_export($actual, true) . '.');
 		}
 
 		/** Return the current window's document title. */

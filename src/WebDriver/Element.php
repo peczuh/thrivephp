@@ -5,7 +5,10 @@
 	 * A DOM element bound to its browser window and original frame path. Commands
 	 * select that context automatically and return this element for fluent chaining.
 	 * References are never silently re-found: stale-element errors propagate except
-	 * when completing waitNotPresent() or waitNotVisible().
+	 * when completing waitNotPresent(), waitNotVisible(), or isNotVisible().
+	 * Fluent assertions evaluate once, return this element, and report through Browser's
+	 * assertion callback. Without a callback, failed assertions throw RuntimeException.
+	 * Driver errors propagate, except that isNotVisible() accepts a stale element.
 	 */
 	class Element
 	{
@@ -43,7 +46,7 @@
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
 			$references = $this->request('POST', '/elements', ['using' => $using, 'value' => $selector]);
-			return new ElementSet(...array_map(fn($reference) => self::fromReference($this->window, $this->frames, $reference), $references));
+			return ElementSet::fromReferences($this->window, $this->frames, $references);
 		}
 
 		/** Return the accessible shadow root; throws if the host has none. */
@@ -257,6 +260,81 @@
 					return true;
 				}
 			}, $timeout === null ? null : $timeout / 1000);
+			return $this;
+		}
+
+		/** Assert displayedness once; visibility does not guarantee clickability. Return this element. */
+		public function isVisible(): self
+		{
+			$actual = $this->displayed();
+			$this->window->browser()->reportAssertion($actual,
+				'Element ' . var_export($this->id, true) . ' visibility: expected true, got ' . var_export($actual, true) . '.');
+			return $this;
+		}
+
+		/** Assert once that this original node is hidden or stale; return this element without re-finding it. */
+		public function isNotVisible(): self
+		{
+			$browser = $this->window->browser();
+			// Context errors must not be mistaken for this element becoming stale.
+			$browser->activate($this->window, $this->frames);
+			try {
+				$actual = $this->displayed();
+			} catch (\RuntimeException $error) {
+				if (!preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
+					throw $error;
+				endif;
+				$actual = null;
+			}
+			$browser->reportAssertion($actual !== true,
+				'Element ' . var_export($this->id, true) . ' visibility: expected false or stale, got ' . ($actual === null ? 'stale' : var_export($actual, true)) . '.');
+			return $this;
+		}
+
+		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */
+		public function valueEquals(string $expected): self
+		{
+			$actual = $this->property('value');
+			$this->window->browser()->reportAssertion($actual === $expected,
+				'Element ' . var_export($this->id, true) . ' value: expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
+			return $this;
+		}
+
+		/** Assert strict equality with rendered text once; return this element. */
+		public function textEquals(string $expected): self
+		{
+			$actual = $this->text();
+			$this->window->browser()->reportAssertion($actual === $expected,
+				'Element ' . var_export($this->id, true) . ' text: expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
+			return $this;
+		}
+
+		/** Assert a case-sensitive substring of rendered text once; return this element. */
+		public function textContains(string $expected): self
+		{
+			$actual = $this->text();
+			$this->window->browser()->reportAssertion(str_contains($actual, $expected),
+				'Element ' . var_export($this->id, true) . ' text: expected to contain ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
+			return $this;
+		}
+
+		/** Assert strict attribute equality once; null expects an absent attribute. Return this element. */
+		public function attributeEquals(string $name, ?string $expected): self
+		{
+			$actual = $this->attribute($name);
+			$this->window->browser()->reportAssertion($actual === $expected,
+				'Element ' . var_export($this->id, true) . ' attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true) . ', got ' . var_export($actual, true) . '.');
+			return $this;
+		}
+
+		/**
+		 * Assert an attribute matches a delimited PHP regex once; absence never matches.
+		 * Invalid patterns throw. Return this element.
+		 */
+		public function attributeMatches(string $name, string $pattern): self
+		{
+			$this->window->browser()->assertMatches($pattern, $this->attribute($name),
+				'Element ' . var_export($this->id, true) . ' attribute ' . var_export($name, true));
 			return $this;
 		}
 
