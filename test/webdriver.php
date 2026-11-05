@@ -883,6 +883,28 @@ foreach (['waitNotPresent' => 'name', 'waitNotVisible' => 'displayed'] as $metho
 	});
 endforeach;
 
+scenario('value replacement restores element context and preserves append behavior', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => null], null);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/value', ['text' => 'Jane €'], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/value', ['text' => ' Doe'], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], ['error' => 'invalid element state', 'message' => 'readonly'], 400);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$element = $browser->switchFrame(0)->find('#name');
+	$browser->defaultFrame();
+	verify($element->setValue('Jane €')->type(' Doe') === $element, 'Value replacement lost receiver.');
+	verify($element->setValue('') === $element, 'Empty replacement should only clear.');
+	expectError(fn() => $element->setValue('blocked'), 'invalid element state');
+	$browser->quit();
+});
+
 scenario('element visibility wait succeeds when the original node becomes hidden', function ($listener) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);

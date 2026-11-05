@@ -80,6 +80,13 @@
 			return $this;
 		}
 
+		/** Clear then type a replacement value; an empty string only clears. Return this element. */
+		public function setValue(string $value): self
+		{
+			$this->clear();
+			return $value === '' ? $this : $this->type($value);
+		}
+
 		/** Send Browser::ENTER or a sequence such as Browser::CONTROL . 'a' . Browser::RELEASE. */
 		public function key(string $key): self
 		{
