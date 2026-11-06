@@ -7,7 +7,7 @@
 	 * Actions and observations use the current reference. Assertions wait by default and re-find
 	 * retained selectors, including ancestor scopes, and adopt the successful reference.
 	 * Script/focus references have no lookup: they can be polled but staleness propagates.
-	 * Original-node disappearance waits never re-find. isNotVisible() also accepts a stale
+	 * Original-node disappearance waits never re-find. visible(invert: true) also accepts a stale
 	 * original reference when no lookup is being retried. Assertions return this element
 	 * and report once to the active Test. Failed comparisons stop the case by default;
 	 * $verify records the failure and continues. Outside Test::run(), failures always throw.
@@ -268,18 +268,16 @@
 			return $this;
 		}
 
-		/** Assert displayedness, waiting by default; visibility does not guarantee clickability. */
-		public function isVisible(bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		/**
+		 * Assert displayedness, waiting by default and re-finding retained lookups.
+		 * $invert accepts hiddenness, missing matches, or stale original nodes.
+		 * Return this element for chaining; use displayed() for immediate boolean logic.
+		 * Visibility does not guarantee clickability.
+		 */
+		public function visible(bool $invert = false, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
-			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === true,
-				'visibility: expected true', $wait, $timeout, $verify);
-		}
-
-		/** Assert hiddenness; waiting re-finds retained lookups. Missing matches or stale original nodes pass. */
-		public function isNotVisible(bool $wait = true, ?float $timeout = null, bool $verify = false): self
-		{
-			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === false,
-				'visibility: expected false or stale', $wait, $timeout, $verify, true);
+			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === !$invert,
+				'visibility: expected ' . ($invert ? 'false or stale' : 'true'), $wait, $timeout, $verify, $invert);
 		}
 
 		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */

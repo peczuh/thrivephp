@@ -227,7 +227,7 @@ foreach (['element', 'browser URL', 'window URL', 'count', 'empty snapshot', 'fi
 			'check' => function (Test $test) use ($url, $operation, &$continued, &$cleaned) {
 				$browser = new Browser($url, 'firefox');
 				try {
-					$element = $browser->find('#node')->isVisible(wait: false);
+					$element = $browser->find('#node')->visible(wait: false);
 					$test->verify(false, 'continuing verification');
 					switch ($operation) {
 						case 'element': $element->textEquals('Expected', wait: false); break;
@@ -254,10 +254,10 @@ foreach (['element', 'browser URL', 'window URL', 'count', 'empty snapshot', 'fi
 endforeach;
 
 $assertionCases = [
-	['isVisible', [], '/displayed', true, true, 'expected true, got true'],
-	['isVisible', [], '/displayed', false, false, 'expected true, got false'],
-	['isNotVisible', [], '/displayed', false, true, 'expected false or stale, got false'],
-	['isNotVisible', [], '/displayed', true, false, 'expected false or stale, got true'],
+	['visible', [], '/displayed', true, true, 'expected true, got true'],
+	['visible', [], '/displayed', false, false, 'expected true, got false'],
+	['visible', [true], '/displayed', false, true, 'expected false or stale, got false'],
+	['visible', [true], '/displayed', true, false, 'expected false or stale, got true'],
 	['valueEquals', ['Jane'], '/property/value', 'Jane', true, "expected 'Jane', got 'Jane'"],
 	['valueEquals', ['0'], '/property/value', 0, false, "expected '0', got 0"],
 	['textEquals', ['Hello €'], '/text', 'Hello €', true, "expected 'Hello €', got 'Hello €'"],
@@ -431,7 +431,7 @@ scenario('assertions throw on failure without a recorder and preserve the sessio
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	$element = $browser->find('#name');
-	verify($element->setValue('Jane')->valueEquals('Jane', wait: false)->isVisible(wait: false) === $element, 'Action/assertion chain failed.');
+	verify($element->setValue('Jane')->valueEquals('Jane', wait: false)->visible(wait: false) === $element, 'Action/assertion chain failed.');
 	expectError(fn() => $element->textEquals('Expected', wait: false, verify: true), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
 	expectError(fn() => $browser->findAll('.missing')->countEquals(1, wait: false), 'expected 1, got 0');
 	expectError(fn() => $browser->urlMatches('~/expected$~', wait: false), "got 'https://example.test/actual'");
@@ -560,13 +560,13 @@ scenario('element assertions restore captured context and distinguish stale refe
 	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$element = $browser->switchFrame(0)->find('#original');
 	$browser->switch('other');
-	$element->isVisible(wait: false);
-	verify($element->isNotVisible(wait: false) === $element, 'Stale visibility assertion lost original identity.');
-	expectError(fn() => $element->isVisible(wait: false), 'stale element reference');
-	expectError(fn() => $element->isNotVisible(wait: false), 'no such element');
-	expectError(fn() => $element->isNotVisible(wait: false), 'unknown error');
+	$element->visible(wait: false);
+	verify($element->visible(invert: true, wait: false) === $element, 'Stale visibility assertion lost original identity.');
+	expectError(fn() => $element->visible(wait: false), 'stale element reference');
+	expectError(fn() => $element->visible(invert: true, wait: false), 'no such element');
+	expectError(fn() => $element->visible(invert: true, wait: false), 'unknown error');
 	$browser->defaultFrame();
-	expectError(fn() => $element->isNotVisible(), 'frame removed');
+	expectError(fn() => $element->visible(invert: true), 'frame removed');
 	verify(array_column($results, 0) === [true, true], 'Driver/context errors were reported as assertions.');
 	verify(str_contains($results[1][1], 'got stale'), 'Stale assertion diagnostics were lost.');
 	$browser->quit();
@@ -588,7 +588,7 @@ scenario('invalid assertion patterns and callback exceptions propagate without e
 	expectError(fn() => $browser->urlMatches('not delimited', wait: true), 'Could not evaluate assertion pattern');
 	verify($calls === 0, 'Invalid patterns reached the assertion recorder.');
 	try {
-		$element->isNotVisible(wait: false);
+		$element->visible(invert: true, wait: false);
 		throw new RuntimeException('Callback exception was swallowed.');
 	} catch (RuntimeException $error) {
 		verify($error === $expected, 'Callback exception was replaced.');
@@ -598,8 +598,8 @@ scenario('invalid assertion patterns and callback exceptions propagate without e
 });
 
 $retryAssertions = [
-	['isVisible', [], '/displayed', false, true],
-	['isNotVisible', [], '/displayed', true, false],
+	['visible', [], '/displayed', false, true],
+	['visible', [true], '/displayed', true, false],
 	['valueEquals', ['Jane'], '/property/value', 'Pending', 'Jane'],
 	['textEquals', ['Saved'], '/text', 'Saving', 'Saved'],
 	['textContains', ['Saved'], '/text', 'Saving', 'Saved successfully'],
@@ -658,7 +658,7 @@ scenario('assertion retries handle missing matches and report timeout once with 
 		verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'Assertion timeout units/default changed.');
 		verify($element->id() === 'ready', 'Failed assertion replaced the last successful reference.');
 	endforeach;
-	$element->isNotVisible(wait: true, timeout: 1000);
+	$element->visible(invert: true, wait: true, timeout: 1000);
 	verify(array_column($results, 0) === [true, false, false, true], 'Missing match or timeout reported the wrong result.');
 	verify(str_contains($results[1][1], "expected 'Done', got 'Pending'"), 'Timeout lost its last observation.');
 	$browser->quit();
@@ -785,7 +785,7 @@ scenario('stale selectorless search ancestors fail without retrying or recording
 	$parent = $browser->activeElement();
 	$child = $parent->find('.child');
 	$set = $parent->findAll('.child');
-	expectError(fn() => $child->isNotVisible(wait: true, timeout: 1000), 'unrecoverable parent');
+	expectError(fn() => $child->visible(invert: true, wait: true, timeout: 1000), 'unrecoverable parent');
 	expectError(fn() => $set->countEquals(0, wait: true, timeout: 1000), 'unrecoverable parent');
 	$shadowChild = $browser->script('return root;')->find('.child');
 	expectError(fn() => $shadowChild->textEquals('Done', wait: true, timeout: 1000), 'unrecoverable root');
@@ -850,6 +850,7 @@ scenario('consolidated find reports once and still throws when a prerequisite fa
 	foreach (['findWaitPresent', 'findWaitVisible', 'waitNotPresent', 'waitNotVisible', 'isNotVisible'] as $removed):
 		verify(!method_exists($browser, $removed) && !method_exists($browser->window(), $removed), 'Overlapping selector helper still exists.');
 	endforeach;
+	verify(!method_exists(Element::class, 'isVisible') && !method_exists(Element::class, 'isNotVisible'), 'Old element visibility assertions remain.');
 	$browser->quit();
 });
 

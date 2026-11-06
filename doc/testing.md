@@ -403,7 +403,7 @@ $this->browser->find('#greeting')
 $this->browser->findAll('.row')->countEquals(3, verify: true);
 ```
 
-This option is available on `isVisible()`, `isNotVisible()`, `valueEquals()`,
+This option is available on `visible()`, `valueEquals()`,
 `textEquals()`, `textContains()`, `attributeEquals()`, `attributeMatches()`,
 `countEquals()`, and browser/window `urlMatches()`. It applies only to that call.
 A failed verification still fails the case or suite phase overall. Without an
@@ -422,6 +422,22 @@ Application cleanup must tolerate incomplete setup. `SuiteBrowser` keeps a
 nullable driver reference so its own cleanup also works after configuration or
 startup failure. Keep the inherited `startBrowser()` and `stopBrowser()` hooks
 when overriding other suite behavior.
+
+### Element actions and queries
+
+`visible()` asserts visibility and returns the element. It waits by default and
+re-finds retained lookups. `visible(invert: true)` asserts hiddenness, accepting
+missing matches or stale original nodes. It replaces `isVisible()` and
+`isNotVisible()`. Use `displayed()` for an immediate boolean query in conditional
+logic. Neither method guarantees that a click is unobstructed.
+
+```php
+$element->visible()->click();
+$element->visible(invert: true, wait: false);
+if ($element->displayed()) {
+    $element->click();
+}
+```
 
 ## Regression checks
 
