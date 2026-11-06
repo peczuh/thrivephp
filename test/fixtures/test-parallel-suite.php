@@ -21,6 +21,7 @@ $suite = new class($test) extends Suite {
     public function start(): void
     {
         $this->log('start');
+        if (in_array($this->mode, ['actions', 'action-error'], true)) return;
         $this->test->assert(!isset($GLOBALS['isolated']), 'A fresh process owns each suite.');
         $GLOBALS['isolated'] = true;
         if ($this->mode === 'mismatch') register_shutdown_function(static function () { exit(7); });
@@ -29,6 +30,7 @@ $suite = new class($test) extends Suite {
     #[CaseName('first')]
     public function first(): void
     {
+        if (in_array($this->mode, ['actions', 'action-error'], true)) return;
         $this->test->assert(true, 'completed before later failures');
         if ($this->mode === 'concurrent') usleep(200000);
     }
@@ -37,6 +39,11 @@ $suite = new class($test) extends Suite {
     public function body(): void
     {
         switch ($this->mode) {
+            case 'actions':
+                $this->log('action');
+                return;
+            case 'action-error':
+                throw new RuntimeException('action failed');
             case 'crash':
                 $this->test->assert(true, 'retain active-case assertions');
                 exit(23);
@@ -81,7 +88,11 @@ $suite = new class($test) extends Suite {
     }
 
     #[CaseName('last')]
-    public function last(): void { $this->test->assert(true, 'remaining case runs'); }
+    public function last(): void
+    {
+        if (in_array($this->mode, ['actions', 'action-error'], true)) return;
+        $this->test->assert(true, 'remaining case runs');
+    }
 
     #[SuiteAfter]
     public function finish(): void { $this->log('finish'); }

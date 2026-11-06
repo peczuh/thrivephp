@@ -14,7 +14,8 @@ final class Report
     public function caseResult(string $suite, array $result): void
     {
         echo $result['status'] . ' ' . $suite . ' > ' . $result['name']
-            . ($result['status'] === 'SKIP' ? ' (' . $result['reason'] . ')' : '') . PHP_EOL;
+            . ($result['status'] === 'SKIP' ? ' (' . $result['reason'] . ')' : '')
+            . ($result['status'] === 'PASS' && ($result['noAssertions'] ?? false) ? ' (No assertions)' : '') . PHP_EOL;
         self::failures($result['failures'] ?? []);
     }
 
@@ -26,7 +27,8 @@ final class Report
         }
         unset($count);
         $this->hasSuites = $this->hasSuites || $result['hasSuites'];
-        echo ($result['checksFailed'] ? 'FAIL ' : 'PASS ') . $suite . PHP_EOL;
+        echo ($result['checksFailed'] ? 'FAIL ' : 'PASS ') . $suite
+            . (!$result['checksFailed'] && $result['assertionsPassed'] + $result['assertionsFailed'] === 0 ? ' (No assertions)' : '') . PHP_EOL;
         self::failures($result['failures']);
     }
 

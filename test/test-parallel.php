@@ -72,6 +72,17 @@ function runParallel(array $modes, array $options = [], array $environment = [],
 }
 
 try {
+    [$code, $out, $err] = runParallel(['a' => 'actions', 'b' => 'action-error']);
+    check($code === 1 && $err === '' && str_contains($out, 'PASS a > body (No assertions)')
+        && str_contains($out, 'PASS a (No assertions)') && str_contains($out, 'FAIL b > body')
+        && str_contains($out, 'action failed') && str_contains($out, 'Checks: 1 passed, 1 failed')
+        && str_contains($out, 'Cases: 5 passed, 1 failed, 0 skipped')
+        && str_contains($out, 'Assertions: 0 passed, 0 failed'), $out . $err);
+    $events = array_map(fn ($line) => json_decode($line, true), file($root . '/events.jsonl', FILE_IGNORE_NEW_LINES));
+    check(count(array_filter($events, fn ($event) => $event['event'] === 'action')) === 1
+        && count(array_filter($events, fn ($event) => $event['event'] === 'finish')) === 2, 'Action-only bodies or cleanup did not run.');
+    echo "PASS: action-only cases pass with no-assertion labels, while execution errors still fail\n";
+
     [$code, $out, $err, $live] = runParallel(array_fill_keys(['a', 'b', 'c', 'd', 'e'], 'concurrent'));
     check($code === 0 && $err === '' && str_contains($out, 'Checks: 5 passed, 0 failed')
         && str_contains($out, 'Cases: 15 passed, 0 failed, 0 skipped')

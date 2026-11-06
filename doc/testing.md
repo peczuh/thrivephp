@@ -184,8 +184,10 @@ necessarily remove the ambiguity. Unannotated helpers are not discovered.
 - Assertion failures are reported once. Unexpected exceptions and additional
   cleanup failures retain their own diagnostics.
 
-Case assertions include their before/after hooks. A case with no assertions and
-no other failure fails with `No assertions ran.` Suite setup/teardown assertions
+Case assertions include their before/after hooks. A case or callable check with no
+assertions passes if it completes without errors, reported as `PASS` with a
+`(No assertions)` annotation. Exceptions, hook failures, and exceeded deadlines
+still fail the case. Suite setup/teardown assertions
 are counted separately from individual cases and can fail the suite even when
 all cases pass. An empty suite fails with `No cases found.`
 

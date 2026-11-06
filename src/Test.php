@@ -411,9 +411,6 @@ class Test
                 $this->event(['type' => 'configured', 'idleTimeout' => null, 'cases' => []]);
                 $this->event(['type' => 'activity', 'activity' => 'callable check']);
                 $check($this);
-                if ($this->passed + $this->failed === 0) {
-                    $this->failures[] = 'No assertions ran.';
-                }
             }
         } catch (Test\AssertionFailure $error) {
             // assert() already recorded this failure before stopping the check.
@@ -492,9 +489,6 @@ class Test
                 } finally {
                     $this->runHooks($suite, $methods[Test\CaseAfter::class], 'CaseAfter', teardown: true);
                 }
-                if ($this->passed + $this->failed === 0 && !$this->failures) {
-                    $this->failures[] = 'No assertions ran.';
-                }
                 if ($this->failures) {
                     $casesFailed++;
                 } else {
@@ -502,6 +496,7 @@ class Test
                 }
                 $this->event(['type' => 'case_finished', 'name' => $case['name'],
                     'status' => $this->failures ? 'FAIL' : 'PASS', 'failures' => $this->failures,
+                    'noAssertions' => $this->passed + $this->failed === 0,
                     'duration' => (hrtime(true) - $started) / 1e9]);
                 $assertionsPassed += $this->passed;
                 $assertionsFailed += $this->failed;

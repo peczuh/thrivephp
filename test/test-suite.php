@@ -263,19 +263,19 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
         },
         'next' => function (Test $test) { $test->assert(true, 'legacy check still runs'); },
     ]);
-    check($status === 1 && str_contains($output, 'PASS next') && Test::active() === null, $output);
+    check($status === ($mode === 'empty' ? 0 : 1) && str_contains($output, 'PASS next') && Test::active() === null, $output);
     check(array_slice($suite->trace, -2) === ['suite cleanup', 'later stop'], json_encode($suite->trace));
     if ($mode === 'suite setup') {
         check($suite->trace === ['suite setup', 'suite cleanup', 'later stop'], json_encode($suite->trace));
         check(str_contains($output, 'Cases: 0 passed, 0 failed, 2 skipped') && substr_count($output, 'setup failed') === 3, $output);
     } else {
         check(in_array('second', $suite->trace, true) && in_array('later clean 1', $suite->trace, true), $output);
-        check(str_contains($output, $mode === 'suite cleanup' ? 'Cases: 2 passed, 0 failed, 0 skipped' : 'Cases: 1 passed, 1 failed, 0 skipped'), $output);
+        check(str_contains($output, in_array($mode, ['suite cleanup', 'empty'], true) ? 'Cases: 2 passed, 0 failed, 0 skipped' : 'Cases: 1 passed, 1 failed, 0 skipped'), $output);
     }
     if ($mode === 'case setup') check(!in_array('first', $suite->trace, true), $output);
     if ($mode === 'case body') check(!in_array('continued', $suite->trace, true) && substr_count($output, 'body failed') === 1, $output);
     if ($mode === 'verify') check(in_array('continued', $suite->trace, true) && str_contains($output, 'Assertions: 3 passed, 1 failed'), $output);
-    if ($mode === 'empty') check(str_contains($output, 'No assertions ran.'), $output);
+    if ($mode === 'empty') check(str_contains($output, 'PASS suite > First case (No assertions)') && str_contains($output, 'Assertions: 2 passed, 0 failed'), $output);
 }
 echo "PASS: stopping failures, continuing verification, skipped cases, independent cleanup and mixed legacy checks\n";
 

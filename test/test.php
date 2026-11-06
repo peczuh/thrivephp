@@ -55,9 +55,9 @@ foreach (['success', 'assert', 'exception', 'empty'] as $mode) {
 			if ($mode === 'exception') throw new RuntimeException('unexpected failure');
 			if ($mode !== 'empty') $current->assert($mode === 'success', 'inner assertion');
 		}], $inner);
-		check($status === ($mode === 'success' ? 0 : 1), $output);
+		check($status === (in_array($mode, ['success', 'empty'], true) ? 0 : 1), $output);
 		if ($mode === 'exception') check(str_contains($output, 'Execution error: RuntimeException: unexpected failure'), $output);
-		if ($mode === 'empty') check(str_contains($output, 'No assertions ran.'), $output);
+		if ($mode === 'empty') check(str_contains($output, 'PASS check (No assertions)') && str_contains($output, 'Assertions: 0 passed, 0 failed'), $output);
 		$outer->assert(Test::active() === $outer, 'Nested run restored the outer recorder.');
 	}]);
 	check($status === 0 && str_contains($output, 'Assertions: 1 passed, 0 failed'), $output);
