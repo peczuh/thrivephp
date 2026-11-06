@@ -198,14 +198,23 @@ check($status === 1 && str_contains($output, 'PASS suite > Case after verifying 
     && str_contains($output, 'Assertions: 1 passed, 2 failed'), $output);
 echo "PASS: alias deduplication prefers an eligible original, otherwise the first public alias by name\n";
 
-foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite cleanup', 'verify', 'empty'] as $mode) {
+$failureModes = ['suite setup', 'case setup', 'case body', 'case error', 'case deadline', 'case cleanup', 'suite cleanup', 'verify', 'empty'];
+foreach ([...$failureModes, ...array_map(fn ($mode) => 'stop ' . $mode, $failureModes)] as $mode) {
+    $stop = str_starts_with($mode, 'stop ');
+    if ($stop) $mode = substr($mode, 5);
     $suite = null;
     [$status, $output] = runChecks([
-        'suite' => function (TestRunner $test) use (&$suite, $mode) {
+        'suite' => function (TestRunner $test) use (&$suite, $mode, $stop) {
             $suite = new class($test) extends Suite {
                 public string $mode;
+                public bool $stop;
                 public array $trace = [];
                 private int $case = 0;
+
+                protected function configure(SuiteConfig $config): void
+                {
+                    if ($this->stop) $config->skipRemainingOnFailure = true;
+                }
 
                 #[SuiteBefore]
                 public function setup(): void
@@ -234,12 +243,14 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
                 #[CaseAfter]
                 public function laterClean(): void { $this->trace[] = 'later clean ' . $this->case; }
 
-                #[Test('First case')]
+                #[Test('First case', deadline: 0.02)]
                 public function first(): void
                 {
                     $this->trace[] = 'first';
                     if ($this->mode === 'empty') return;
                     if ($this->mode === 'case body') $this->test->assert(false, 'body failed');
+                    if ($this->mode === 'case error') throw new RuntimeException('body error');
+                    if ($this->mode === 'case deadline') usleep(40000);
                     if ($this->mode === 'verify') $this->test->verify(false, 'verification failed');
                     $this->test->assert(true, 'first passed');
                     $this->trace[] = 'continued';
@@ -259,6 +270,7 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
                 public function laterStop(): void { $this->trace[] = 'later stop'; }
             };
             $suite->mode = $mode;
+            $suite->stop = $stop;
             return $suite;
         },
         'next' => function (TestRunner $test) { $test->assert(true, 'legacy check still runs'); },
@@ -268,16 +280,22 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
     if ($mode === 'suite setup') {
         check($suite->trace === ['suite setup', 'suite cleanup', 'later stop'], json_encode($suite->trace));
         check(str_contains($output, 'Cases: 0 passed, 0 failed, 2 skipped') && substr_count($output, 'setup failed') === 3, $output);
+    } elseif ($stop && !in_array($mode, ['suite cleanup', 'empty'], true)) {
+        check(!in_array('second', $suite->trace, true) && !in_array('prepare 2', $suite->trace, true)
+            && !in_array('clean 2', $suite->trace, true) && in_array('later clean 1', $suite->trace, true), json_encode($suite->trace));
+        check(str_contains($output, 'SKIP suite > Second case (previous case failed)')
+            && str_contains($output, 'Cases: 0 passed, 1 failed, 1 skipped'), $output);
     } else {
         check(in_array('second', $suite->trace, true) && in_array('later clean 1', $suite->trace, true), $output);
         check(str_contains($output, in_array($mode, ['suite cleanup', 'empty'], true) ? 'Cases: 2 passed, 0 failed, 0 skipped' : 'Cases: 1 passed, 1 failed, 0 skipped'), $output);
     }
     if ($mode === 'case setup') check(!in_array('first', $suite->trace, true), $output);
     if ($mode === 'case body') check(!in_array('continued', $suite->trace, true) && substr_count($output, 'body failed') === 1, $output);
-    if ($mode === 'verify') check(in_array('continued', $suite->trace, true) && str_contains($output, 'Assertions: 3 passed, 1 failed'), $output);
+    if ($mode === 'verify') check(in_array('continued', $suite->trace, true)
+        && str_contains($output, 'Assertions: ' . ($stop ? 2 : 3) . ' passed, 1 failed'), $output);
     if ($mode === 'empty') check(str_contains($output, 'PASS suite > First case (No assertions)') && str_contains($output, 'Assertions: 2 passed, 0 failed'), $output);
 }
-echo "PASS: stopping failures, continuing verification, skipped cases, independent cleanup and mixed legacy checks\n";
+echo "PASS: optional skipping after assertions, verification, errors, hooks and deadlines preserves cleanup and other checks\n";
 
 [$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
@@ -339,7 +357,8 @@ check($status === 1 && str_contains($output, 'Execution error: RuntimeException:
 echo "PASS: empty suites and loading failures produce failing reports without leaking a recorder\n";
 
 $config = new SuiteConfig();
-check($config->idleTimeout === null && $config->timeout === 10.0 && $config->capabilities === [], 'Incorrect defaults.');
+check($config->idleTimeout === null && $config->timeout === 10.0 && $config->capabilities === []
+    && $config->skipRemainingOnFailure === false, 'Incorrect defaults.');
 $config->idleTimeout = 1;
 check((new SuiteConfig())->idleTimeout === null, 'Configuration leaked between suites.');
 try {

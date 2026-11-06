@@ -17,7 +17,7 @@ abstract class Suite
     final public function configuration(): SuiteConfig
     {
         if ($this->configuration === null) {
-            $config = new SuiteConfig();
+            $config = new SuiteConfig(skipRemainingOnFailure: $this instanceof SuiteBrowser);
             $this->configure($config);
             if ($config->idleTimeout !== null && (!is_finite($config->idleTimeout) || $config->idleTimeout <= 0)) {
                 throw new \InvalidArgumentException('Suite idleTimeout must be positive and finite, or null.');

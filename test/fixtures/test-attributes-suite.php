@@ -26,12 +26,14 @@ $suite = new #[Test('Attribute suite', deadline: 0.5, retry: 1, tags: ['suite'])
     public string $mode;
     public string $name;
     public int $attempt;
+    public bool $stop;
     private int $prepared = 0;
     private int $bodies = 0;
 
     protected function configure(SuiteConfig $config): void
     {
         $this->log('configure');
+        $config->skipRemainingOnFailure = $this->stop;
         if ($this->mode === 'attribute-config' && $this->attempt === 1) throw new RuntimeException('configuration failed');
         if ($this->mode === 'attribute-retry-timeout') $config->idleTimeout = 0.2;
     }
@@ -102,7 +104,8 @@ $suite = new #[Test('Attribute suite', deadline: 0.5, retry: 1, tags: ['suite'])
         }
     }
 };
-$suite->mode = $mode;
+$suite->stop = str_starts_with($mode, 'attribute-stop-');
+$suite->mode = $suite->stop ? 'attribute-' . substr($mode, strlen('attribute-stop-')) : $mode;
 $suite->name = $name;
 $suite->attempt = $GLOBALS['attributeAttempts'][$name] = ($GLOBALS['attributeAttempts'][$name] ?? 0) + 1;
 return $suite;

@@ -113,6 +113,24 @@ try {
         && str_contains($out, 'Assertions: 3 passed, 1 failed') && substr_count($out, 'RETRY Attribute suite > first') === 2, $out . $err);
     echo "PASS: parallel case and whole-suite retries discard earlier counts and retain final outcomes\n";
 
+    foreach ([1, 2] as $workers) {
+        foreach (['case-retry', 'suite-retry', 'always-fail'] as $mode) {
+            [$code, $out, $err] = runParallel(['a' => 'attribute-stop-' . $mode, 'b' => 'attribute-normal'], ['workers' => $workers]);
+            $failed = $mode === 'always-fail';
+            check($code === (int)$failed && $err === '' && str_contains($out, $failed
+                ? 'Checks: 1 passed, 1 failed, 0 skipped' : 'Checks: 2 passed, 0 failed, 0 skipped'), $out . $err);
+            check(str_contains($out, $failed ? 'Cases: 2 passed, 1 failed, 3 skipped' : 'Cases: 4 passed, 0 failed, 2 skipped')
+                && str_contains($out, $failed ? 'Assertions: 6 passed, 1 failed' : 'Assertions: 8 passed, 0 failed'), $out);
+            check(substr_count($out, 'SKIP Attribute suite > second (previous case failed)') === ($failed ? 2 : (int)($mode === 'suite-retry')), $out);
+            $events = array_map(fn ($line) => json_decode($line, true), file($root . '/events.jsonl', FILE_IGNORE_NEW_LINES));
+            $secondCases = array_values(array_map(fn ($event) => $event['name'], array_filter($events, fn ($event) => $event['event'] === 'second')));
+            sort($secondCases);
+            check($secondCases === ($failed ? ['b'] : ['a', 'b']), json_encode($events));
+            check(count(array_filter($events, fn ($event) => $event['event'] === 'cleanup')) === ($mode === 'case-retry' ? 2 : 3), json_encode($events));
+        }
+    }
+    echo "PASS: serial/parallel skip-on-failure preserves retries, skip reasons, totals, cleanup and other suites\n";
+
     foreach (['retry-crash', 'retry-timeout', 'suite-crash'] as $mode) {
         [$code, $out, $err] = runParallel(['a' => 'attribute-' . $mode]);
         check($code === 1 && str_contains($out, 'RETRY Attribute suite') && str_contains($out, 'Suite incomplete.')

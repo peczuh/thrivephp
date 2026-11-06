@@ -240,7 +240,8 @@ class Test
      * Legacy callables accept this Test; their return values are ignored.
      * Register this instance as the process-wide active recorder during each check,
      * restoring the previous recorder afterward. Assertion failures stop the current
-     * callable check, case body, or hook, while suite cleanup and later cases still run.
+     * callable check, case body, or hook. Suite cleanup always runs; later cases follow
+     * skipRemainingOnFailure, which defaults to true for browser suites and false otherwise.
      *
      * Null workers prefers two parallel processes, falling back to serial for Safari.
      * Explicit workers > 1 requires a parallel-capable selected browser; 1 runs in-process.
@@ -538,10 +539,10 @@ class Test
             }
             $suiteState = [$this->passed, $this->failed, $this->failures];
             foreach ($cases as $case) {
-                if ($case['skip'] || !$ready) {
+                if ($case['skip'] || !$ready || ($config->skipRemainingOnFailure && $casesFailed > 0)) {
                     $casesSkipped++;
                     $this->event(['type' => 'case_finished', 'name' => $case['name'], 'status' => 'SKIP',
-                        'reason' => $case['skip'] ? 'marked skip' : 'suite setup failed', 'duration' => 0]);
+                        'reason' => $case['skip'] ? 'marked skip' : ($ready ? 'previous case failed' : 'suite setup failed'), 'duration' => 0]);
                     continue;
                 }
 

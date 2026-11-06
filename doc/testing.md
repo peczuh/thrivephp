@@ -329,7 +329,8 @@ necessarily remove the ambiguity. Unannotated helpers are not discovered.
 - A thrown case-setup failure skips remaining setup hooks and that case's body.
 - Every applicable teardown hook is attempted independently, including after
   partial setup. A teardown failure does not suppress later teardown hooks.
-- A case failure does not prevent later cases from running.
+- With `skipRemainingOnFailure`, a final case failure skips later selected cases.
+  It defaults to `true` for `SuiteBrowser` and `false` for ordinary `Suite`.
 - Assertion failures are reported once. Unexpected exceptions and additional
   cleanup failures retain their own diagnostics.
 
@@ -344,6 +345,26 @@ Case results appear as `PASS layouts > The initial collection contains one item`
 Each file also has an overall result. `Checks` counts file results; `Cases` counts
 suite cases, including cases skipped after suite setup fails; `Assertions` counts
 all recorded results, including hooks and legacy checks.
+
+`skipRemainingOnFailure` takes effect after the case's retries and `CaseAfter`
+hooks finish. Failed assertions, continuing verifications, exceptions in the body
+or case hooks, and case deadline failures all count. A successful retry allows
+later cases to run. Skipped cases run no case hooks and report
+`SKIP ... (previous case failed)`; explicitly skipped cases keep `marked skip`,
+and filtered-out cases remain excluded from totals. Suite teardown still runs,
+and other suites continue. A whole-suite retry starts with fresh skip state.
+
+Override the default in either suite type:
+
+```php
+protected function configure(SuiteConfig $config): void
+{
+    $config->skipRemainingOnFailure = false;
+}
+```
+
+Put required cleanup in `SuiteAfter` hooks rather than a final case, since a case
+can be skipped after an earlier failure.
 
 ## Browser suites
 
@@ -388,6 +409,7 @@ and calls `configure()` once per suite attempt before suite hooks. Defaults are:
 | `timeout` | `10` | Seconds, passed to `WebDriver::browser()`. |
 | `capabilities` | `[]` | Browser capabilities passed to the session factory. |
 | `idleTimeout` | `null` | Seconds without worker progress; null disables it. |
+| `skipRemainingOnFailure` | `true` for `SuiteBrowser`, otherwise `false` | Skip later cases after a case exhausts its retries and fails. |
 
 Declared properties enforce their PHP types. Assigning an unknown option throws
 `InvalidArgumentException`. Configuration changes do not

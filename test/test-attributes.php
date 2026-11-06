@@ -56,6 +56,25 @@ check(count(array_filter($GLOBALS['attributeTrace'], fn ($event) => $event['even
     'Nested suite/case retry limits changed.');
 echo "PASS: exhausted case retries precede suite retries and final failures are counted once\n";
 
+foreach (['case-retry', 'case-error', 'case-before', 'case-after', 'case-deadline', 'suite-retry', 'always-fail'] as $mode) {
+    [$status, $output] = runAttributes('attribute-stop-' . $mode);
+    $failed = $mode === 'always-fail';
+    check($status === (int)$failed && str_contains($output, $failed
+        ? 'Cases: 0 passed, 1 failed, 2 skipped' : 'Cases: 2 passed, 0 failed, 1 skipped'), $output);
+    check(str_contains($output, $failed ? 'Assertions: 2 passed, 1 failed' : 'Assertions: 4 passed, 0 failed'), $output);
+    $events = array_column($GLOBALS['attributeTrace'], 'event');
+    $counts = array_count_values($events);
+    check(($counts['second'] ?? 0) === ($failed ? 0 : 1), json_encode($events));
+    check($counts['prepare'] === ($failed ? 4 : ($mode === 'suite-retry' ? 4 : 3))
+        && $counts['clean'] === $counts['prepare'] && $counts['cleanup'] === ($failed || $mode === 'suite-retry' ? 2 : 1), json_encode($events));
+    check(substr_count($output, 'SKIP Attribute suite > second (previous case failed)') === ($failed ? 2 : (int)($mode === 'suite-retry'))
+        && str_contains($output, 'SKIP Attribute suite > skipped (marked skip)'), $output);
+}
+[$status, $output] = runAttributes('attribute-stop-always-fail', ['::^(first|skipped)$']);
+check($status === 1 && str_contains($output, 'Cases: 0 passed, 1 failed, 1 skipped')
+    && !str_contains($output, '> second') && !str_contains($output, 'previous case failed'), $output);
+echo "PASS: skip-on-failure waits for retries, resets on suite retry, and preserves explicit skips and filtering\n";
+
 foreach ([
     [[], ['first', 'second'], 1],
     [['##^smoke$'], ['first'], 0],

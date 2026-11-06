@@ -11,6 +11,8 @@ class SuiteConfig
         public float $timeout = 10,
         public array $capabilities = [],
         public ?float $idleTimeout = null,
+        /** Skip later cases after a final case failure; SuiteBrowser supplies true before configure(). */
+        public bool $skipRemainingOnFailure = false,
     ) {}
 
     /** Reject misspelled options on every supported PHP version. */

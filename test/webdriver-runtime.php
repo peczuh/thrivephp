@@ -461,6 +461,45 @@ try {
 		check($requests[0]['body']['capabilities']['alwaysMatch']['acceptInsecureCerts'] === false, 'Suite capabilities were not forwarded.');
 	});
 
+	foreach ([true, false] as $skip):
+		scenario('browser suites skip later failures by default with an override: ' . (int)$skip, function () use ($skip, $log) {
+			FixtureDriver::$source = installation(['firefox']);
+			$suite = null;
+			[$status, $output] = runChecks(['suite' => function (TestRunner $test) use (&$suite, $skip) {
+				$suite = new class($test) extends FixtureBrowserSuite {
+					public bool $skip;
+					public array $trace = [];
+
+					protected function configure(SuiteConfig $config): void
+					{
+						check($config->skipRemainingOnFailure, 'Browser default was not supplied before configure().');
+						if (!$this->skip) $config->skipRemainingOnFailure = false;
+					}
+
+					#[Test('failing browser case')]
+					public function first(): void
+					{
+						$this->browser->urlMatches('~/missing$~', wait: false, verify: true);
+						$this->trace[] = 'continued';
+					}
+
+					#[Test('later browser case')]
+					public function second(): void { $this->trace[] = 'second'; $this->browser->urlMatches('~/fixture$~'); }
+
+					#[SuiteAfter]
+					public function cleanup(): void { $this->trace[] = 'cleanup'; }
+				};
+				$suite->skip = $skip;
+				return $suite;
+			}], browser: 'firefox');
+			check($status === 1 && str_contains($output, $skip ? 'Cases: 0 passed, 1 failed, 1 skipped' : 'Cases: 1 passed, 1 failed, 0 skipped'), $output);
+			check(str_contains($output, 'SKIP suite > later browser case (previous case failed)') === $skip, $output);
+			check($suite->trace === ($skip ? ['continued', 'cleanup'] : ['continued', 'second', 'cleanup']), json_encode($suite->trace));
+			check(!$suite->process->running() && !$suite->browser->active(), 'Failure leaked a driver or session.');
+			check(count(array_filter(events($log), fn($event) => ($event['method'] ?? '') === 'DELETE')) === 1, 'Browser cleanup was skipped or repeated.');
+		});
+	endforeach;
+
 	scenario('whole-suite retries replace browser sessions after cleanup', function () use ($log) {
 		FixtureDriver::$source = installation(['firefox']);
 		$suites = [];
@@ -477,6 +516,8 @@ try {
 					$this->trace[] = 'body';
 					$this->browser->urlMatches($this->fail ? '~/missing$~' : '~/fixture$~', wait: false);
 				}
+				#[Test('later browser case')]
+				public function later(): void { $this->trace[] = 'later'; $this->test->assert(true, 'retry restored later cases'); }
 				#[SuiteAfter]
 				public function logout(): void { $this->trace[] = 'logout'; }
 			};
@@ -484,12 +525,14 @@ try {
 			return $suites[] = $suite;
 		}], browser: 'firefox');
 		check($status === 0 && str_contains($output, 'PASS Retry browser suite (attempt 2)')
-			&& str_contains($output, 'Cases: 1 passed, 0 failed, 0 skipped')
-			&& str_contains($output, 'Assertions: 1 passed, 0 failed'), $output);
+			&& str_contains($output, 'Cases: 2 passed, 0 failed, 0 skipped')
+			&& str_contains($output, 'SKIP Retry browser suite > later browser case (previous case failed)')
+			&& str_contains($output, 'Assertions: 2 passed, 0 failed'), $output);
 		check(count($suites) === 2 && $suites[0]->browser !== $suites[1]->browser
 			&& $suites[0]->settings !== $suites[1]->settings, 'Retry reused browser or configuration.');
-		foreach ($suites as $suite):
-			check($suite->trace === ['login', 'body', 'logout'] && !$suite->process->running() && !$suite->browser->active(), 'Retry lifecycle failed.');
+		foreach ($suites as $attempt => $suite):
+			check($suite->trace === ($attempt === 0 ? ['login', 'body', 'logout'] : ['login', 'body', 'later', 'logout'])
+				&& !$suite->process->running() && !$suite->browser->active(), 'Retry lifecycle failed.');
 		endforeach;
 		$requests = array_values(array_filter(events($log), fn($event) => ($event['path'] ?? '') === '/session'));
 		check(count($requests) === 2, 'Retry did not create a new driver session.');

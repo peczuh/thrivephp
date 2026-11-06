@@ -7,7 +7,7 @@ namespace ThriveData\ThrivePHP\Test;
 use ThriveData\ThrivePHP\WebDriver\Browser;
 use ThriveData\ThrivePHP\WebDriver\WebDriver;
 
-/** Owns a fresh browser session shared by this suite's hooks and cases. */
+/** Owns a fresh browser session shared by its hooks and cases; defaults to skipping cases after failure. */
 abstract class SuiteBrowser extends Suite
 {
     /** Available after startBrowser() succeeds, through the end of child suite cleanup. */
