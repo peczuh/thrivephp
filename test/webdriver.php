@@ -115,7 +115,7 @@ function createSession($listener, string $browser = 'firefox', bool $bidi = fals
 	endif;
 }
 
-/** Check script transport and argument marshalling. */
+/** Check script transport and argument marshalling; real DOM tests check the JavaScript's effects. */
 function scriptExchange($listener, array $arguments, mixed $value = null, int $status = 200): void
 {
 	exchange($listener, 'GET', '/session/session%2F1/timeouts', null, ['script' => 30000]);
@@ -194,8 +194,12 @@ $elementScripts = [
 	['attribute', ['disabled', null], null],
 	['submit', [], null],
 	['inject', ['<span>content</span>', 'afterend'], null],
+	['firstChild', [], [Element::REFERENCE => 'child']],
+	['lastChild', [], [Element::REFERENCE => 'child']],
+	['nextSibling', [], null],
+	['previousSibling', [], null],
 ];
-scenario('element scripts restore context, preserve setter values', function ($listener) use ($elementScripts) {
+scenario('element scripts restore context, preserve setter values, and bind traversal references', function ($listener) use ($elementScripts) {
 	createSession($listener);
 	foreach ($elementScripts as [$method, $arguments, $value]):
 		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
@@ -223,7 +227,15 @@ scenario('element scripts restore context, preserve setter values', function ($l
 	foreach ($elementScripts as [$method, $arguments, $value]):
 		$browser->switch('other');
 		$result = $element->$method(...$arguments);
-		verify($result === $element, "$method lost its fluent receiver.");
+		if (in_array($method, ['firstChild', 'lastChild', 'nextSibling', 'previousSibling'], true)):
+			if ($value === null):
+				verify($result === null, 'Empty traversal did not return null.');
+			else:
+				verify($result->reference($window, [0]) === $value && !$result->canRefresh(), 'Traversal lost context or acquired a lookup.');
+			endif;
+		else:
+			verify($result === $element, "$method lost its fluent receiver.");
+		endif;
 	endforeach;
 	$child = new Element($window, 'child', [0]);
 	verify($element->property('related', ['nodes' => [$child]]) === $element, 'Nested property assignment lost receiver.');

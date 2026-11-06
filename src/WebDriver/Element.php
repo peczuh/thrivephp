@@ -123,6 +123,30 @@
 			return $this;
 		}
 
+		/** Return the first element child, ignoring text/comments, or null; never wait or re-find. */
+		public function firstChild(): ?Element
+		{
+			return $this->script('return arguments[0].firstElementChild;');
+		}
+
+		/** Return the last element child, ignoring text/comments, or null; never wait or re-find. */
+		public function lastChild(): ?Element
+		{
+			return $this->script('return arguments[0].lastElementChild;');
+		}
+
+		/** Return the next element sibling, ignoring text/comments, or null; never wait or re-find. */
+		public function nextSibling(): ?Element
+		{
+			return $this->script('return arguments[0].nextElementSibling;');
+		}
+
+		/** Return the previous element sibling, ignoring text/comments, or null; never wait or re-find. */
+		public function previousSibling(): ?Element
+		{
+			return $this->script('return arguments[0].previousElementSibling;');
+		}
+
 		/** Send text without clearing existing input. */
 		public function type(string $text): self
 		{

@@ -466,6 +466,10 @@ validation blocking or cancellation does not itself throw or record an assertion
 It returns the original element. Use `click()` when a particular submit button's
 name/value or submission overrides matter.
 
+`firstChild()`, `lastChild()`, `nextSibling()`, and `previousSibling()` return an
+`Element` or null. They skip text and comment nodes and retain the original
+window/frame context. They do not wait or retain a lookup for re-finding.
+
 ### Script and HTML injection
 
 Browser/window `script()` normally executes a WebDriver function body and returns
@@ -512,3 +516,8 @@ Parallel checks launch real PHP workers and exercise concurrency, live reports,
 large results, inherited diagnostics, timeouts, crashes, and descendant recovery.
 Passing these checks on one OS does not verify native execution on other platforms
 or concurrent real-browser sessions.
+
+For DOM behavior, run `php test/webdriver-dom.php chrome` or
+`php test/webdriver-dom.php firefox` with that browser and driver installed.
+These checks create a headless session with isolated documents and cover form
+submission, setters, checkbox/radio events, injection, traversal, and captured contexts.
