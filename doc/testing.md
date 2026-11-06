@@ -453,6 +453,11 @@ Setters return the original element and dispatch no automatic `input` or `change
 events. Property values use the usual script argument/reference conversion.
 Attribute getters retain WebDriver's boolean-attribute behavior of `'true'` or null.
 
+`check()` supports checkbox and radio inputs; `uncheck()` supports only checkboxes.
+They use native clicks only when the selection state needs to change, returning
+the element. Unsupported elements and radio unchecking throw. `selected()` is the
+immediate boolean query.
+
 `submit()` calls native `requestSubmit()` once, without a submitter argument.
 It uses the form itself, a control's actual form owner including external
 `form="..."` associations, or the nearest ancestor form for other descendants.

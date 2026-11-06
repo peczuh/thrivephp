@@ -233,6 +233,46 @@ scenario('element scripts restore context, preserve setter values', function ($l
 	$browser->quit();
 });
 
+foreach ([['check', 'checkbox', false], ['check', 'checkbox', true], ['check', 'radio', false], ['check', 'radio', true], ['uncheck', 'checkbox', false], ['uncheck', 'checkbox', true]] as [$method, $type, $selected]):
+	scenario("$method $type selected=" . (int)$selected, function ($listener) use ($method, $type, $selected) {
+		createSession($listener);
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		exchange($listener, 'GET', '/session/session%2F1/element/node/name', null, 'input');
+		exchange($listener, 'GET', '/session/session%2F1/element/node/property/type', null, $type);
+		exchange($listener, 'GET', '/session/session%2F1/element/node/selected', null, $selected);
+		if ($selected === ($method === 'uncheck')):
+			exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], null);
+		endif;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($method) {
+		$browser = new Browser($url, 'firefox');
+		$element = new Element($browser->window(), 'node', [0]);
+		verify($element->$method() === $element, 'Check action lost receiver.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('check actions reject unsupported controls and propagate click errors', function ($listener) {
+	createSession($listener);
+	foreach ([['div', null], ['input', 'text'], ['input', 'radio']] as [$tag, $type]):
+		exchange($listener, 'GET', '/session/session%2F1/element/node/name', null, $tag);
+		if ($type !== null) exchange($listener, 'GET', '/session/session%2F1/element/node/property/type', null, $type);
+	endforeach;
+	exchange($listener, 'GET', '/session/session%2F1/element/node/name', null, 'input');
+	exchange($listener, 'GET', '/session/session%2F1/element/node/property/type', null, 'checkbox');
+	exchange($listener, 'GET', '/session/session%2F1/element/node/selected', null, false);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], ['error' => 'element click intercepted', 'message' => 'covered'], 400);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$element = new Element($browser->window(), 'node');
+	expectError(fn() => $element->check(), 'requires a checkbox or radio input');
+	expectError(fn() => $element->check(), 'requires a checkbox or radio input');
+	expectError(fn() => $element->uncheck(), 'requires a checkbox input');
+	expectError(fn() => $element->check(), 'element click intercepted: covered');
+	$browser->quit();
+});
+
 foreach (['chrome', 'firefox', 'safari'] as $browser):
 	scenario("classic commands: $browser", function ($listener) use ($browser) {
 		createSession($listener, $browser);

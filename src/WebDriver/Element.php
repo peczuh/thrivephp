@@ -77,6 +77,24 @@
 			return $this;
 		}
 
+		/** Check a checkbox or radio with a native click only when not already selected. */
+		public function check(): self
+		{
+			if (strtolower($this->tag()) !== 'input' || !in_array($this->property('type'), ['checkbox', 'radio'], true)):
+				throw new \InvalidArgumentException('check() requires a checkbox or radio input.');
+			endif;
+			return $this->selected() ? $this : $this->click();
+		}
+
+		/** Uncheck a checkbox with a native click only when selected; radios are unsupported. */
+		public function uncheck(): self
+		{
+			if (strtolower($this->tag()) !== 'input' || $this->property('type') !== 'checkbox'):
+				throw new \InvalidArgumentException('uncheck() requires a checkbox input.');
+			endif;
+			return $this->selected() ? $this->click() : $this;
+		}
+
 		/**
 		 * Request submission of this form, a control's form owner, or an ancestor form.
 		 * Honor validation and cancellable submit events; neither blocking nor cancellation
