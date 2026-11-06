@@ -13,6 +13,14 @@ class Test
     private array $failures = [];
     private string $pathRoot;
     private string $pathChecks;
+    private bool $bootstrapped = false;
+    private ?string $selectedBrowser = null;
+    private bool $browserResolved = false;
+    private bool $headless = false;
+    /** Worker events stay separate from incidental stdout/stderr. Null is the serial path. */
+    private ?Test\Channel $channel = null;
+    private ?Test\Report $report = null;
+    private string $currentCheck = '';
 
     /** Set the project root and its relative checks directory; bootstrap defines PATH_ROOT. */
     public function __construct(string $pathRoot, string $pathChecks = '/test/checks')
@@ -41,6 +49,7 @@ class Test
             define('PATH_ROOT', $this->pathRoot);
             require_once(PATH_ROOT . '/vendor/autoload.php');
             \ThriveData\ThrivePHP\Application::init();
+            $this->bootstrapped = true;
         } catch (\Throwable $error) {
             error_clear_last();
             fwrite(STDERR, 'ERROR Application initialization failed (' . get_class($error)
@@ -75,6 +84,7 @@ class Test
             $this->failed++;
             $this->failures[] = $message;
         }
+        $this->event(['type' => 'assertion', 'passed' => $condition]);
 
         return $condition;
     }
@@ -230,14 +240,20 @@ class Test
      * restoring the previous recorder afterward. Assertion failures stop the current
      * callable check, case body, or hook, while suite cleanup and later cases still run.
      *
+     * Null workers prefers two parallel processes, falling back to serial for Safari.
+     * Explicit workers > 1 requires a parallel-capable selected browser; 1 runs in-process.
+     * Browser and headless apply to every managed SuiteBrowser in this run.
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
      */
-    public function run(array $names = []): int
+    public function run(array $names = [], ?int $workers = null, ?string $browser = null, bool $headless = false): int
     {
-        $directory = PATH_ROOT . '/' . trim($this->pathChecks, '/') . '/';
+        $directory = $this->pathRoot . '/' . trim($this->pathChecks, '/') . '/';
         $files = [];
 
         try {
+            if ($workers !== null && $workers < 1) {
+                throw new \InvalidArgumentException('Workers must be a positive integer, or null.');
+            }
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)
             );
@@ -262,86 +278,171 @@ class Test
                     throw new \RuntimeException("Unknown check: $name");
                 }
             }
+            $this->headless = $headless;
+            $this->browserResolved = false;
+            $this->selectedBrowser = null;
+            if ($workers !== 1 || $browser !== null || $headless) {
+                $this->selectedBrowser = $this->resolveBrowser($browser);
+                $this->browserResolved = true;
+                $this->validateHeadless();
+            }
+            if (in_array($this->selectedBrowser, ['safari', 'safaripreview'], true)) {
+                if ($workers !== null && $workers > 1) {
+                    throw new \RuntimeException('The selected browser ' . $this->selectedBrowser . ' does not support parallel sessions.');
+                }
+                $workers = 1;
+            }
         } catch (\Throwable $error) {
             echo 'ERROR ' . $error->getMessage() . PHP_EOL;
             return 1;
         }
 
-        $checksPassed = $checksFailed = $assertionsPassed = $assertionsFailed = 0;
+        if ($workers !== 1) {
+            $selected = [];
+            foreach ($names as $name) {
+                $selected[$name] = $files[$name];
+            }
+            return (new Test\Parallel())->run($selected, min($workers ?? 2, count($names)), [
+                'root' => realpath($this->pathRoot), 'checks' => $this->pathChecks,
+                'browser' => $this->selectedBrowser, 'headless' => $headless, 'bootstrap' => $this->bootstrapped,
+            ]);
+        }
+        $this->report = new Test\Report();
+        try {
+            foreach ($names as $name) {
+                $this->report->result($name, $this->executeFile($name, $files[$name]));
+            }
+            return $this->report->summary();
+        } finally {
+            $this->report = null;
+        }
+    }
+
+    /** Managed suites use the concrete run-level selection, never a new automatic choice in a worker. */
+    public function browser(): string
+    {
+        if (!$this->browserResolved) {
+            $this->selectedBrowser = $this->resolveBrowser(null);
+            $this->browserResolved = true;
+        }
+        $this->validateHeadless();
+        return $this->selectedBrowser ?? throw new \RuntimeException('No ready browser/driver pair.');
+    }
+
+    public function headless(): bool
+    {
+        return $this->headless;
+    }
+
+    /** No ready pair is allowed for non-browser checks; managed browser setup then reports the failure. */
+    protected function resolveBrowser(?string $browser): ?string
+    {
+        $preference = WebDriver\WebDriver::PREFERENCE;
+        if ($browser !== null && !in_array($browser, $preference, true)) {
+            throw new \InvalidArgumentException('Unknown browser: ' . $browser);
+        }
+        $inventory = WebDriver\WebDriver::bootstrap();
+        foreach ($browser === null ? $preference : [$browser] as $name) {
+            $entry = $inventory->browsers->$name;
+            if ($entry->ready === true && $entry->driver->ready === true) {
+                return $name;
+            }
+        }
+        if ($browser !== null) {
+            throw new \RuntimeException('No ready browser/driver pair for ' . $browser . '.');
+        }
+        return null;
+    }
+
+    private function validateHeadless(): void
+    {
+        if ($this->headless && in_array($this->selectedBrowser, ['safari', 'safaripreview'], true)) {
+            throw new \InvalidArgumentException('Safari does not support headless browser sessions.');
+        }
+    }
+
+    /** @internal The worker entry owns application bootstrap and sends exactly one terminal result. */
+    public function runWorker(array $job, Test\Channel $channel): int
+    {
+        $this->channel = $channel;
+        $this->selectedBrowser = $job['browser'];
+        $this->browserResolved = true;
+        $this->headless = $job['headless'];
+        $this->event(['type' => 'activity', 'activity' => 'application bootstrap started']);
+        if ($job['bootstrap']) {
+            $this->bootstrap();
+        } else {
+            define('PATH_ROOT', $this->pathRoot);
+            require_once PATH_ROOT . '/vendor/autoload.php';
+        }
+        $this->event(['type' => 'activity', 'activity' => 'application bootstrap finished']);
+        $result = $this->executeFile($job['name'], $job['file']);
+        $this->event(['type' => 'result', 'result' => $result]);
+        return $result['checksFailed'] ? 1 : 0;
+    }
+
+    private function executeFile(string $name, string $path): array
+    {
+        $this->currentCheck = $name;
+        $this->passed = $this->failed = 0;
+        $this->failures = [];
         $casesPassed = $casesFailed = $casesSkipped = 0;
         $hasSuites = false;
-
-        foreach ($names as $name) {
-            $this->passed = $this->failed = 0;
-            $this->failures = [];
-            $suiteFailed = false;
-
-            set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
-                if (!(error_reporting() & $severity)) {
-                    return false;
-                }
-
-                throw new \ErrorException($message, 0, $severity, $file, $line);
-            });
-
-            $previous = self::$active;
-            self::$active = $this;
-            try {
-                // Keep variables declared by a check file out of the runner's scope.
-                $check = (static fn (string $path, self $test) => require($path))($files[$name], $this);
-                if ($check instanceof Test\Suite) {
-                    $hasSuites = true;
-                    [$passed, $failed, $skipped] = $this->runSuite($name, $check);
-                    $casesPassed += $passed;
-                    $casesFailed += $failed;
-                    $casesSkipped += $skipped;
-                    $suiteFailed = $failed > 0;
-                } else {
-                    if (!is_callable($check)) {
-                        throw new \RuntimeException('Check file must return a callable or Suite.');
-                    }
-                    $check($this);
-                    if ($this->passed + $this->failed === 0) {
-                        $this->failures[] = 'No assertions ran.';
-                    }
-                }
-            } catch (Test\AssertionFailure $error) {
-                // assert() already recorded this failure before stopping the check.
-            } catch (\Throwable $error) {
-                $this->failures[] = 'Execution error: ' . get_class($error) . ': ' . $error->getMessage();
-            } finally {
-                self::$active = $previous;
-                restore_error_handler();
-                // Application::init installs a shutdown handler that rethrows even suppressed errors.
-                error_clear_last();
+        $started = hrtime(true);
+        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+            if (!(error_reporting() & $severity)) {
+                return false;
             }
-
-            if ($suiteFailed || $this->failures) {
-                $checksFailed++;
-                echo "FAIL $name" . PHP_EOL;
-                foreach ($this->failures as $message) {
-                    echo '  ' . str_replace("\n", "\n  ", $message) . PHP_EOL;
-                }
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+        $previous = self::$active;
+        self::$active = $this;
+        try {
+            $this->event(['type' => 'activity', 'activity' => 'loading suite']);
+            // Keep variables declared by a check file out of the runner's scope.
+            $check = (static fn (string $path, self $test) => require($path))($path, $this);
+            if ($check instanceof Test\Suite) {
+                $hasSuites = true;
+                [$casesPassed, $casesFailed, $casesSkipped] = $this->runSuite($check);
             } else {
-                $checksPassed++;
-                echo "PASS $name" . PHP_EOL;
+                if (!is_callable($check)) {
+                    throw new \RuntimeException('Check file must return a callable or Suite.');
+                }
+                $this->event(['type' => 'configured', 'idleTimeout' => null, 'cases' => []]);
+                $this->event(['type' => 'activity', 'activity' => 'callable check']);
+                $check($this);
+                if ($this->passed + $this->failed === 0) {
+                    $this->failures[] = 'No assertions ran.';
+                }
             }
-
-            $assertionsPassed += $this->passed;
-            $assertionsFailed += $this->failed;
+        } catch (Test\AssertionFailure $error) {
+            // assert() already recorded this failure before stopping the check.
+        } catch (\Throwable $error) {
+            $this->failures[] = 'Execution error: ' . get_class($error) . ': ' . $error->getMessage();
+        } finally {
+            self::$active = $previous;
+            restore_error_handler();
+            // Application::init installs a shutdown handler that rethrows even suppressed errors.
+            error_clear_last();
         }
+        $failed = $casesFailed > 0 || $this->failures;
+        return ['checksPassed' => $failed ? 0 : 1, 'checksFailed' => $failed ? 1 : 0,
+            'casesPassed' => $casesPassed, 'casesFailed' => $casesFailed, 'casesSkipped' => $casesSkipped,
+            'assertionsPassed' => $this->passed, 'assertionsFailed' => $this->failed,
+            'hasSuites' => $hasSuites, 'failures' => $this->failures, 'duration' => (hrtime(true) - $started) / 1e9];
+    }
 
-        echo PHP_EOL . "Checks: $checksPassed passed, $checksFailed failed" . PHP_EOL;
-        if ($hasSuites) {
-            echo "Cases: $casesPassed passed, $casesFailed failed, $casesSkipped skipped" . PHP_EOL;
+    private function event(array $message): void
+    {
+        if ($this->channel !== null) {
+            $this->channel->send($message);
+        } elseif ($message['type'] === 'case_finished') {
+            $this->report?->caseResult($this->currentCheck, $message);
         }
-        echo "Assertions: $assertionsPassed passed, $assertionsFailed failed" . PHP_EOL;
-
-        return $checksFailed ? 1 : 0;
     }
 
     /** Execute one suite, keeping case results separate from suite setup and teardown. */
-    private function runSuite(string $name, Test\Suite $suite): array
+    private function runSuite(Test\Suite $suite): array
     {
         $methods = Test\SuiteMethods::discover($suite);
         if (!$methods[Test\CaseName::class]) {
@@ -350,21 +451,43 @@ class Test
         $casesPassed = $casesFailed = $casesSkipped = $assertionsPassed = $assertionsFailed = 0;
         $suiteState = [$this->passed, $this->failed, $this->failures];
         try {
-            $ready = $this->runHooks($suite, $methods[Test\SuiteBefore::class], 'SuiteBefore');
+            $ready = false;
+            $idleTimeout = null;
+            try {
+                $config = $suite->configuration();
+                $idleTimeout = $config->idleTimeout;
+                $ready = true;
+            } catch (\Throwable $error) {
+                $this->failures[] = 'Suite configuration: ' . get_class($error) . ': ' . $error->getMessage();
+            }
+            $this->event(['type' => 'configured', 'idleTimeout' => $idleTimeout,
+                'cases' => array_column($methods[Test\CaseName::class], 'name')]);
+            if ($ready) {
+                $ready = $this->runHooks($suite, $methods[Test\SuiteBefore::class], 'SuiteBefore');
+            }
             $suiteState = [$this->passed, $this->failed, $this->failures];
             foreach ($methods[Test\CaseName::class] as $case) {
-                $label = $name . ' > ' . $case['name'];
                 if (!$ready) {
                     $casesSkipped++;
-                    echo "SKIP $label (suite setup failed)" . PHP_EOL;
+                    $this->event(['type' => 'case_finished', 'name' => $case['name'], 'status' => 'SKIP',
+                        'reason' => 'suite setup failed', 'duration' => 0]);
                     continue;
                 }
 
                 $this->passed = $this->failed = 0;
                 $this->failures = [];
+                $started = hrtime(true);
+                $this->event(['type' => 'case_started', 'name' => $case['name']]);
                 try {
                     if ($this->runHooks($suite, $methods[Test\CaseBefore::class], 'CaseBefore')) {
+                        $this->event(['type' => 'activity', 'activity' => 'case body: ' . $case['name']]);
+                        $bodyStarted = hrtime(true);
                         $this->invokeSuiteMethod($suite, $case['method']);
+                        $duration = (hrtime(true) - $bodyStarted) / 1e9;
+                        if ($case['deadline'] !== null && $duration > $case['deadline']) {
+                            $this->failures[] = sprintf('Case deadline exceeded: %.3fs > %.3fs.', $duration, $case['deadline']);
+                        }
+                        $this->event(['type' => 'activity', 'activity' => 'case body finished: ' . $case['name'], 'duration' => $duration]);
                     }
                 } finally {
                     $this->runHooks($suite, $methods[Test\CaseAfter::class], 'CaseAfter', teardown: true);
@@ -374,14 +497,12 @@ class Test
                 }
                 if ($this->failures) {
                     $casesFailed++;
-                    echo "FAIL $label" . PHP_EOL;
-                    foreach ($this->failures as $message) {
-                        echo '  ' . str_replace("\n", "\n  ", $message) . PHP_EOL;
-                    }
                 } else {
                     $casesPassed++;
-                    echo "PASS $label" . PHP_EOL;
                 }
+                $this->event(['type' => 'case_finished', 'name' => $case['name'],
+                    'status' => $this->failures ? 'FAIL' : 'PASS', 'failures' => $this->failures,
+                    'duration' => (hrtime(true) - $started) / 1e9]);
                 $assertionsPassed += $this->passed;
                 $assertionsFailed += $this->failed;
             }
@@ -399,7 +520,11 @@ class Test
     {
         foreach ($hooks as $hook) {
             $start = count($this->failures);
+            $started = hrtime(true);
+            $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name']]);
             $completed = $this->invokeSuiteMethod($suite, $hook['method']);
+            $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name'] . ' finished',
+                'duration' => (hrtime(true) - $started) / 1e9]);
             for ($index = $start; $index < count($this->failures); $index++) {
                 $this->failures[$index] = $phase . ' ' . $hook['name'] . ': ' . $this->failures[$index];
             }

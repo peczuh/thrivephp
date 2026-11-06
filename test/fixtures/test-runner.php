@@ -14,14 +14,16 @@ use ThriveData\ThrivePHP\Test;
 define('PATH_ROOT', dirname(__DIR__, 2));
 
 /** Run real check files with supplied bodies, capturing the runner's report. Supports nested runs. */
-function runChecks(array $checks, ?Test $test = null): array
+function runChecks(array $checks, ?Test $test = null, ?string $browser = null, bool $headless = false): array
 {
 	$previous = $GLOBALS['runnerChecks'] ?? null;
 	$GLOBALS['runnerChecks'] = $checks;
-	$test ??= new Test(PATH_ROOT, '/test/fixtures/test-checks');
+	$test ??= new class(PATH_ROOT, '/test/fixtures/test-checks') extends Test {
+		protected function resolveBrowser(?string $browser): ?string { return $browser ?? 'firefox'; }
+	};
 	ob_start();
 	try {
-		$status = $test->run(array_keys($checks));
+		$status = $test->run(array_keys($checks), workers: 1, browser: $browser, headless: $headless);
 		return [$status, ob_get_contents()];
 	} finally {
 		ob_end_clean();

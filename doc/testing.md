@@ -1,6 +1,6 @@
 # Test suites
 
-`ThriveData\ThrivePHP\Test` runs PHP files below `/test/checks` by default. Each
+Requires PHP 8.5 or later. `ThriveData\ThrivePHP\Test` runs PHP files below `/test/checks` by default. Each
 file receives the runner as `$test` and returns either a `Test\Suite` or an
 existing callable check. A file's relative path, without `.php`, is its name.
 
@@ -15,6 +15,99 @@ exit($test->run());
 Pass names to `run(['layouts', 'login'])` to select files. A nonzero return value
 means at least one file failed. Callable checks continue to receive the runner
 as their argument and report one result per file.
+
+## Execution and browser selection
+
+```php
+exit($test->run(
+    names: ['layouts', 'login'],
+    workers: 4,
+    browser: 'firefox',
+    headless: true,
+));
+```
+
+`workers: null`, the default, uses up to two concurrent workers, capped by the
+number of selected files. Each file runs in a fresh PHP process. Its cases and
+hooks execute sequentially. `workers: 1` runs in the parent process, which also
+supports checks that depend on parent-only globals or closures. Positive explicit
+worker counts above one select parallel execution even for a single file.
+
+The parent resolves the browser before starting parallel work. Automatic selection
+uses the first ready browser/driver pair in this order: Safari Technology Preview,
+Safari, Chrome, Chromium, Firefox. It does not skip Safari to obtain parallelism.
+Safari and Preview make the default execution mode serial; explicitly requesting
+more than one worker with either browser fails before any checks run.
+
+`browser` and `headless` apply to all managed `SuiteBrowser` sessions in the run.
+Explicit unavailable browsers fail; headless Safari/Preview fails without switching
+browsers. Headless defaults to false. Checks that need no browser can run without
+an installed pair. Managed browser setup then fails if no pair is available.
+In explicit serial mode, automatic browser discovery waits until a managed suite
+needs it. Suites needing a different browser must create and clean up that browser
+themselves.
+
+Workers use `PHP_BINARY`, the parent's ini-file loading and effective ini-setting
+overrides, and inherit its environment and working directory. They do not take a
+separately configured worker ini file. Configure extensions in the shared PHP ini
+files. Workers load `<project root>/vendor/autoload.php`. If the parent called
+`$test->bootstrap()`, each worker also repeats application initialization. Put
+required application state in that initialization or suite hooks. Arbitrary parent
+globals, closures, objects, and entry-script statements are not copied to workers.
+
+Each worker has null stdin and inherits stdout/stderr. Incidental diagnostic
+output may interleave. Structured progress and results use a dedicated loopback
+TCP connection with newline-delimited JSON; they do not share the output streams.
+The parent prints suite-labeled case results as they arrive, then combined totals.
+Completion order can differ from the requested scheduling order.
+
+## Timing and recovery
+
+```php
+#[CaseName('The report completes', deadline: 5)]
+public function report(): void
+{
+    // The body completes before the runner checks its elapsed time.
+    $this->test->assert($this->buildReport(), 'Report built');
+}
+
+protected function configure(SuiteConfig $config): void
+{
+    $config->idleTimeout = 120;
+}
+```
+
+`CaseName::$deadline` is nullable and defaults to no deadline. A positive finite
+value sets a case-body limit in seconds, measured with a monotonic clock. Hooks
+are excluded. The worker checks the elapsed time after the body returns, records
+a case failure if it exceeded the limit, and continues cleanup and subsequent
+cases. It does not interrupt a running body. Deadline failures do not add a failed
+assertion to the assertion count.
+
+`SuiteConfig::$idleTimeout` is also nullable with no timeout by default. In parallel
+mode, a positive finite value limits seconds without structured worker progress.
+Hook boundaries, case boundaries, and assertions reset it; incidental stdout/stderr
+does not. A suite can exceed this duration overall while continuing to make
+progress. This timeout starts when the worker reports its suite configuration,
+so application loading and `configure()` are not covered. In-process serial runs
+cannot enforce worker inactivity recovery. Browser command timeout remains a
+separate setting.
+
+Workers have a hardcoded 60-second connection timeout. On a crash, lost connection,
+protocol failure, or inactivity timeout, the parent retains completed case results
+and reported assertions, fails an active case, skips remaining discovered cases,
+and marks the suite incomplete. Other suites continue. A final result must agree
+with the worker's exit status. A crash before case discovery can only report a
+failed file, because the parent does not know its cases.
+
+Recovery attempts to terminate the whole worker tree and reap the worker, including
+surviving descendants after ordinary completion. Unix workers create a separate
+session when POSIX is available; the parent also tracks observed descendants and
+escalates termination to a forced kill. With PCNTL available, parent interruption
+uses the same cleanup path. Windows uses a PowerShell supervisor and a kill-on-close
+Job Object. Cleanup is best-effort: detached Unix children that escape observation,
+an uncatchable parent termination, or OS termination failures can leave processes
+behind. Cleanup failures are reported.
 
 ## Defining a suite
 
@@ -118,7 +211,7 @@ use ThriveData\ThrivePHP\Test\CaseName;
 return new class($test) extends SuiteBrowser {
     protected function configure(SuiteConfig $config): void
     {
-        $config->browser = 'safari';
+        $config->timeout = 15;
     }
 
     #[SuiteBefore]
@@ -136,18 +229,17 @@ return new class($test) extends SuiteBrowser {
 };
 ```
 
-`configure()` is optional. The browser-start hook creates a fresh `SuiteConfig`
-and calls `configure()` once before starting the driver. Defaults are:
+`configure()` is optional on all suites. The runner creates a fresh `SuiteConfig`
+and calls `configure()` once before suite hooks. Defaults are:
 
 | Property | Default | Meaning |
 | --- | --- | --- |
-| `browser` | `'firefox'` | Browser name accepted by `WebDriver`. |
-| `headless` | `false` | Headless session; Safari does not support this. |
 | `timeout` | `10` | Seconds, passed to `WebDriver::browser()`. |
 | `capabilities` | `[]` | Browser capabilities passed to the session factory. |
+| `idleTimeout` | `null` | Seconds without worker progress; null disables it. |
 
 Declared properties enforce their PHP types. Assigning an unknown option throws
-`InvalidArgumentException`, including on PHP 8.0. Configuration changes do not
+`InvalidArgumentException`. Configuration changes do not
 affect other suites. No reference parameter is needed to change object properties.
 
 Browser assertions automatically report to the current case or suite phase and
@@ -184,8 +276,13 @@ Run from the ThrivePHP repository root:
 ```sh
 php test/test.php
 php test/test-suite.php
+php test/test-parallel.php
 php test/webdriver.php
 php test/webdriver-runtime.php
 ```
 
 Browser protocol and lifecycle checks use local fixture services, not real browsers.
+Parallel checks launch real PHP workers and exercise concurrency, live reports,
+large results, inherited diagnostics, timeouts, crashes, and descendant recovery.
+Passing these checks on one OS does not verify native execution on other platforms
+or concurrent real-browser sessions.

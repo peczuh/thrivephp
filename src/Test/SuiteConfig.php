@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace ThriveData\ThrivePHP\Test;
 
-/** Per-suite browser settings. Timeout is in seconds, as in WebDriver::browser(). */
+/** Per-suite settings. Browser command timeout and worker inactivity timeout are seconds. */
 class SuiteConfig
 {
     public function __construct(
-        public string $browser = 'firefox',
-        public bool $headless = false,
         public float $timeout = 10,
         public array $capabilities = [],
+        public ?float $idleTimeout = null,
     ) {}
 
     /** Reject misspelled options on every supported PHP version. */

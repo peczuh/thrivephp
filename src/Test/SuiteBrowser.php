@@ -14,15 +14,14 @@ abstract class SuiteBrowser extends Suite
     public Browser $browser;
     private ?WebDriver $driver = null;
 
-    /** Configure this suite and start its owned browser before child setup hooks. */
+    /** Start the run-level browser before child setup hooks, using this suite's session settings. */
     #[SuiteBefore]
     public function startBrowser(): void
     {
-        $config = new SuiteConfig();
-        $this->configure($config);
+        $config = $this->configuration();
         $this->driver = $this->createDriver($config);
         $this->browser = $this->driver->browser(
-            headless: $config->headless,
+            headless: $this->test->headless(),
             timeout: $config->timeout,
             capabilities: $config->capabilities,
         );
@@ -31,7 +30,7 @@ abstract class SuiteBrowser extends Suite
     /** Driver creation is overridable so protocol fixtures can exercise the real lifecycle. */
     protected function createDriver(SuiteConfig $config): WebDriver
     {
-        return new WebDriver(browser: $config->browser);
+        return new WebDriver(browser: $this->test->browser());
     }
 
     /** A nullable driver permits cleanup when configuration or startup failed. */

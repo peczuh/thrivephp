@@ -339,9 +339,9 @@ check($status === 1 && str_contains($output, 'Execution error: RuntimeException:
 echo "PASS: empty suites and loading failures produce failing reports without leaking a recorder\n";
 
 $config = new SuiteConfig();
-check($config->browser === 'firefox' && !$config->headless && $config->timeout === 10.0 && $config->capabilities === [], 'Incorrect defaults.');
-$config->browser = 'safari';
-check((new SuiteConfig())->browser === 'firefox', 'Configuration leaked between suites.');
+check($config->idleTimeout === null && $config->timeout === 10.0 && $config->capabilities === [], 'Incorrect defaults.');
+$config->idleTimeout = 1;
+check((new SuiteConfig())->idleTimeout === null, 'Configuration leaked between suites.');
 try {
     $config->browswer = 'safari';
     throw new LogicException('Unknown config property was accepted.');
@@ -349,3 +349,56 @@ try {
     check(str_contains($error->getMessage(), 'browswer'), $error->getMessage());
 }
 echo "PASS: SuiteConfig supplies fresh typed defaults and rejects misspelled settings\n";
+
+$trace = [];
+[$status, $output] = runChecks(['suite' => function (Test $test) use (&$trace) {
+    return new class($test, $trace) extends Suite {
+        public function __construct(Test $test, private array &$trace) { parent::__construct($test); }
+
+        #[CaseBefore]
+        public function prepare(): void { usleep(30000); }
+
+        #[CaseAfter]
+        public function cleanup(): void { $this->trace[] = 'cleanup'; }
+
+        #[CaseName('hooks excluded', deadline: 0.02)]
+        public function quick(): void { $this->test->assert(true, 'body is fast'); }
+
+        #[CaseName('over deadline', deadline: 0.01)]
+        public function slow(): void
+        {
+            usleep(30000);
+            $this->trace[] = 'body finished';
+            $this->test->assert(true, 'body completed before deadline failure');
+        }
+
+        #[CaseName('no deadline')]
+        public function unlimited(): void
+        {
+            usleep(30000);
+            $this->test->assert(true, 'nullable default');
+        }
+    };
+}]);
+check($status === 1 && str_contains($output, 'PASS suite > hooks excluded')
+    && str_contains($output, 'FAIL suite > over deadline') && str_contains($output, 'Case deadline exceeded')
+    && str_contains($output, 'PASS suite > no deadline') && str_contains($output, 'Assertions: 3 passed, 0 failed')
+    && $trace === ['cleanup', 'body finished', 'cleanup', 'cleanup'], $output);
+foreach ([0, -1, INF, NAN] as $invalid) {
+    try {
+        new CaseName('invalid', deadline: $invalid);
+        throw new LogicException('Invalid deadline accepted.');
+    } catch (InvalidArgumentException) {}
+    [$status, $output] = runChecks(['suite' => function (Test $test) use ($invalid) {
+        $suite = new class($test) extends Suite {
+            public float $invalid;
+            protected function configure(SuiteConfig $config): void { $config->idleTimeout = $this->invalid; }
+            #[CaseName('skipped')]
+            public function body(): void { $this->test->assert(true, 'must not run'); }
+        };
+        $suite->invalid = $invalid;
+        return $suite;
+    }]);
+    check($status === 1 && str_contains($output, 'idleTimeout must be positive and finite') && str_contains($output, 'SKIP suite > skipped'), $output);
+}
+echo "PASS: deadlines exclude hooks, report after completion, preserve cleanup and validate finite positive durations\n";

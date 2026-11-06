@@ -8,5 +8,11 @@ namespace ThriveData\ThrivePHP\Test;
 #[\Attribute(\Attribute::TARGET_METHOD)]
 final class CaseName
 {
-    public function __construct(public string $name) {}
+    /** Deadline is the maximum case-body duration in seconds, checked after it returns. */
+    public function __construct(public string $name, public ?float $deadline = null)
+    {
+        if ($deadline !== null && (!is_finite($deadline) || $deadline <= 0)) {
+            throw new \InvalidArgumentException('Case deadline must be positive and finite, or null.');
+        }
+    }
 }

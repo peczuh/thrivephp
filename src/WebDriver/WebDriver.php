@@ -21,7 +21,7 @@
 	class WebDriver
 	{
 		/** Automatic selection stops at the first locally ready browser/driver pair. */
-		private const PREFERENCE = ['safaripreview', 'safari', 'chrome', 'chromium', 'firefox'];
+		public const PREFERENCE = ['safaripreview', 'safari', 'chrome', 'chromium', 'firefox'];
 		private ?DriverProcess $process = null;
 		private ?Browser $session = null;
 		/** Selected installation, independent of any earlier bootstrap report. */

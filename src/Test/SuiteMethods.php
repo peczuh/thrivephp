@@ -7,7 +7,7 @@ namespace ThriveData\ThrivePHP\Test;
 /** @internal Discovers effective annotated methods and orders their lifecycle phases. */
 final class SuiteMethods
 {
-    /** @return array<class-string, list<array{method: \ReflectionMethod, name: string, order: array}>> */
+    /** @return array<class-string, list<array{method: \ReflectionMethod, name: string, deadline: ?float, order: array}>> */
     public static function discover(Suite $suite): array
     {
         $class = new \ReflectionObject($suite);
@@ -49,6 +49,7 @@ final class SuiteMethods
                     $selected[] = [
                         'method' => $method,
                         'name' => $instance instanceof CaseName ? $instance->name : $method->getName(),
+                        'deadline' => $instance instanceof CaseName ? $instance->deadline : null,
                         'order' => [
                             in_array($attribute, [SuiteAfter::class, CaseAfter::class], true) ? $depth : -$depth,
                             $trait ? 1 : 0,

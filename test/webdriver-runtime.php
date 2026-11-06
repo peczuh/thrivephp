@@ -93,7 +93,7 @@ abstract class FixtureBrowserSuite extends SuiteBrowser
 	protected function createDriver(SuiteConfig $config): WebDriver
 	{
 		$this->settings = $config;
-		$driver = new FixtureDriver(browser: $config->browser, startupTimeout: 1);
+		$driver = new FixtureDriver(browser: $this->test->browser(), startupTimeout: 1);
 		$this->process = ownedProcess($driver);
 		return $driver;
 	}
@@ -407,7 +407,6 @@ try {
 					protected function configure(SuiteConfig $config): void
 					{
 						$this->configured++;
-						$config->browser = 'safari';
 						$config->timeout = 0.5;
 						$config->capabilities = ['acceptInsecureCerts' => false];
 					}
@@ -450,15 +449,15 @@ try {
 					public function defaults(): void { $this->browser->urlMatches('~/fixture$~'); }
 				};
 			},
-		]);
+		], browser: 'safari');
 		check($status === 0 && str_contains($output, 'Cases: 3 passed, 0 failed, 0 skipped') && str_contains($output, 'Assertions: 6 passed, 0 failed'), $output);
 		check($suites[0]->configured === 1 && $suites[0]->trace === ['login', 'first', 'second', 'logout'], 'Suite setup or shared state changed.');
-		check($suites[1]->settings->browser === 'firefox' && $suites[1]->settings->capabilities === [] && $suites[1]->settings->timeout === 10.0, 'Configuration leaked into the next suite.');
+		check($suites[1]->settings->capabilities === [] && $suites[1]->settings->timeout === 10.0, 'Configuration leaked into the next suite.');
 		foreach ($suites as $suite):
 			check(!$suite->process->running() && !$suite->browser->active(), 'Suite did not stop its browser/driver.');
 		endforeach;
 		$requests = array_values(array_filter(events($log), fn($event) => ($event['path'] ?? '') === '/session'));
-		check(count($requests) === 2 && $requests[0]['body']['capabilities']['alwaysMatch']['browserName'] === 'safari' && $requests[1]['body']['capabilities']['alwaysMatch']['browserName'] === 'firefox', 'Suite browser selection was not forwarded.');
+		check(count($requests) === 2 && $requests[0]['body']['capabilities']['alwaysMatch']['browserName'] === 'safari' && $requests[1]['body']['capabilities']['alwaysMatch']['browserName'] === 'safari', 'Run browser selection was not forwarded.');
 		check($requests[0]['body']['capabilities']['alwaysMatch']['acceptInsecureCerts'] === false, 'Suite capabilities were not forwarded.');
 	});
 
@@ -475,7 +474,6 @@ try {
 						protected function configure(SuiteConfig $config): void
 						{
 							if ($this->failure === 'config') $config->browswer = 'safari';
-							$config->headless = true;
 						}
 
 						#[CaseName('browser assertion')]
@@ -497,7 +495,7 @@ try {
 					return $suite;
 				},
 				'next' => function (Test $test) { $test->assert(true, 'next file runs'); },
-			]);
+			], headless: true);
 			check($status === 1 && str_contains($output, 'PASS next') && in_array('cleanup', $suite->trace, true), $output);
 			check($suite->process === null || !$suite->process->running(), 'Failure leaked a driver.');
 			check(!isset($suite->browser) || !$suite->browser->active(), 'Failure leaked a browser session.');
