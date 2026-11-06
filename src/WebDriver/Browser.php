@@ -653,6 +653,10 @@
 		 * Calling the callback signals completion of this invocation; other outstanding
 		 * JavaScript requests or timers may still be running.
 		 *
+		 * With $inject, append an inline script containing the source (without script tags)
+		 * and return null. Execution is subject to CSP; insertion does not guarantee success.
+		 * Injection rejects $async=true and nonempty $arguments.
+		 *
 		 * ```php
 		 * $driver->scriptTimeout(5);
 		 * $result = $driver->script(
@@ -664,9 +668,9 @@
 		 * this HTTP request. If the browser timeout is disabled (null), only the finite
 		 * constructor timeout applies; an indefinitely running script is not awaited forever.
 		 */
-		public function script(string $script, bool $async = false, array $arguments = []): mixed
+		public function script(string $script, bool $async = false, array $arguments = [], bool $inject = false): mixed
 		{
-			return $this->window()->script($script, $async, $arguments);
+			return $this->window()->script($script, $async, $arguments, $inject);
 		}
 
 		/** Set the browser's script execution timeout in seconds, rounded to whole milliseconds. */

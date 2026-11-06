@@ -233,6 +233,22 @@ scenario('element scripts restore context, preserve setter values', function ($l
 	$browser->quit();
 });
 
+scenario('script injection facade and window reject incompatible options before execution', function ($listener) {
+	createSession($listener);
+	scriptExchange($listener, ['window.injected = true;']);
+	scriptExchange($listener, ['window.injected = false;']);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	foreach ([$browser, $browser->window()] as $receiver):
+		expectError(fn() => $receiver->script('', async: true, inject: true), 'requires async: false and no arguments');
+		expectError(fn() => $receiver->script('', arguments: [null], inject: true), 'requires async: false and no arguments');
+	endforeach;
+	verify($browser->script('window.injected = true;', inject: true) === null, 'Browser injection did not return null.');
+	verify($browser->window()->script('window.injected = false;', inject: true) === null, 'Window injection did not return null.');
+	$browser->quit();
+});
+
 foreach ([['check', 'checkbox', false], ['check', 'checkbox', true], ['check', 'radio', false], ['check', 'radio', true], ['uncheck', 'checkbox', false], ['uncheck', 'checkbox', true]] as [$method, $type, $selected]):
 	scenario("$method $type selected=" . (int)$selected, function ($listener) use ($method, $type, $selected) {
 		createSession($listener);

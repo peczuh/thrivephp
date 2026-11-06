@@ -363,9 +363,23 @@
 		 * and results are converted automatically. PHP blocks in either mode; async
 		 * scripts must invoke the final callback argument. See Browser::script().
 		 * Cyclic arguments or nesting beyond 64 levels throw InvalidArgumentException.
+		 * $inject appends an inline script, subject to CSP, and returns null. It requires
+		 * synchronous mode and no arguments; pass source without script tags.
 		 */
-		public function script(string $script, bool $async = false, array $arguments = []): mixed
+		public function script(string $script, bool $async = false, array $arguments = [], bool $inject = false): mixed
 		{
+			if ($inject):
+				if ($async || $arguments !== []):
+					throw new \InvalidArgumentException('Script injection requires async: false and no arguments.');
+				endif;
+				$arguments = [$script];
+				$script = <<<'JS'
+					const script = document.createElement('script');
+					script.textContent = arguments[0];
+					document.documentElement.appendChild(script);
+					return null;
+					JS;
+			endif;
 			$arguments = $this->encode($arguments);
 			// Script limits can exceed the ordinary HTTP timeout (30s vs 10s by default).
 			$timeouts = $this->browser->timeouts();

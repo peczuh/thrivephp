@@ -466,6 +466,21 @@ validation blocking or cancellation does not itself throw or record an assertion
 It returns the original element. Use `click()` when a particular submit button's
 name/value or submission overrides matter.
 
+### Script and HTML injection
+
+Browser/window `script()` normally executes a WebDriver function body and returns
+its decoded result. With `inject: true`, it instead appends an inline script
+containing the supplied source and returns null:
+
+```php
+$browser->script('window.testMode = true;', inject: true);
+$browser->window()->script('window.testMode = false;', inject: true);
+```
+
+Script injection takes JavaScript source without `<script>` tags. It rejects
+`async: true` and nonempty `arguments`. Execution follows the page's CSP rules;
+successful insertion does not guarantee successful execution.
+
 All element actions restore their captured browser/window/frame context. Stale
 references, context failures, and driver errors propagate without action retries.
 
