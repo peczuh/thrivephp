@@ -475,11 +475,20 @@ containing the supplied source and returns null:
 ```php
 $browser->script('window.testMode = true;', inject: true);
 $browser->window()->script('window.testMode = false;', inject: true);
+
+$element->inject('<span>Appended</span>');
+$element->inject('<span>Prepended</span>', where: 'afterbegin');
 ```
 
 Script injection takes JavaScript source without `<script>` tags. It rejects
 `async: true` and nonempty `arguments`. Execution follows the page's CSP rules;
 successful insertion does not guarantee successful execution.
+
+`Element::inject($html, $where = 'beforeend')` calls `insertAdjacentHTML()` once
+and returns the original element. Positions are `beforebegin` and `afterend` for
+siblings, or `afterbegin` and `beforeend` for children. DOM errors propagate.
+Script markup inserted this way does not execute. Register handlers through
+`script()` or use an existing delegated listener.
 
 All element actions restore their captured browser/window/frame context. Stale
 references, context failures, and driver errors propagate without action retries.

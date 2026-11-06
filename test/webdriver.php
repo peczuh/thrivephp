@@ -193,6 +193,7 @@ $elementScripts = [
 	['attribute', ['disabled', ''], null],
 	['attribute', ['disabled', null], null],
 	['submit', [], null],
+	['inject', ['<span>content</span>', 'afterend'], null],
 ];
 scenario('element scripts restore context, preserve setter values', function ($listener) use ($elementScripts) {
 	createSession($listener);
@@ -200,14 +201,17 @@ scenario('element scripts restore context, preserve setter values', function ($l
 		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
 		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
 		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		if ($method === 'inject') $arguments = [$arguments[1], $arguments[0]];
 		scriptExchange($listener, [[Element::REFERENCE => 'node'], ...$arguments], $value);
 	endforeach;
 	scriptExchange($listener, [[Element::REFERENCE => 'node'], 'related', ['nodes' => [[Element::REFERENCE => 'child']]]]);
 	exchange($listener, 'GET', '/session/session%2F1/element/node/attribute/data%2Fkey', null, 'value');
 	exchange($listener, 'GET', '/session/session%2F1/element/node/property/custom', null, false);
 	foreach ($elementScripts as [$method, $arguments]):
+		if ($method === 'inject') $arguments = [$arguments[1], $arguments[0]];
 		scriptExchange($listener, [[Element::REFERENCE => 'node'], ...$arguments], ['error' => 'stale element reference', 'message' => 'removed'], 404);
 	endforeach;
+	scriptExchange($listener, [[Element::REFERENCE => 'node'], 'invalid', ''], ['error' => 'javascript error', 'message' => 'invalid position'], 500);
 	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
 	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
 	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], ['error' => 'no such frame', 'message' => 'frame removed'], 404);
@@ -228,6 +232,7 @@ scenario('element scripts restore context, preserve setter values', function ($l
 	foreach ($elementScripts as [$method, $arguments]):
 		expectError(fn() => $element->$method(...$arguments), 'stale element reference: removed');
 	endforeach;
+	expectError(fn() => $element->inject('', 'invalid'), 'javascript error: invalid position');
 	$browser->switch('other');
 	expectError(fn() => $element->submit(), 'no such frame: frame removed');
 	$browser->quit();

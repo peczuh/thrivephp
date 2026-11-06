@@ -113,6 +113,16 @@
 			return $this;
 		}
 
+		/**
+		 * Insert HTML at beforebegin, afterbegin, beforeend (default), or afterend.
+		 * Return this element. DOM insertion errors propagate; script markup does not execute.
+		 */
+		public function inject(string $html, string $where = 'beforeend'): self
+		{
+			$this->script('arguments[0].insertAdjacentHTML(arguments[1], arguments[2]);', [$where, $html]);
+			return $this;
+		}
+
 		/** Send text without clearing existing input. */
 		public function type(string $text): self
 		{
