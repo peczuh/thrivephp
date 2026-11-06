@@ -2,6 +2,12 @@
 
 require_once dirname(__DIR__, 2) . '/src/Test.php';
 require_once dirname(__DIR__, 2) . '/src/Test/AssertionFailure.php';
+spl_autoload_register(static function (string $class): void {
+	$prefix = 'ThriveData\\ThrivePHP\\Test\\';
+	if (str_starts_with($class, $prefix)) {
+		require dirname(__DIR__, 2) . '/src/Test/' . substr($class, strlen($prefix)) . '.php';
+	}
+});
 
 use ThriveData\ThrivePHP\Test;
 

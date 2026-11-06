@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ThriveData\ThrivePHP;
 
-/** Runs callable check files and reports accumulated assertions. */
+/** Runs callable checks and attributed suites, recording assertions in their current case or phase. */
 class Test
 {
     private static ?self $active = null;
@@ -55,7 +55,7 @@ class Test
         return self::$active;
     }
 
-    /** Record a result; failure throws Test\AssertionFailure to stop the current check. */
+    /** Record a result; failure throws Test\AssertionFailure to stop the current case or hook. */
     public function assert(bool $condition, string $message): bool
     {
         $this->verify($condition, $message);
@@ -224,9 +224,11 @@ class Test
 
     /**
      * Run checks and print results. Return 0 only when every selected check passes.
-     * Check files return callables accepting this Test; their return values are ignored.
+     * Files receive $test in their loading scope and return a Test\Suite or a callable.
+     * Legacy callables accept this Test; their return values are ignored.
      * Register this instance as the process-wide active recorder during each check,
-     * restoring the previous recorder afterward. Assertion failures stop only that check.
+     * restoring the previous recorder afterward. Assertion failures stop the current
+     * callable check, case body, or hook, while suite cleanup and later cases still run.
      *
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
      */
@@ -266,10 +268,13 @@ class Test
         }
 
         $checksPassed = $checksFailed = $assertionsPassed = $assertionsFailed = 0;
+        $casesPassed = $casesFailed = $casesSkipped = 0;
+        $hasSuites = false;
 
         foreach ($names as $name) {
             $this->passed = $this->failed = 0;
             $this->failures = [];
+            $suiteFailed = false;
 
             set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
                 if (!(error_reporting() & $severity)) {
@@ -283,15 +288,22 @@ class Test
             self::$active = $this;
             try {
                 // Keep variables declared by a check file out of the runner's scope.
-                $check = (static fn (string $path) => require($path))($files[$name]);
-                if (!is_callable($check)) {
-                    throw new \RuntimeException('Check file must return a callable.');
-                }
-
-                $check($this);
-
-                if ($this->passed + $this->failed === 0) {
-                    $this->failures[] = 'No assertions ran.';
+                $check = (static fn (string $path, self $test) => require($path))($files[$name], $this);
+                if ($check instanceof Test\Suite) {
+                    $hasSuites = true;
+                    [$passed, $failed, $skipped] = $this->runSuite($name, $check);
+                    $casesPassed += $passed;
+                    $casesFailed += $failed;
+                    $casesSkipped += $skipped;
+                    $suiteFailed = $failed > 0;
+                } else {
+                    if (!is_callable($check)) {
+                        throw new \RuntimeException('Check file must return a callable or Suite.');
+                    }
+                    $check($this);
+                    if ($this->passed + $this->failed === 0) {
+                        $this->failures[] = 'No assertions ran.';
+                    }
                 }
             } catch (Test\AssertionFailure $error) {
                 // assert() already recorded this failure before stopping the check.
@@ -304,7 +316,7 @@ class Test
                 error_clear_last();
             }
 
-            if ($this->failures) {
+            if ($suiteFailed || $this->failures) {
                 $checksFailed++;
                 echo "FAIL $name" . PHP_EOL;
                 foreach ($this->failures as $message) {
@@ -320,8 +332,95 @@ class Test
         }
 
         echo PHP_EOL . "Checks: $checksPassed passed, $checksFailed failed" . PHP_EOL;
+        if ($hasSuites) {
+            echo "Cases: $casesPassed passed, $casesFailed failed, $casesSkipped skipped" . PHP_EOL;
+        }
         echo "Assertions: $assertionsPassed passed, $assertionsFailed failed" . PHP_EOL;
 
         return $checksFailed ? 1 : 0;
+    }
+
+    /** Execute one suite, keeping case results separate from suite setup and teardown. */
+    private function runSuite(string $name, Test\Suite $suite): array
+    {
+        $methods = Test\SuiteMethods::discover($suite);
+        if (!$methods[Test\CaseName::class]) {
+            throw new \RuntimeException('No cases found.');
+        }
+        $casesPassed = $casesFailed = $casesSkipped = $assertionsPassed = $assertionsFailed = 0;
+        $suiteState = [$this->passed, $this->failed, $this->failures];
+        try {
+            $ready = $this->runHooks($suite, $methods[Test\SuiteBefore::class], 'SuiteBefore');
+            $suiteState = [$this->passed, $this->failed, $this->failures];
+            foreach ($methods[Test\CaseName::class] as $case) {
+                $label = $name . ' > ' . $case['name'];
+                if (!$ready) {
+                    $casesSkipped++;
+                    echo "SKIP $label (suite setup failed)" . PHP_EOL;
+                    continue;
+                }
+
+                $this->passed = $this->failed = 0;
+                $this->failures = [];
+                try {
+                    if ($this->runHooks($suite, $methods[Test\CaseBefore::class], 'CaseBefore')) {
+                        $this->invokeSuiteMethod($suite, $case['method']);
+                    }
+                } finally {
+                    $this->runHooks($suite, $methods[Test\CaseAfter::class], 'CaseAfter', teardown: true);
+                }
+                if ($this->passed + $this->failed === 0 && !$this->failures) {
+                    $this->failures[] = 'No assertions ran.';
+                }
+                if ($this->failures) {
+                    $casesFailed++;
+                    echo "FAIL $label" . PHP_EOL;
+                    foreach ($this->failures as $message) {
+                        echo '  ' . str_replace("\n", "\n  ", $message) . PHP_EOL;
+                    }
+                } else {
+                    $casesPassed++;
+                    echo "PASS $label" . PHP_EOL;
+                }
+                $assertionsPassed += $this->passed;
+                $assertionsFailed += $this->failed;
+            }
+        } finally {
+            [$this->passed, $this->failed, $this->failures] = $suiteState;
+            $this->runHooks($suite, $methods[Test\SuiteAfter::class], 'SuiteAfter', teardown: true);
+            $this->passed += $assertionsPassed;
+            $this->failed += $assertionsFailed;
+        }
+        return [$casesPassed, $casesFailed, $casesSkipped];
+    }
+
+    /** Stop setup at its first thrown failure; attempt every teardown hook independently. */
+    private function runHooks(Test\Suite $suite, array $hooks, string $phase, bool $teardown = false): bool
+    {
+        foreach ($hooks as $hook) {
+            $start = count($this->failures);
+            $completed = $this->invokeSuiteMethod($suite, $hook['method']);
+            for ($index = $start; $index < count($this->failures); $index++) {
+                $this->failures[$index] = $phase . ' ' . $hook['name'] . ': ' . $this->failures[$index];
+            }
+            if (!$completed && !$teardown) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** A stopping assertion was already recorded; unexpected exceptions need their own diagnostic. */
+    private function invokeSuiteMethod(Test\Suite $suite, \ReflectionMethod $method): bool
+    {
+        try {
+            $method->invoke($suite);
+            return true;
+        } catch (Test\AssertionFailure $error) {
+            return false;
+        } catch (\Throwable $error) {
+            $this->failures[] = 'Execution error: ' . get_class($error) . ': ' . $error->getMessage();
+            return false;
+        }
     }
 }

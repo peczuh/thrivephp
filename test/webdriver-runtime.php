@@ -13,6 +13,11 @@ use ThriveData\ThrivePHP\WebDriver\Discovery;
 use ThriveData\ThrivePHP\WebDriver\DriverProcess;
 use ThriveData\ThrivePHP\WebDriver\WebDriver;
 use ThriveData\ThrivePHP\Test;
+use ThriveData\ThrivePHP\Test\SuiteBrowser;
+use ThriveData\ThrivePHP\Test\SuiteConfig;
+use ThriveData\ThrivePHP\Test\SuiteBefore;
+use ThriveData\ThrivePHP\Test\SuiteAfter;
+use ThriveData\ThrivePHP\Test\CaseName;
 
 function check(bool $condition, string $message): void
 {
@@ -76,6 +81,21 @@ class FixtureDriver extends WebDriver
 	protected function command(int $port): array
 	{
 		return [PHP_BINARY, __DIR__ . '/fixtures/webdriver-driver.php', ...array_slice(parent::command($port), 1)];
+	}
+}
+
+/** Keep the production suite hooks while substituting the local protocol fixture service. */
+abstract class FixtureBrowserSuite extends SuiteBrowser
+{
+	public ?DriverProcess $process = null;
+	public ?SuiteConfig $settings = null;
+
+	protected function createDriver(SuiteConfig $config): WebDriver
+	{
+		$this->settings = $config;
+		$driver = new FixtureDriver(browser: $config->browser, startupTimeout: 1);
+		$this->process = ownedProcess($driver);
+		return $driver;
 	}
 }
 
@@ -373,6 +393,123 @@ try {
 			$driver->stop();
 		}
 	});
+
+	scenario('SuiteBrowser configures, shares and cleans up a fresh session per suite', function () use ($log) {
+		FixtureDriver::$source = installation(['firefox', 'safari']);
+		$suites = [];
+		[$status, $output] = runChecks([
+			'suite' => function (Test $test) use (&$suites) {
+				return $suites[] = new class($test) extends FixtureBrowserSuite {
+					public int $configured = 0;
+					public array $trace = [];
+					private ?Browser $original = null;
+
+					protected function configure(SuiteConfig $config): void
+					{
+						$this->configured++;
+						$config->browser = 'safari';
+						$config->timeout = 0.5;
+						$config->capabilities = ['acceptInsecureCerts' => false];
+					}
+
+					#[SuiteBefore]
+					public function login(): void
+					{
+						$this->original = $this->browser;
+						$this->browser->urlMatches('~/fixture$~');
+						$this->trace[] = 'login';
+					}
+
+					#[CaseName('first browser case')]
+					public function first(): void
+					{
+						$this->test->assert($this->browser === $this->original, 'Shared session.');
+						$this->browser->urlMatches('~/fixture$~');
+						$this->trace[] = 'first';
+					}
+
+					#[CaseName('second browser case')]
+					public function second(): void
+					{
+						$this->test->assert($this->browser === $this->original, 'Same session in the next case.');
+						$this->trace[] = 'second';
+					}
+
+					#[SuiteAfter]
+					public function logout(): void
+					{
+						$this->browser->urlMatches('~/fixture$~');
+						$this->trace[] = 'logout';
+					}
+				};
+			},
+			'suite-next' => function (Test $test) use (&$suites) {
+				check(!$suites[0]->process->running(), 'Previous suite still owns a driver.');
+				return $suites[] = new class($test) extends FixtureBrowserSuite {
+					#[CaseName('default browser configuration')]
+					public function defaults(): void { $this->browser->urlMatches('~/fixture$~'); }
+				};
+			},
+		]);
+		check($status === 0 && str_contains($output, 'Cases: 3 passed, 0 failed, 0 skipped') && str_contains($output, 'Assertions: 6 passed, 0 failed'), $output);
+		check($suites[0]->configured === 1 && $suites[0]->trace === ['login', 'first', 'second', 'logout'], 'Suite setup or shared state changed.');
+		check($suites[1]->settings->browser === 'firefox' && $suites[1]->settings->capabilities === [] && $suites[1]->settings->timeout === 10.0, 'Configuration leaked into the next suite.');
+		foreach ($suites as $suite):
+			check(!$suite->process->running() && !$suite->browser->active(), 'Suite did not stop its browser/driver.');
+		endforeach;
+		$requests = array_values(array_filter(events($log), fn($event) => ($event['path'] ?? '') === '/session'));
+		check(count($requests) === 2 && $requests[0]['body']['capabilities']['alwaysMatch']['browserName'] === 'safari' && $requests[1]['body']['capabilities']['alwaysMatch']['browserName'] === 'firefox', 'Suite browser selection was not forwarded.');
+		check($requests[0]['body']['capabilities']['alwaysMatch']['acceptInsecureCerts'] === false, 'Suite capabilities were not forwarded.');
+	});
+
+	foreach (['config', 'exit', 'session-error', 'case', 'cleanup', 'delete-error'] as $failure):
+		scenario("SuiteBrowser cleans up after $failure failure", function () use ($failure, $log) {
+			if (in_array($failure, ['exit', 'session-error', 'delete-error'], true)) putenv('WEBDRIVER_FIXTURE_MODE=' . $failure);
+			$suite = null;
+			[$status, $output] = runChecks([
+				'suite' => function (Test $test) use (&$suite, $failure) {
+					$suite = new class($test) extends FixtureBrowserSuite {
+						public string $failure;
+						public array $trace = [];
+
+						protected function configure(SuiteConfig $config): void
+						{
+							if ($this->failure === 'config') $config->browswer = 'safari';
+							$config->headless = true;
+						}
+
+						#[CaseName('browser assertion')]
+						public function body(): void
+						{
+							$this->trace[] = 'case';
+							$this->browser->urlMatches($this->failure === 'case' ? '~/missing$~' : '~/fixture$~');
+							$this->trace[] = 'continued';
+						}
+
+						#[SuiteAfter]
+						public function cleanup(): void
+						{
+							$this->trace[] = 'cleanup';
+							if ($this->failure === 'cleanup') throw new RuntimeException('application cleanup failed');
+						}
+					};
+					$suite->failure = $failure;
+					return $suite;
+				},
+				'next' => function (Test $test) { $test->assert(true, 'next file runs'); },
+			]);
+			check($status === 1 && str_contains($output, 'PASS next') && in_array('cleanup', $suite->trace, true), $output);
+			check($suite->process === null || !$suite->process->running(), 'Failure leaked a driver.');
+			check(!isset($suite->browser) || !$suite->browser->active(), 'Failure leaked a browser session.');
+			if (in_array($failure, ['config', 'exit', 'session-error'], true)):
+				check(str_contains($output, 'Cases: 0 passed, 0 failed, 1 skipped') && $suite->trace === ['cleanup'], $output);
+			else:
+				check(count(array_filter(events($log), fn($event) => ($event['method'] ?? '') === 'DELETE')) === 1, 'Browser cleanup was skipped or repeated.');
+			endif;
+			if ($failure === 'case') check($suite->trace === ['case', 'cleanup'] && !str_contains($output, 'Execution error'), $output);
+			check(Test::active() === null, 'Browser suite leaked the active recorder.');
+		});
+	endforeach;
 
 	scenario('Chromium uses chrome protocol name and the selected binary', function () use ($log) {
 		FixtureDriver::$source = installation(['chromium']);
