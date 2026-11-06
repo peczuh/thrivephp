@@ -437,7 +437,24 @@ $element->visible(invert: true, wait: false);
 if ($element->displayed()) {
     $element->click();
 }
+
+$element->property('value');                 // Get the live DOM value.
+$element->property('value', 'example');      // Set and return the element.
+$element->property('checked', false);
+$element->property('customData', null);      // Assign JavaScript null.
+$element->attribute('name');                 // Get an HTML attribute or null.
+$element->attribute('name', 'example');
+$element->attribute('disabled', '');         // Set an empty attribute.
+$element->attribute('disabled', null);       // Remove the attribute.
 ```
+
+Supplying a second argument selects setter behavior, including explicit `null`.
+Setters return the original element and dispatch no automatic `input` or `change`
+events. Property values use the usual script argument/reference conversion.
+Attribute getters retain WebDriver's boolean-attribute behavior of `'true'` or null.
+
+All element actions restore their captured browser/window/frame context. Stale
+references, context failures, and driver errors propagate without action retries.
 
 ## Regression checks
 

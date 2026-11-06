@@ -115,6 +115,19 @@ function createSession($listener, string $browser = 'firefox', bool $bidi = fals
 	endif;
 }
 
+/** Check script transport and argument marshalling. */
+function scriptExchange($listener, array $arguments, mixed $value = null, int $status = 200): void
+{
+	exchange($listener, 'GET', '/session/session%2F1/timeouts', null, ['script' => 30000]);
+	[$stream, $head, $body] = acceptRequest($listener);
+	verify(str_starts_with($head, 'POST /session/session%2F1/execute/sync HTTP/'), "Unexpected script request: $head");
+	$request = json_decode($body, true, flags: JSON_THROW_ON_ERROR);
+	verify(is_string($request['script']) && $request['script'] !== '' && $request['args'] === $arguments, "Unexpected script arguments: $body");
+	$json = json_encode(['value' => $value]);
+	fwrite($stream, "HTTP/1.1 $status Response\r\nContent-Type: application/json\r\nContent-Length: " . strlen($json) . "\r\nConnection: close\r\n\r\n$json");
+	fclose($stream);
+}
+
 function upgrade($listener)
 {
 	[$stream, $head] = acceptRequest($listener);
@@ -173,6 +186,46 @@ function scenario(string $name, callable $server, callable $client): void
 	verify(pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0, "$name fixture failed.");
 	echo "PASS: $name\n";
 }
+
+$elementScripts = [
+	['property', ['custom', null], null],
+	['property', ['checked', false], null],
+	['attribute', ['disabled', ''], null],
+	['attribute', ['disabled', null], null],
+];
+scenario('element scripts restore context, preserve setter values', function ($listener) use ($elementScripts) {
+	createSession($listener);
+	foreach ($elementScripts as [$method, $arguments, $value]):
+		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
+		exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		scriptExchange($listener, [[Element::REFERENCE => 'node'], ...$arguments], $value);
+	endforeach;
+	scriptExchange($listener, [[Element::REFERENCE => 'node'], 'related', ['nodes' => [[Element::REFERENCE => 'child']]]]);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/attribute/data%2Fkey', null, 'value');
+	exchange($listener, 'GET', '/session/session%2F1/element/node/property/custom', null, false);
+	foreach ($elementScripts as [$method, $arguments]):
+		scriptExchange($listener, [[Element::REFERENCE => 'node'], ...$arguments], ['error' => 'stale element reference', 'message' => 'removed'], 404);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) use ($elementScripts) {
+	$browser = new Browser($url, 'firefox');
+	$window = $browser->window();
+	$element = new Element($window, 'node', [0]);
+	foreach ($elementScripts as [$method, $arguments, $value]):
+		$browser->switch('other');
+		$result = $element->$method(...$arguments);
+		verify($result === $element, "$method lost its fluent receiver.");
+	endforeach;
+	$child = new Element($window, 'child', [0]);
+	verify($element->property('related', ['nodes' => [$child]]) === $element, 'Nested property assignment lost receiver.');
+	verify($element->attribute(key: 'data/key') === 'value' && $element->property(key: 'custom') === false, 'Getter behavior changed.');
+	expectError(fn() => $element->property('related', new Element($window, 'foreign')), 'another browser session or browsing context');
+	foreach ($elementScripts as [$method, $arguments]):
+		expectError(fn() => $element->$method(...$arguments), 'stale element reference: removed');
+	endforeach;
+	$browser->quit();
+});
 
 foreach (['chrome', 'firefox', 'safari'] as $browser):
 	scenario("classic commands: $browser", function ($listener) use ($browser) {

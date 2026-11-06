@@ -176,16 +176,35 @@
 			return $this->request('GET', '/text');
 		}
 
-		/** Return an HTML attribute, or null; boolean attributes return 'true' or null. */
-		public function attribute(string $name): ?string
+		/**
+		 * Get an HTML attribute, or null; boolean attributes return 'true' or null.
+		 * A supplied value sets the attribute (null removes it) and returns this element.
+		 * An empty string sets an empty attribute. No events are dispatched automatically.
+		 */
+		public function attribute(string $key, ?string $value = null): string|self|null
 		{
-			return $this->request('GET', '/attribute/' . rawurlencode($name));
+			if (func_num_args() === 1):
+				return $this->request('GET', '/attribute/' . rawurlencode($key));
+			endif;
+			$this->script(<<<'JS'
+				if (arguments[2] === null) arguments[0].removeAttribute(arguments[1]);
+				else arguments[0].setAttribute(arguments[1], arguments[2]);
+				JS, [$key, $value]);
+			return $this;
 		}
 
-		/** Return a live DOM property, e.g. the current input value, decoded from JSON. */
-		public function property(string $name): mixed
+		/**
+		 * Get a live DOM property decoded from JSON, such as the current input value.
+		 * A supplied value, including null or false, assigns the property and returns this
+		 * element. No events are dispatched automatically. Script reference conversion applies.
+		 */
+		public function property(string $key, mixed $value = null): mixed
 		{
-			return $this->request('GET', '/property/' . rawurlencode($name));
+			if (func_num_args() === 1):
+				return $this->request('GET', '/property/' . rawurlencode($key));
+			endif;
+			$this->script('arguments[0][arguments[1]] = arguments[2];', [$key, $value]);
+			return $this;
 		}
 
 		/** Return a resolved CSS value, not the inline style declaration. */
@@ -413,6 +432,13 @@
 		private function request(string $method, string $path, ?array $body = null): mixed
 		{
 			return $this->window->request($method, '/element/' . rawurlencode($this->id) . $path, $body, $this->frames);
+		}
+
+		/** Restore captured context before encoding arguments; the first argument is this element. */
+		private function script(string $script, array $arguments = []): mixed
+		{
+			$this->window->browser()->activate($this->window, $this->frames);
+			return $this->window->script($script, arguments: [$this, ...$arguments]);
 		}
 
 		/** Build hover or click actions at the in-view center. */
