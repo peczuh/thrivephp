@@ -35,9 +35,10 @@ function runParallel(array $modes, array $options = [], array $environment = [],
         if (is_file($root . '/' . $name . '.pid')) unlink($root . '/' . $name . '.pid');
     }
     foreach ($modes as $name => $mode) {
+        $fixture = str_starts_with($mode, 'attribute-') ? 'test-attributes-suite.php' : 'test-parallel-suite.php';
         file_put_contents($root . '/checks/' . $name . '.php', '<?php $mode = ' . var_export($mode, true)
             . '; $name = ' . var_export($name, true) . '; return require '
-            . var_export(__DIR__ . '/fixtures/test-parallel-suite.php', true) . ';');
+            . var_export(__DIR__ . '/fixtures/' . $fixture, true) . ';');
     }
     $process = proc_open([PHP_BINARY, '-d', 'memory_limit=192M', '-d', 'short_open_tag=1',
         __DIR__ . '/fixtures/test-parallel-run.php', $root, json_encode($options, JSON_THROW_ON_ERROR)],
@@ -72,6 +73,67 @@ function runParallel(array $modes, array $options = [], array $environment = [],
 }
 
 try {
+    foreach ([1, 2] as $workers) {
+        foreach ([
+            [['^a$::^first$##smoke', '^b$::^second$##slow', '^a$::^first$'], [], ['a:first', 'b:second']],
+            [['^a$::^first$##slow', '^b$::^second$##smoke'], [], []],
+            [['^[ab]$::^first$#!smoke', '^b$::^first$'], [], ['b:first']],
+            [['^[ab]$::^first$'], ['b'], ['b:first']],
+            [['.*!!^(b|excluded)$::^first$'], [], ['a:first']],
+            [['^missing$'], [], []],
+        ] as [$selectors, $names, $expected]) {
+            [$code, $out, $err] = runParallel(['a' => 'attribute-normal', 'b' => 'attribute-normal', 'excluded' => 'attribute-load-error'],
+                ['workers' => $workers, 'selectors' => $selectors, 'names' => $names]);
+            $events = array_map(fn ($line) => json_decode($line, true), file($root . '/events.jsonl', FILE_IGNORE_NEW_LINES));
+            $bodies = array_values(array_map(fn ($event) => $event['name'] . ':' . $event['event'],
+                array_filter($events, fn ($event) => in_array($event['event'], ['first', 'second'], true))));
+            sort($bodies);
+            check($code === 0 && $err === '' && $bodies === $expected, $out . $err . json_encode($bodies));
+            check(str_contains($out, 'Checks: ' . count($expected) . ' passed, 0 failed, 0 skipped'), $out);
+            if (!$expected) check($events === [], 'Fully filtered suite ran hooks: ' . $out);
+        }
+        [$code, $out, $err] = runParallel(['a' => 'attribute-load-error'], ['workers' => $workers, 'selectors' => ['^a$', '##[']]);
+        check($code === 1 && str_contains($out, 'Invalid tags include regex') && !str_contains($out, 'Excluded file loaded.'), $out . $err);
+        [$code, $out, $err] = runParallel(['aaa' => 'attribute-load-error'],
+            ['workers' => $workers, 'selectors' => ['^aaa$', '(*LIMIT_MATCH=1)(*NO_JIT)^a+$']]);
+        check($code === 1 && str_contains($out, 'Backtrack limit exhausted')
+            && !str_contains($out . $err, 'Excluded file loaded.') && !str_contains($out, 'protocol error'), $out . $err);
+    }
+    echo "PASS: serial/parallel selectors preserve file/case/tag associations, local exclusions, deduplication, and pre-load validation\n";
+
+    foreach (['case-retry', 'case-before', 'case-after', 'case-deadline', 'suite-retry', 'suite-before', 'suite-after', 'config', 'suite-deadline'] as $mode) {
+        [$code, $out, $err] = runParallel(['a' => 'attribute-' . $mode]);
+        check($code === 0 && $err === '' && str_contains($out, 'RETRY Attribute suite')
+            && str_contains($out, 'Checks: 1 passed, 0 failed, 0 skipped')
+            && str_contains($out, 'Cases: 2 passed, 0 failed, 1 skipped')
+            && str_contains($out, 'Assertions: 4 passed, 0 failed'), $out . $err);
+    }
+    [$code, $out, $err] = runParallel(['a' => 'attribute-always-fail']);
+    check($code === 1 && $err === '' && str_contains($out, 'Cases: 1 passed, 1 failed, 1 skipped')
+        && str_contains($out, 'Assertions: 3 passed, 1 failed') && substr_count($out, 'RETRY Attribute suite > first') === 2, $out . $err);
+    echo "PASS: parallel case and whole-suite retries discard earlier counts and retain final outcomes\n";
+
+    foreach (['retry-crash', 'retry-timeout', 'suite-crash'] as $mode) {
+        [$code, $out, $err] = runParallel(['a' => 'attribute-' . $mode]);
+        check($code === 1 && str_contains($out, 'RETRY Attribute suite') && str_contains($out, 'Suite incomplete.')
+            && str_contains($out, 'Cases: 0 passed, 1 failed, 2 skipped')
+            && str_contains($out, 'Assertions: 1 passed, 0 failed') && !str_contains($out, 'protocol error'), $out . $err);
+    }
+    echo "PASS: crashes and inactivity during retries recover only the current attempt without retrying dead workers\n";
+
+    [$code, $out, $err] = runParallel(['a' => 'attribute-normal'], ['selectors' => ['##^suite$#!^slow$']]);
+    check($code === 0 && $err === '' && str_contains($out, 'Cases: 1 passed, 0 failed, 1 skipped')
+        && str_contains($out, 'Assertions: 3 passed, 0 failed') && !str_contains($out, '> second'), $out . $err);
+    [$code, $out, $err] = runParallel(['a' => 'attribute-normal', 'b' => 'attribute-skip'], ['selectors' => ['#!^suite$']]);
+    check($code === 0 && $err === '' && str_contains($out, 'Checks: 0 passed, 0 failed, 0 skipped')
+        && file_get_contents($root . '/events.jsonl') === '' && !str_contains($out, 'SKIP'), $out . $err);
+    foreach ([['a' => 'attribute-normal'], ['a' => 'attribute-skip']] as $modes) {
+        [$code, $out, $err] = runParallel($modes, ['selectors' => [$modes['a'] === 'attribute-normal' ? '##^skip$' : '##^suite$']]);
+        check($code === 0 && $err === '' && str_contains($out, 'Checks: 0 passed, 0 failed, 1 skipped')
+            && str_contains($out, 'Cases: 0 passed, 0 failed, 1 skipped') && file_get_contents($root . '/events.jsonl') === '', $out . $err);
+    }
+    echo "PASS: parallel tag filters, explicit skips, and empty selections avoid lifecycle hooks and pass protocol validation\n";
+
     [$code, $out, $err] = runParallel(['a' => 'actions', 'b' => 'action-error']);
     check($code === 1 && $err === '' && str_contains($out, 'PASS a > body (No assertions)')
         && str_contains($out, 'PASS a (No assertions)') && str_contains($out, 'FAIL b > body')
@@ -134,7 +196,8 @@ try {
         && str_contains($out, 'Assertions: 4 passed, 1 failed'), 'Large result lost or miscounted: ' . substr($out, -1000) . $err);
     [$code, $out, $err] = runParallel(['a' => 'diagnostics']);
     check($code === 0 && str_contains($out, 'OUT-BEGIN' . str_repeat('o', 1024 * 1024) . 'OUT-END')
-        && $err === 'ERR-BEGIN' . str_repeat('e', 1024 * 1024) . 'ERR-END', 'Inherited diagnostics lost bytes.');
+        && $err === 'ERR-BEGIN' . str_repeat('e', 1024 * 1024) . 'ERR-END',
+        'Inherited diagnostics failed: exit=' . $code . ', stdout=' . strlen($out) . ', stderr=' . strlen($err) . ', tail=' . substr($out, -1000));
     echo "PASS: multi-megabyte TCP results and inherited stdout/stderr do not block or lose bytes\n";
 
     [$code, $out, $err] = runParallel(['a' => 'normal'], ['workers' => 2], ['TEST_BROWSER' => 'safari']);

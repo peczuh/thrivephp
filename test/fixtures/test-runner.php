@@ -14,7 +14,8 @@ use ThriveData\ThrivePHP\Test;
 define('PATH_ROOT', dirname(__DIR__, 2));
 
 /** Run real check files with supplied bodies, capturing the runner's report. Supports nested runs. */
-function runChecks(array $checks, ?Test $test = null, ?string $browser = null, bool $headless = false): array
+function runChecks(array $checks, ?Test $test = null, ?string $browser = null, bool $headless = false,
+	array $selectors = []): array
 {
 	$previous = $GLOBALS['runnerChecks'] ?? null;
 	$GLOBALS['runnerChecks'] = $checks;
@@ -23,7 +24,8 @@ function runChecks(array $checks, ?Test $test = null, ?string $browser = null, b
 	};
 	ob_start();
 	try {
-		$status = $test->run(array_keys($checks), workers: 1, browser: $browser, headless: $headless);
+		$status = $test->run(array_keys($checks), workers: 1, browser: $browser, headless: $headless,
+			selectors: $selectors);
 		return [$status, ob_get_contents()];
 	} finally {
 		ob_end_clean();

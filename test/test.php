@@ -34,7 +34,7 @@ $next = false;
 	},
 ], $test);
 check($status === 1 && !$continued && $cleaned && $next, 'Assert did not stop only its check and run cleanup.');
-check($output === "FAIL check\n  stopping failure\nPASS next\n\nChecks: 1 passed, 1 failed\nAssertions: 2 passed, 1 failed\n", $output);
+check($output === "FAIL check\n  stopping failure\nPASS next\n\nChecks: 1 passed, 1 failed, 0 skipped\nAssertions: 2 passed, 1 failed\n", $output);
 check(Test::active() === null, 'An assertion failure leaked the active recorder.');
 echo "PASS: assert stops its check, reports once, runs cleanup and proceeds to the next check\n";
 
@@ -44,7 +44,7 @@ echo "PASS: assert stops its check, reports once, runs cleanup and proceeds to t
 	$test->verify(false, 'second failure');
 	$test->assert(true, 'continued');
 }], $test);
-check($status === 1 && $output === "FAIL check\n  first failure\n  second failure\n\nChecks: 0 passed, 1 failed\nAssertions: 2 passed, 2 failed\n", $output);
+check($status === 1 && $output === "FAIL check\n  first failure\n  second failure\n\nChecks: 0 passed, 1 failed, 0 skipped\nAssertions: 2 passed, 2 failed\n", $output);
 echo "PASS: verify accumulates failures and continues; repeated runs reset counts\n";
 
 foreach (['success', 'assert', 'exception', 'empty'] as $mode) {

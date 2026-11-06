@@ -3,10 +3,10 @@
 // Run with: php test/test-suite.php.
 require __DIR__ . '/fixtures/test-runner.php';
 
-use ThriveData\ThrivePHP\Test;
+use ThriveData\ThrivePHP\Test as TestRunner;
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
-use ThriveData\ThrivePHP\Test\CaseName;
+use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\Test\SuiteBefore;
 use ThriveData\ThrivePHP\Test\SuiteAfter;
 use ThriveData\ThrivePHP\Test\CaseBefore;
@@ -45,18 +45,18 @@ abstract class BaseSuite extends Suite
     #[CaseAfter]
     public function baseClean(): void { $this->trace[] = 'base clean'; }
 
-    #[CaseName('Inherited case')]
+    #[Test('Inherited case')]
     public function inherited(): void { $this->trace[] = 'base case'; $this->test->assert(true, 'base'); }
 
-    #[CaseName('Removed by an unannotated override')]
+    #[Test('Removed by an unannotated override')]
     public function removed(): void { throw new RuntimeException('parent override ran'); }
 
-    #[CaseName('Replaced by an annotated override')]
+    #[Test('Replaced by an annotated override')]
     public function replaced(): void { throw new RuntimeException('parent replacement ran'); }
 }
 
 $suite = null;
-[$status, $output] = runChecks(['suite' => function (Test $test) use (&$suite) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) use (&$suite) {
     return $suite = new class($test) extends BaseSuite {
         use ZuluHooks, AlphaHooks;
 
@@ -77,13 +77,13 @@ $suite = null;
 
         public function removed(): void { throw new RuntimeException('unannotated override ran'); }
 
-        #[CaseName('Child replacement')]
+        #[Test('Child replacement')]
         public function replaced(): void { $this->trace[] = 'child replacement'; $this->test->assert(true, 'replacement'); }
 
-        #[CaseName('First declared child case')]
-        public function zCase(): void { $this->trace[] = 'child z'; $this->test->assert(Test::active() === $this->test, 'active'); }
+        #[Test('First declared child case')]
+        public function zCase(): void { $this->trace[] = 'child z'; $this->test->assert(TestRunner::active() === $this->test, 'active'); }
 
-        #[CaseName('Second declared child case')]
+        #[Test('Second declared child case')]
         public function aCase(): void { $this->trace[] = 'child a'; $this->test->assert(true, 'a'); }
     };
 }]);
@@ -94,18 +94,18 @@ foreach (['base case', 'child replacement', 'child z', 'child a'] as $case) {
 array_push($expected, 'child stop', 'base stop');
 check($status === 0 && $suite->trace === $expected, $output . json_encode($suite->trace));
 check(str_contains($output, 'Cases: 4 passed, 0 failed, 0 skipped') && str_contains($output, 'Assertions: 4 passed, 0 failed'), $output);
-check(!str_contains($output, 'Removed by') && Test::active() === null, $output);
+check(!str_contains($output, 'Removed by') && TestRunner::active() === null, $output);
 echo "PASS: inherited hooks, source-ordered cases, same-file traits and overrides execute in their defined order\n";
 
 trait SharedCases
 {
-    #[CaseName('Original and alias execute once')]
+    #[Test('Original and alias execute once')]
     public function shared(): void { $this->trace[] = __FUNCTION__; $this->test->assert(true, 'shared'); }
 
-    #[CaseName('Public alias of a protected method')]
+    #[Test('Public alias of a protected method')]
     protected function hidden(): void { $this->trace[] = __FUNCTION__; $this->test->assert(true, 'hidden'); }
 
-    #[CaseName('First same-line method')] public function lineFirst(): void { $this->test->assert(true, 'first'); } #[CaseName('Second same-line method')] public function lineSecond(): void { $this->test->assert(true, 'second'); }
+    #[Test('First same-line method')] public function lineFirst(): void { $this->test->assert(true, 'first'); } #[Test('Second same-line method')] public function lineSecond(): void { $this->test->assert(true, 'second'); }
 }
 
 trait NestedCases
@@ -115,17 +115,17 @@ trait NestedCases
 
 trait FirstConflict
 {
-    #[CaseName('First trait implementation')]
+    #[Test('First trait implementation')]
     public function conflict(): void { $this->test->assert(true, 'first conflict'); }
 }
 
 trait SecondConflict
 {
-    #[CaseName('Second trait implementation')]
+    #[Test('Second trait implementation')]
     public function conflict(): void { $this->test->assert(true, 'second conflict'); }
 }
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
         use NestedCases, FirstConflict, SecondConflict {
             FirstConflict::conflict insteadof SecondConflict;
@@ -140,9 +140,9 @@ check(substr_count($output, 'Original and alias execute once') === 1 && substr_c
 check(str_contains($output, 'First trait implementation') && str_contains($output, 'Second trait implementation'), $output);
 echo "PASS: nested traits, aliases, visibility changes, conflict resolution and distinct same-line methods\n";
 
-trait CompactFirst { #[CaseName('compact first')] public function compact(): void {} } trait CompactSecond { #[CaseName('compact second')] public function compact(): void {} }
+trait CompactFirst { #[Test('compact first')] public function compact(): void {} } trait CompactSecond { #[Test('compact second')] public function compact(): void {} }
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
         use CompactFirst, CompactSecond {
             CompactSecond::compact insteadof CompactFirst;
@@ -154,17 +154,17 @@ check($status === 1 && str_contains($output, 'Ambiguous trait method origin')
     && str_contains($output, 'CompactFirst::compact') && str_contains($output, 'CompactSecond::compact'), $output);
 echo "PASS: ambiguous same-name trait declarations fail discovery instead of silently losing a case\n";
 
-trait OverlapSource { #[CaseName('trait original')] public function same(): void {} } class OverlapConsumer extends Suite { use OverlapSource { same as alias; } #[CaseName('class override')] public function same(): void {} }
+trait OverlapSource { #[Test('trait original')] public function same(): void {} } class OverlapConsumer extends Suite { use OverlapSource { same as alias; } #[Test('class override')] public function same(): void {} }
 
-[$status, $output] = runChecks(['suite' => fn(Test $test) => new OverlapConsumer($test)]);
+[$status, $output] = runChecks(['suite' => fn(TestRunner $test) => new OverlapConsumer($test)]);
 check($status === 1 && str_contains($output, 'consuming class and trait method share source lines'), $output);
 
 trait HelperFirst { public function helper(): void {} } trait HelperSecond { public function helper(): void {} }
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
         use HelperFirst, HelperSecond { HelperSecond::helper insteadof HelperFirst; }
-        #[CaseName('Unannotated helpers are ignored')]
+        #[Test('Unannotated helpers are ignored')]
         public function body(): void { $this->helper(); $this->test->assert(true, 'helper is callable'); }
     };
 }]);
@@ -180,7 +180,7 @@ trait AliasedHooks
     protected function protectedHook(): void { $this->test->verify(false, 'public alias once'); }
 }
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
         use AliasedHooks {
             originalHook as aOriginalAlias;
@@ -188,7 +188,7 @@ trait AliasedHooks
             protectedHook as public aPublicAlias;
         }
 
-        #[CaseName('Case after verifying setup')]
+        #[Test('Case after verifying setup')]
         public function body(): void { $this->test->assert(true, 'case ran'); }
     };
 }]);
@@ -201,7 +201,7 @@ echo "PASS: alias deduplication prefers an eligible original, otherwise the firs
 foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite cleanup', 'verify', 'empty'] as $mode) {
     $suite = null;
     [$status, $output] = runChecks([
-        'suite' => function (Test $test) use (&$suite, $mode) {
+        'suite' => function (TestRunner $test) use (&$suite, $mode) {
             $suite = new class($test) extends Suite {
                 public string $mode;
                 public array $trace = [];
@@ -234,7 +234,7 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
                 #[CaseAfter]
                 public function laterClean(): void { $this->trace[] = 'later clean ' . $this->case; }
 
-                #[CaseName('First case')]
+                #[Test('First case')]
                 public function first(): void
                 {
                     $this->trace[] = 'first';
@@ -245,7 +245,7 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
                     $this->trace[] = 'continued';
                 }
 
-                #[CaseName('Second case')]
+                #[Test('Second case')]
                 public function second(): void { $this->trace[] = 'second'; $this->test->assert(true, 'second passed'); }
 
                 #[SuiteAfter]
@@ -261,9 +261,9 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
             $suite->mode = $mode;
             return $suite;
         },
-        'next' => function (Test $test) { $test->assert(true, 'legacy check still runs'); },
+        'next' => function (TestRunner $test) { $test->assert(true, 'legacy check still runs'); },
     ]);
-    check($status === ($mode === 'empty' ? 0 : 1) && str_contains($output, 'PASS next') && Test::active() === null, $output);
+    check($status === ($mode === 'empty' ? 0 : 1) && str_contains($output, 'PASS next') && TestRunner::active() === null, $output);
     check(array_slice($suite->trace, -2) === ['suite cleanup', 'later stop'], json_encode($suite->trace));
     if ($mode === 'suite setup') {
         check($suite->trace === ['suite setup', 'suite cleanup', 'later stop'], json_encode($suite->trace));
@@ -279,7 +279,7 @@ foreach (['suite setup', 'case setup', 'case body', 'case cleanup', 'suite clean
 }
 echo "PASS: stopping failures, continuing verification, skipped cases, independent cleanup and mixed legacy checks\n";
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
         #[SuiteBefore]
         public function start(): void { $this->test->verify(false, 'suite verification'); }
@@ -287,7 +287,7 @@ echo "PASS: stopping failures, continuing verification, skipped cases, independe
         #[CaseBefore]
         public function prepare(): void { $this->test->assert(true, 'case hook assertion'); }
 
-        #[CaseName('Case uses its hook assertion')]
+        #[Test('Case uses its hook assertion')]
         public function body(): void {}
 
         #[CaseAfter]
@@ -310,32 +310,32 @@ foreach (['suite verification', 'case cleanup assertion', 'additional case clean
 check(str_contains($output, 'SuiteBefore start:') && str_contains($output, 'SuiteAfter stop:') && str_contains($output, 'CaseAfter clean:'), $output);
 echo "PASS: suite and case hook assertions are attributed separately and cleanup errors accumulate\n";
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
-        #[CaseName('Nested suite restores its caller')]
+        #[Test('Nested suite restores its caller')]
         public function nested(): void
         {
             $outer = $this->test;
-            [$status, $output] = runChecks(['suite' => function (Test $test) {
+            [$status, $output] = runChecks(['suite' => function (TestRunner $test) {
                 return new class($test) extends Suite {
-                    #[CaseName('Inner failure')]
+                    #[Test('Inner failure')]
                     public function fail(): void { $this->test->assert(false, 'inner failure'); }
                 };
             }]);
             $this->test->assert($status === 1 && str_contains($output, 'Assertions: 0 passed, 1 failed'), 'Inner suite reported its failure.');
-            $this->test->assert(Test::active() === $outer, 'Outer recorder restored.');
+            $this->test->assert(TestRunner::active() === $outer, 'Outer recorder restored.');
         }
     };
 }]);
-check($status === 0 && str_contains($output, 'Assertions: 2 passed, 0 failed') && Test::active() === null, $output);
+check($status === 0 && str_contains($output, 'Assertions: 2 passed, 0 failed') && TestRunner::active() === null, $output);
 echo "PASS: nested suite runs restore the active recorder and isolate assertion totals\n";
 
-[$status, $output] = runChecks(['suite' => function (Test $test) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {};
 }]);
 check($status === 1 && str_contains($output, 'No cases found.'), $output);
 [$status, $output] = runChecks(['suite' => function () { throw new RuntimeException('suite load failed'); }]);
-check($status === 1 && str_contains($output, 'Execution error: RuntimeException: suite load failed') && Test::active() === null, $output);
+check($status === 1 && str_contains($output, 'Execution error: RuntimeException: suite load failed') && TestRunner::active() === null, $output);
 echo "PASS: empty suites and loading failures produce failing reports without leaking a recorder\n";
 
 $config = new SuiteConfig();
@@ -351,9 +351,9 @@ try {
 echo "PASS: SuiteConfig supplies fresh typed defaults and rejects misspelled settings\n";
 
 $trace = [];
-[$status, $output] = runChecks(['suite' => function (Test $test) use (&$trace) {
+[$status, $output] = runChecks(['suite' => function (TestRunner $test) use (&$trace) {
     return new class($test, $trace) extends Suite {
-        public function __construct(Test $test, private array &$trace) { parent::__construct($test); }
+        public function __construct(TestRunner $test, private array &$trace) { parent::__construct($test); }
 
         #[CaseBefore]
         public function prepare(): void { usleep(30000); }
@@ -361,10 +361,10 @@ $trace = [];
         #[CaseAfter]
         public function cleanup(): void { $this->trace[] = 'cleanup'; }
 
-        #[CaseName('hooks excluded', deadline: 0.02)]
+        #[Test('hooks excluded', deadline: 0.02)]
         public function quick(): void { $this->test->assert(true, 'body is fast'); }
 
-        #[CaseName('over deadline', deadline: 0.01)]
+        #[Test('over deadline', deadline: 0.01)]
         public function slow(): void
         {
             usleep(30000);
@@ -372,7 +372,7 @@ $trace = [];
             $this->test->assert(true, 'body completed before deadline failure');
         }
 
-        #[CaseName('no deadline')]
+        #[Test('no deadline')]
         public function unlimited(): void
         {
             usleep(30000);
@@ -386,14 +386,14 @@ check($status === 1 && str_contains($output, 'PASS suite > hooks excluded')
     && $trace === ['cleanup', 'body finished', 'cleanup', 'cleanup'], $output);
 foreach ([0, -1, INF, NAN] as $invalid) {
     try {
-        new CaseName('invalid', deadline: $invalid);
+        new Test('invalid', deadline: $invalid);
         throw new LogicException('Invalid deadline accepted.');
     } catch (InvalidArgumentException) {}
-    [$status, $output] = runChecks(['suite' => function (Test $test) use ($invalid) {
+    [$status, $output] = runChecks(['suite' => function (TestRunner $test) use ($invalid) {
         $suite = new class($test) extends Suite {
             public float $invalid;
             protected function configure(SuiteConfig $config): void { $config->idleTimeout = $this->invalid; }
-            #[CaseName('skipped')]
+            #[Test('skipped')]
             public function body(): void { $this->test->assert(true, 'must not run'); }
         };
         $suite->invalid = $invalid;

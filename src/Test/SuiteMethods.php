@@ -7,7 +7,7 @@ namespace ThriveData\ThrivePHP\Test;
 /** @internal Discovers effective annotated methods and orders their lifecycle phases. */
 final class SuiteMethods
 {
-    /** @return array<class-string, list<array{method: \ReflectionMethod, name: string, deadline: ?float, order: array}>> */
+    /** @return array<class-string, list<array{method: \ReflectionMethod, name: string, deadline: ?float, retry: int, tags: array, skip: bool, order: array}>> */
     public static function discover(Suite $suite): array
     {
         $class = new \ReflectionObject($suite);
@@ -16,7 +16,7 @@ final class SuiteMethods
             $depths[$ancestor->getName()] = count($depths);
         }
 
-        $attributes = [SuiteBefore::class, SuiteAfter::class, CaseBefore::class, CaseAfter::class, CaseName::class];
+        $attributes = [SuiteBefore::class, SuiteAfter::class, CaseBefore::class, CaseAfter::class, Test::class];
         $methods = [];
         foreach ($class->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
             $annotated = false;
@@ -48,8 +48,11 @@ final class SuiteMethods
                     $trait = $origin->getDeclaringClass()->isTrait();
                     $selected[] = [
                         'method' => $method,
-                        'name' => $instance instanceof CaseName ? $instance->name : $method->getName(),
-                        'deadline' => $instance instanceof CaseName ? $instance->deadline : null,
+                        'name' => $instance instanceof Test ? $instance->description : $method->getName(),
+                        'deadline' => $instance instanceof Test ? $instance->deadline : null,
+                        'retry' => $instance instanceof Test ? $instance->retry : 0,
+                        'tags' => $instance instanceof Test ? $instance->tags : [],
+                        'skip' => $instance instanceof Test && $instance->skip,
                         'order' => [
                             in_array($attribute, [SuiteAfter::class, CaseAfter::class], true) ? $depth : -$depth,
                             $trait ? 1 : 0,

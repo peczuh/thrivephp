@@ -2,7 +2,7 @@
 
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
-use ThriveData\ThrivePHP\Test\CaseName;
+use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\Test\SuiteBefore;
 use ThriveData\ThrivePHP\Test\SuiteAfter;
 
@@ -27,7 +27,7 @@ $suite = new class($test) extends Suite {
         if ($this->mode === 'mismatch') register_shutdown_function(static function () { exit(7); });
     }
 
-    #[CaseName('first')]
+    #[Test('first')]
     public function first(): void
     {
         if (in_array($this->mode, ['actions', 'action-error'], true)) return;
@@ -35,7 +35,7 @@ $suite = new class($test) extends Suite {
         if ($this->mode === 'concurrent') usleep(200000);
     }
 
-    #[CaseName('body', deadline: 0.9)]
+    #[Test('body', deadline: 0.9)]
     public function body(): void
     {
         switch ($this->mode) {
@@ -87,7 +87,7 @@ $suite = new class($test) extends Suite {
         $this->test->assert(true, 'body completed');
     }
 
-    #[CaseName('last')]
+    #[Test('last')]
     public function last(): void
     {
         if (in_array($this->mode, ['actions', 'action-error'], true)) return;

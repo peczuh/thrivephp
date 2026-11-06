@@ -46,7 +46,7 @@ final class Parallel
                     unset($files[$name]);
                     $token = bin2hex(random_bytes(16));
                     $process = new WorkerProcess($php, $address, $token, $job);
-                    $this->workers[$token] = ['process' => $process, 'name' => $name,
+                    $this->workers[$token] = ['process' => $process, 'name' => $name, 'label' => $name,
                         'started' => hrtime(true) / 1e9, 'lastProgress' => hrtime(true) / 1e9,
                         'connection' => null, 'connected' => false, 'configured' => false,
                         'idleTimeout' => null, 'activity' => 'connecting', 'cases' => [], 'activeCase' => null,
@@ -191,12 +191,14 @@ final class Parallel
         switch ($message['type']) {
             case 'configured':
                 $timeout = $message['idleTimeout'];
-                if ($worker['configured'] || ($timeout !== null && (!is_numeric($timeout) || !is_finite((float) $timeout) || $timeout <= 0))
+                if ($worker['configured'] || !is_string($message['name'] ?? null)
+                    || ($timeout !== null && (!is_numeric($timeout) || !is_finite((float) $timeout) || $timeout <= 0))
                     || !is_array($message['cases']) || !array_is_list($message['cases'])
                     || array_any($message['cases'], fn ($name) => !is_string($name))) {
                     throw new \RuntimeException('Invalid suite configuration.');
                 }
                 $worker['configured'] = true;
+                $worker['label'] = $message['name'];
                 $worker['idleTimeout'] = $timeout;
                 $worker['cases'] = $message['cases'];
                 $worker['hasSuites'] = $message['cases'] !== [];
@@ -219,8 +221,9 @@ final class Parallel
                     throw new \RuntimeException('Unexpected case start.');
                 }
                 $worker['activeCase'] = $message['name'];
+                $worker['caseAssertions'] = [$worker['assertionsPassed'], $worker['assertionsFailed']];
                 $worker['activity'] = 'case setup: ' . $message['name'];
-                echo 'RUN ' . $worker['name'] . ' > ' . $message['name'] . PHP_EOL;
+                echo 'RUN ' . $worker['label'] . ' > ' . $message['name'] . PHP_EOL;
                 break;
             case 'case_finished':
                 if (!isset($worker['cases'][0]) || $worker['cases'][0] !== ($message['name'] ?? null)
@@ -231,19 +234,47 @@ final class Parallel
                 $worker['activeCase'] = null;
                 $worker[match ($message['status']) { 'PASS' => 'casesPassed', 'FAIL' => 'casesFailed', 'SKIP' => 'casesSkipped' }]++;
                 $worker['activity'] = 'case finished: ' . $message['name'];
-                $this->report->caseResult($worker['name'], $message);
+                $this->report->caseResult($worker['label'], $message);
+                break;
+            case 'retry':
+                if (!is_int($message['attempt'] ?? null) || $message['attempt'] < 2 || !is_array($message['failures'] ?? null)) {
+                    throw new \RuntimeException('Invalid retry result.');
+                }
+                if ($message['scope'] === 'case') {
+                    if ($worker['activeCase'] === null || $worker['activeCase'] !== ($message['name'] ?? null)) {
+                        throw new \RuntimeException('Unexpected case retry.');
+                    }
+                    // Keep completed cases and suite-hook assertions when discarding this attempt.
+                    [$worker['assertionsPassed'], $worker['assertionsFailed']] = $worker['caseAssertions'];
+                } elseif ($message['scope'] === 'suite') {
+                    if ($worker['activeCase'] !== null || $worker['cases']) {
+                        throw new \RuntimeException('Unexpected suite retry.');
+                    }
+                    $worker['configured'] = false;
+                    $worker['hasSuites'] = false;
+                    $worker['idleTimeout'] = null;
+                    foreach (['casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed'] as $key) {
+                        $worker[$key] = 0;
+                    }
+                } else {
+                    throw new \RuntimeException('Unknown retry scope.');
+                }
+                $worker['activity'] = $message['scope'] . ' retry';
+                $this->report->retry($worker['label'], $message);
                 break;
             case 'result':
                 $result = $message['result'] ?? null;
                 if (!is_array($result) || !is_bool($result['hasSuites'] ?? null) || !is_array($result['failures'] ?? null)) {
                     throw new \RuntimeException('Invalid terminal result.');
                 }
-                foreach (['checksPassed', 'checksFailed', 'casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed'] as $key) {
+                foreach (['checksPassed', 'checksFailed', 'checksSkipped', 'casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed'] as $key) {
                     if (!is_int($result[$key] ?? null) || $result[$key] < 0 || (isset($worker[$key]) && $result[$key] !== $worker[$key])) {
                         throw new \RuntimeException('Inconsistent result count: ' . $key);
                     }
                 }
-                if ($result['checksPassed'] + $result['checksFailed'] !== 1 || $worker['cases']) {
+                if (!is_bool($result['filtered'] ?? null)
+                    || $result['checksPassed'] + $result['checksFailed'] + $result['checksSkipped'] !== ($result['filtered'] ? 0 : 1)
+                    || $worker['cases']) {
                     throw new \RuntimeException('Incomplete terminal result.');
                 }
                 $worker['result'] = $result;
@@ -269,16 +300,16 @@ final class Parallel
         if ($worker['error'] !== null) {
             $worker['error'] .= ' Suite incomplete.';
             if ($worker['activeCase'] !== null) {
-                $this->report->caseResult($worker['name'], ['name' => array_shift($worker['cases']), 'status' => 'FAIL',
+                $this->report->caseResult($worker['label'], ['name' => array_shift($worker['cases']), 'status' => 'FAIL',
                     'failures' => [$worker['error']]]);
                 $worker['casesFailed']++;
             }
             foreach ($worker['cases'] as $case) {
-                $this->report->caseResult($worker['name'], ['name' => $case, 'status' => 'SKIP', 'reason' => 'worker failed']);
+                $this->report->caseResult($worker['label'], ['name' => $case, 'status' => 'SKIP', 'reason' => 'worker failed']);
                 $worker['casesSkipped']++;
             }
             $result = array_intersect_key($worker, array_flip(['hasSuites', 'casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed']));
-            $result += ['checksPassed' => 0, 'checksFailed' => 1,
+            $result += ['checksPassed' => 0, 'checksFailed' => 1, 'checksSkipped' => 0, 'name' => $worker['label'],
                 'failures' => [...($worker['result']['failures'] ?? []), $worker['error']]];
         } else {
             $result = $worker['result'];

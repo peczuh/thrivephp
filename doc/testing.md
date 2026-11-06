@@ -16,6 +16,80 @@ Pass names to `run(['layouts', 'login'])` to select files. A nonzero return valu
 means at least one file failed. Callable checks continue to receive the runner
 as their argument and report one result per file.
 
+## Selecting files, cases, and tags
+
+Pass one or more regex selectors to `run()`:
+
+```php
+$test->run(selectors: [
+    'folderA/(folder1|folder2)!!/archive/::^case:!Deprecated$##^estimates#!^slow$',
+    '/^login$::^validCredentials$',
+]);
+```
+
+The grammar is:
+
+```text
+[files-include][!!files-exclude][::cases-include][:!cases-exclude][##tags-include][#!tags-exclude]
+```
+
+| Opening delimiter | Target |
+| --- | --- |
+| Initial text | Include file paths. Strip one leading `/` if present. |
+| `!!` | Exclude file paths. |
+| `::` | Include PHP case method names. |
+| `:!` | Exclude PHP case method names. |
+| `##` | Include cases with any matching tag. |
+| `#!` | Exclude cases with any matching tag. |
+
+File regexes match the complete path relative to the checks directory, without
+`.php`, using `/` separators on every platform. The optional initial `/` is only
+selector syntax, not an absolute-path indicator or anchor. There is no closing
+slash delimiter; every subsequent slash is regex text. Case regexes match PHP
+method names, independently of their `#[Test('description')]` text. Effective
+tags combine the concrete suite's tags and each method's tags.
+
+All components are optional and follow the order above. Within a selector, all
+supplied conditions must hold. Selectors combine with OR, and overlapping
+selectors execute each case once in its usual order. Exclusions are local to
+their selector, so another selector may include a case that the first excludes.
+To exclude `slow` across alternatives, include `#!^slow$` in each one.
+
+Each delimiter opens its component once. The parser splits the first `#!`, then
+the first `##` in the remaining prefix, and continues backward through `:!`,
+`::`, and `!!`. Repeated delimiters and earlier delimiters inside a later
+component remain regex text. For example, `file::case::variant##tag##suffix`
+has file regex `file`, case regex `case::variant`, and tag regex `tag##suffix`.
+A later component's opening delimiter inside an earlier regex is structural,
+even inside a character class or `\Q...\E`. Encode literal delimiters there,
+for example `\x23\x23` for `##`.
+
+Components are raw PCRE regexes, without surrounding regex delimiters. Matching
+is unanchored and case-sensitive unless the pattern says otherwise. Use `^` and
+`$` for exact matching and inline options such as `(?i)` for case-insensitivity.
+
+```php
+$test->run(selectors: ['^folderA/']);          // All files below folderA.
+$test->run(selectors: ['::^create']);          // Method names starting with create.
+$test->run(selectors: ['##^tag#!^tag1$']);     // A tag starting with tag, but no tag1.
+$test->run(selectors: ['#!^slow$']);          // Also permits untagged cases.
+```
+
+`selectors: []` imposes no restriction. An empty selector or explicitly empty
+component is an error; omit a component or use `.*` deliberately. The runner
+validates every regex before loading files and reports runtime regex errors
+rather than treating them as nonmatches. A valid selection matching nothing
+succeeds with zero checks. The existing `names` argument retains exact-file
+selection and intersects with selectors when both are supplied.
+
+File filtering happens before loading. Case/tag filtering requires loading the
+file and constructing its suite, but happens before `configure()` or lifecycle
+hooks, so a fully filtered suite starts no browser session. Filtered tests do
+not contribute results or counts. Callable checks have no method name or tags;
+positive case/tag filters exclude them, while negative-only filters permit them.
+Tag declarations remain on `#[Test(..., tags: [...])]` and must be nonempty
+strings. Run-level tag filtering uses selectors only.
+
 ## Execution and browser selection
 
 ```php
@@ -64,7 +138,7 @@ Completion order can differ from the requested scheduling order.
 ## Timing and recovery
 
 ```php
-#[CaseName('The report completes', deadline: 5)]
+#[Test('The report completes', deadline: 5)]
 public function report(): void
 {
     // The body completes before the runner checks its elapsed time.
@@ -77,8 +151,8 @@ protected function configure(SuiteConfig $config): void
 }
 ```
 
-`CaseName::$deadline` is nullable and defaults to no deadline. A positive finite
-value sets a case-body limit in seconds, measured with a monotonic clock. Hooks
+On a case method, `Test::$deadline` is nullable and defaults to no deadline. A positive
+finite value sets a case-body limit in seconds, measured with a monotonic clock. Hooks
 are excluded. The worker checks the elapsed time after the body returns, records
 a case failure if it exceeded the limit, and continues cleanup and subsequent
 cases. It does not interrupt a running body. Deadline failures do not add a failed
@@ -116,7 +190,7 @@ public `$test` property; individual suites do not need their own constructors.
 
 ```php
 use ThriveData\ThrivePHP\Test\Suite;
-use ThriveData\ThrivePHP\Test\CaseName;
+use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\Test\CaseBefore;
 
 return new class($test) extends Suite {
@@ -128,7 +202,7 @@ return new class($test) extends Suite {
         $this->items = ['first'];
     }
 
-    #[CaseName('The initial collection contains one item')]
+    #[Test('The initial collection contains one item')]
     public function initialCount(): void
     {
         $this->test->assert(count($this->items) === 1, 'Expected one initial item.');
@@ -137,8 +211,83 @@ return new class($test) extends Suite {
 ```
 
 Annotated methods must be public and callable without arguments. Unannotated
-methods are helpers. `CaseName` supplies the report label independently of the
+methods are helpers. `Test` supplies the reporting description independently of the
 method's PHP name. The same suite object holds shared state throughout its run.
+
+### Suite and case metadata
+
+`ThriveData\ThrivePHP\Test\Test` replaces the former `CaseName` attribute. It can
+annotate a suite class as well as a case method:
+
+```php
+use ThriveData\ThrivePHP\Test\SuiteBrowser;
+use ThriveData\ThrivePHP\Test\Test;
+
+return new #[Test('Estimates', retry: 1, tags: ['estimates'])] class($test) extends SuiteBrowser {
+    #[Test('Creates an estimate', deadline: 10, retry: 2, tags: ['smoke'])]
+    public function createEstimate(): void
+    {
+        $this->browser->find('#create-estimate')->click();
+    }
+
+    #[Test('Exports an estimate', skip: true)]
+    public function exportEstimate(): void {}
+};
+```
+
+| Argument | Default | Meaning |
+| --- | --- | --- |
+| `description` | Required | Human-readable suite or case description used in reports. |
+| `deadline` | `null` | Positive finite seconds, checked after execution. |
+| `retry` | `0` | Nonnegative number of additional attempts after failure. |
+| `tags` | `[]` | Tags used for case selection. |
+| `skip` | `false` | Report the selected suite or case as skipped. |
+
+Class metadata is optional and applies to the concrete suite declaration; it
+is not inherited from base classes. Without it, the suite label is its file name
+and the attribute defaults apply. Method metadata follows the existing method
+inheritance and override rules. Descriptions do not change file or method selection.
+If a file imports both the runner and attribute, alias the runner with
+`use ThriveData\ThrivePHP\Test as TestRunner;`.
+
+### Skips
+
+A skipped case runs neither its body nor its case hooks. A skipped suite, or one
+whose selected cases are all skipped, runs no configuration or lifecycle hooks.
+Selected skipped cases report `SKIP` with `marked skip`; a wholly skipped suite
+also reports `SKIP` and contributes to skipped checks. Skips do not fail the run
+or trigger retries. Selector filtering applies before skipping, so filtered-out cases
+are omitted rather than reported as skipped.
+
+### Retries
+
+`retry: 1` permits two attempts. Stop retrying after the first successful attempt.
+A method-level retry repeats `CaseBefore`, the case body, and `CaseAfter`, retaining
+the suite object and browser session. Each attempt gets its own case-body deadline.
+Failed assertions and verifications, exceptions, hook failures, and exceeded
+deadlines can all cause a retry. Case hooks must prepare the state needed by each
+attempt; retries do not undo application changes.
+
+A class-level retry reruns the whole suite, including configuration, suite hooks,
+and every selected case. It does not supply a default retry count for cases.
+Case retries finish before deciding whether a suite needs another attempt.
+Cleanup finishes before the next attempt starts. The runner reloads the check
+file to construct a fresh suite with fresh configuration and, for `SuiteBrowser`,
+a fresh browser session. Use anonymous suite classes as above, or keep named
+classes in autoloaded files so reloading the factory does not redeclare them.
+Retries run in the same PHP process; globals and static state are not reset.
+Worker crashes and inactivity termination are not retried.
+
+A class-level deadline measures the whole suite attempt, including configuration,
+all case attempts, and teardown, but excluding file loading and construction. It
+is checked after teardown and does not interrupt execution. A method-level deadline
+continues to measure only that case body's attempt, excluding its hooks.
+
+Reports show `RETRY` with the next attempt number and the failed attempt's
+diagnostics. Results after retries include their attempt number. Final check,
+case, and assertion totals include only the final suite attempt and the final
+attempt of each case within it. Earlier failures remain visible in the output
+but do not make a later successful attempt fail the run.
 
 ## Hooks and ordering
 
@@ -189,7 +338,7 @@ assertions passes if it completes without errors, reported as `PASS` with a
 `(No assertions)` annotation. Exceptions, hook failures, and exceeded deadlines
 still fail the case. Suite setup/teardown assertions
 are counted separately from individual cases and can fail the suite even when
-all cases pass. An empty suite fails with `No cases found.`
+all cases pass. An empty suite fails with `No cases found.` unless explicitly skipped.
 
 Case results appear as `PASS layouts > The initial collection contains one item`.
 Each file also has an overall result. `Checks` counts file results; `Cases` counts
@@ -208,7 +357,7 @@ hooks, not constructors, so the runner can report failures and arrange cleanup.
 use ThriveData\ThrivePHP\Test\SuiteBrowser;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
 use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\CaseName;
+use ThriveData\ThrivePHP\Test\Test;
 
 return new class($test) extends SuiteBrowser {
     protected function configure(SuiteConfig $config): void
@@ -222,7 +371,7 @@ return new class($test) extends SuiteBrowser {
         $this->browser->navigate('https://example.test/');
     }
 
-    #[CaseName('The page displays its greeting')]
+    #[Test('The page displays its greeting')]
     public function greeting(): void
     {
         $this->browser->find('#greeting', wait: true)
@@ -232,7 +381,7 @@ return new class($test) extends SuiteBrowser {
 ```
 
 `configure()` is optional on all suites. The runner creates a fresh `SuiteConfig`
-and calls `configure()` once before suite hooks. Defaults are:
+and calls `configure()` once per suite attempt before suite hooks. Defaults are:
 
 | Property | Default | Meaning |
 | --- | --- | --- |
@@ -281,6 +430,8 @@ Run from the ThrivePHP repository root:
 ```sh
 php test/test.php
 php test/test-suite.php
+php test/test-attributes.php
+php test/test-selectors.php
 php test/test-parallel.php
 php test/webdriver.php
 php test/webdriver-runtime.php
