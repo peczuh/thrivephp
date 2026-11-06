@@ -77,6 +77,24 @@
 			return $this;
 		}
 
+		/**
+		 * Request submission of this form, a control's form owner, or an ancestor form.
+		 * Honor validation and cancellable submit events; neither blocking nor cancellation
+		 * is an error. Throw if no form applies. Execute once without a submitter argument;
+		 * click a specific button when its name/value or submission overrides matter.
+		 */
+		public function submit(): self
+		{
+			$this->script(<<<'JS'
+				const element = arguments[0];
+				const form = element instanceof HTMLFormElement ? element :
+					('form' in element ? element.form : element.closest('form'));
+				if (!form) throw new Error('No applicable form for element.');
+				HTMLFormElement.prototype.requestSubmit.call(form);
+				JS);
+			return $this;
+		}
+
 		/** Send text without clearing existing input. */
 		public function type(string $text): self
 		{

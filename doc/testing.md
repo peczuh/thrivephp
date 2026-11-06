@@ -453,6 +453,14 @@ Setters return the original element and dispatch no automatic `input` or `change
 events. Property values use the usual script argument/reference conversion.
 Attribute getters retain WebDriver's boolean-attribute behavior of `'true'` or null.
 
+`submit()` calls native `requestSubmit()` once, without a submitter argument.
+It uses the form itself, a control's actual form owner including external
+`form="..."` associations, or the nearest ancestor form for other descendants.
+It throws when no form applies. Validation and cancellable submit handlers apply;
+validation blocking or cancellation does not itself throw or record an assertion.
+It returns the original element. Use `click()` when a particular submit button's
+name/value or submission overrides matter.
+
 All element actions restore their captured browser/window/frame context. Stale
 references, context failures, and driver errors propagate without action retries.
 

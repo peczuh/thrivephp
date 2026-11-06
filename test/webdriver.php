@@ -192,6 +192,7 @@ $elementScripts = [
 	['property', ['checked', false], null],
 	['attribute', ['disabled', ''], null],
 	['attribute', ['disabled', null], null],
+	['submit', [], null],
 ];
 scenario('element scripts restore context, preserve setter values', function ($listener) use ($elementScripts) {
 	createSession($listener);
@@ -207,6 +208,9 @@ scenario('element scripts restore context, preserve setter values', function ($l
 	foreach ($elementScripts as [$method, $arguments]):
 		scriptExchange($listener, [[Element::REFERENCE => 'node'], ...$arguments], ['error' => 'stale element reference', 'message' => 'removed'], 404);
 	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'other'], null);
+	exchange($listener, 'POST', '/session/session%2F1/window', ['handle' => 'window/1'], null);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], ['error' => 'no such frame', 'message' => 'frame removed'], 404);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) use ($elementScripts) {
 	$browser = new Browser($url, 'firefox');
@@ -224,6 +228,8 @@ scenario('element scripts restore context, preserve setter values', function ($l
 	foreach ($elementScripts as [$method, $arguments]):
 		expectError(fn() => $element->$method(...$arguments), 'stale element reference: removed');
 	endforeach;
+	$browser->switch('other');
+	expectError(fn() => $element->submit(), 'no such frame: frame removed');
 	$browser->quit();
 });
 
