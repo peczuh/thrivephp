@@ -30,7 +30,7 @@ class RecordingBrowser extends Browser
 		parent::__construct($endpoint, $browser, timeout: $timeout);
 	}
 
-	public function reportAssertion(bool $condition, string $message): void
+	public function reportAssertion(bool $condition, string $message, bool $verify = false): void
 	{
 		($this->record)($condition, $message);
 	}
@@ -272,6 +272,124 @@ $assertionCases = [
 	['attributeMatches', ['missing', '/^$/'], '/attribute/missing', null, false, "expected a match for '/^$/', got NULL"],
 ];
 
+scenario('element verification records every comparison and leaves subsequent assertions stopping', function ($listener) use ($assertionCases) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
+	foreach ($assertionCases as [$method, $arguments, $path, $actual]):
+		exchange($listener, 'GET', '/session/session%2F1/element/input' . $path, null, $actual);
+	endforeach;
+	exchange($listener, 'GET', '/session/session%2F1/element/input/text', null, 'Actual');
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) use ($assertionCases) {
+	$completed = 0;
+	$stopped = true;
+	[$status, $output] = runChecks(['check' => function () use ($url, $assertionCases, &$completed, &$stopped) {
+		$browser = new Browser($url, 'firefox');
+		try {
+			$element = $browser->find('#name');
+			foreach ($assertionCases as [$method, $arguments]):
+				verify($element->$method(...[...$arguments, 'verify' => true]) === $element, "$method did not preserve the verification receiver.");
+				$completed++;
+			endforeach;
+			$element->textEquals('Default must stop');
+			$stopped = false;
+		} finally {
+			$browser->quit();
+		}
+	}]);
+	$passed = count(array_filter(array_column($assertionCases, 4)));
+	$failed = count($assertionCases) - $passed + 1;
+	verify($status === 1 && $completed === count($assertionCases) && $stopped, $output);
+	verify(str_contains($output, "Assertions: $passed passed, $failed failed") && !str_contains($output, 'Execution error'), $output);
+});
+
+scenario('waiting verification adopts successful replacements and records timeout once before continuing', function ($listener) {
+	createSession($listener);
+	$selector = ['using' => 'css selector', 'value' => '#status'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'original']);
+	foreach (['pending' => 'Pending', 'replacement' => 'Saved'] as $id => $text):
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => $id]);
+		exchange($listener, 'GET', "/session/session%2F1/element/$id/text", null, $text);
+	endforeach;
+	exchange($listener, 'POST', '/session/session%2F1/element/replacement/click', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'pending']);
+	exchange($listener, 'GET', '/session/session%2F1/element/pending/text', null, 'Pending');
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$continued = false;
+	[$status, $output] = runChecks(['check' => function () use ($url, &$continued) {
+		$browser = new Browser($url, 'firefox');
+		try {
+			$element = $browser->find('#status');
+			verify($element->textEquals('Saved', wait: true, timeout: 1000, verify: true)->click() === $element, 'Successful verification lost the receiver.');
+			verify($element->id() === 'replacement', 'Successful verification did not adopt its replacement.');
+			$start = microtime(true);
+			verify($element->textEquals('Done', wait: true, timeout: 20, verify: true) === $element, 'Failed verification lost the receiver.');
+			verify(microtime(true) - $start >= 0.02 && $element->id() === 'replacement', 'Timeout did not wait or changed the retained reference.');
+			$continued = true;
+		} finally {
+			$browser->quit();
+		}
+	}]);
+	verify($status === 1 && $continued && str_contains($output, 'Assertions: 1 passed, 1 failed'), $output);
+	verify(substr_count($output, "expected 'Done', got 'Pending'") === 1 && !str_contains($output, 'Execution error'), $output);
+});
+
+scenario('count and URL verification continue after mismatches and preserve snapshots and receivers', function ($listener) {
+	createSession($listener);
+	$selector = ['using' => 'css selector', 'value' => '.row'];
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, [[Element::REFERENCE => 'old']]);
+	exchange($listener, 'POST', '/session/session%2F1/elements', $selector, []);
+	foreach (['pending', 'pending', 'done'] as $path):
+		exchange($listener, 'GET', '/session/session%2F1/url', null, 'https://example.test/' . $path);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$continued = false;
+	[$status, $output] = runChecks(['check' => function () use ($url, &$continued) {
+		$browser = new Browser($url, 'firefox');
+		try {
+			$set = $browser->findAll('.row');
+			verify($set->countEquals(1, wait: true, timeout: 20, verify: true) === $set && $set->first()->id() === 'old', 'Failed count verification replaced its snapshot.');
+			$set->countEquals(1);
+			verify($browser->urlMatches('~/done$~', wait: true, timeout: 20, verify: true) === $browser, 'Browser verification lost its receiver.');
+			$window = $browser->window();
+			verify($window->urlMatches('~/done$~', verify: true) === $window, 'Window verification lost its receiver.');
+			$browser->urlMatches('~/done$~', verify: true);
+			$empty = new ElementSet();
+			verify($empty->countEquals(1, verify: true)->countEquals(0, verify: true) === $empty, 'Explicit empty snapshot lost its receiver.');
+			$continued = true;
+		} finally {
+			$browser->quit();
+		}
+	}]);
+	verify($status === 1 && $continued && str_contains($output, 'Assertions: 3 passed, 4 failed') && !str_contains($output, 'Execution error'), $output);
+	expectError(fn() => (new ElementSet())->countEquals(1, verify: true), 'WebDriver assertion failed');
+});
+
+scenario('verification propagates invalid patterns and driver errors instead of recording mismatches', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'node']);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/text', null, ['error' => 'unknown error', 'message' => 'driver failure'], 500);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$continued = false;
+	[$status, $output] = runChecks(['check' => function () use ($url, &$continued) {
+		$browser = new Browser($url, 'firefox');
+		try {
+			$element = $browser->find('#node');
+			expectError(fn() => $element->attributeMatches('name', '/[/', verify: true), 'Could not evaluate assertion pattern');
+			expectError(fn() => $browser->urlMatches('not delimited', verify: true), 'Could not evaluate assertion pattern');
+			$element->textEquals('Expected', verify: true);
+			$continued = true;
+		} finally {
+			$browser->quit();
+		}
+	}]);
+	verify($status === 1 && !$continued && str_contains($output, 'Assertions: 0 passed, 0 failed'), $output);
+	verify(str_contains($output, 'Execution error: RuntimeException: WebDriver HTTP 500 unknown error: driver failure'), $output);
+});
+
 scenario('protocol assertions report each result once through the recording probe', function ($listener) use ($assertionCases) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
@@ -314,7 +432,7 @@ scenario('assertions throw on failure without a recorder and preserve the sessio
 	$browser = new Browser($url, 'firefox');
 	$element = $browser->find('#name');
 	verify($element->setValue('Jane')->valueEquals('Jane')->isVisible() === $element, 'Action/assertion chain failed.');
-	expectError(fn() => $element->textEquals('Expected'), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
+	expectError(fn() => $element->textEquals('Expected', verify: true), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
 	expectError(fn() => $browser->findAll('.missing')->countEquals(1), 'expected 1, got 0');
 	expectError(fn() => $browser->urlMatches('~/expected$~'), "got 'https://example.test/actual'");
 	$browser->quit();

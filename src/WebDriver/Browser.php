@@ -71,7 +71,8 @@
 		 * Chrome; $browser and $bidi determine browserName and webSocketUrl themselves.
 		 * $timeout is positive seconds: an HTTP stream I/O timeout and a BiDi command/
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
-		 * Assertions report automatically to the active Test and stop its check on failure.
+		 * Assertions report automatically to the active Test and stop on failure by default.
+		 * Comparison methods accept $verify to record a failed result and continue instead.
 		 * Outside Test::run(), failures throw RuntimeException. Assertions retry only with $wait.
 		 */
 		public function __construct(
@@ -380,19 +381,23 @@
 		 * Assert that the current window URL matches a delimited PHP regex. $wait polls;
 		 * $timeout is positive milliseconds or null for the browser default, ignored without waiting.
 		 * Return this browser. Invalid patterns throw. Results report to the active Test;
-		 * failures throw both inside and outside Test::run().
+		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
 		 */
-		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null): self
+		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
-			$this->window()->urlMatches($pattern, $wait, $timeout);
+			$this->window()->urlMatches($pattern, $wait, $timeout, $verify);
 			return $this;
 		}
 
-		/** @internal Report once to the active Test; failed assertions always throw. */
-		public function reportAssertion(bool $condition, string $message): void
+		/** @internal Report once; $verify continues only when an active Test records the result. */
+		public function reportAssertion(bool $condition, string $message, bool $verify = false): void
 		{
 			if (($test = Test::active()) !== null):
-				$test->assert($condition, $message);
+				if ($verify):
+					$test->verify($condition, $message);
+				else:
+					$test->assert($condition, $message);
+				endif;
 			elseif (!$condition):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);
 			endif;

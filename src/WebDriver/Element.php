@@ -9,7 +9,9 @@
 	 * Script/focus references have no lookup: they can be polled but staleness propagates.
 	 * Original-node disappearance waits never re-find. isNotVisible() also accepts a stale
 	 * original reference when no lookup is being retried. Assertions return this element
-	 * and report once to the active Test. Failed assertions always throw.
+	 * and report once to the active Test. Failed comparisons stop the case by default;
+	 * $verify records the failure and continues. Outside Test::run(), failures always throw.
+	 * Driver errors propagate in either mode. find() and wait() remain stopping prerequisites.
 	 * Assertion $timeout is positive, finite milliseconds, null for the browser default,
 	 * and ignored without $wait. Polling is every 100 ms; commands retain their own timeouts.
 	 */
@@ -265,57 +267,57 @@
 		}
 
 		/** Assert displayedness, optionally waiting; visibility does not guarantee clickability. */
-		public function isVisible(bool $wait = false, ?float $timeout = null): self
+		public function isVisible(bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === true,
-				'visibility: expected true', $wait, $timeout);
+				'visibility: expected true', $wait, $timeout, $verify);
 		}
 
 		/** Assert hiddenness; waiting re-finds retained lookups. Missing matches or stale original nodes pass. */
-		public function isNotVisible(bool $wait = false, ?float $timeout = null): self
+		public function isNotVisible(bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === false,
-				'visibility: expected false or stale', $wait, $timeout, true);
+				'visibility: expected false or stale', $wait, $timeout, $verify, true);
 		}
 
 		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */
-		public function valueEquals(string $expected, bool $wait = false, ?float $timeout = null): self
+		public function valueEquals(string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->property('value'), fn($actual) => $actual === $expected,
-				'value: expected ' . var_export($expected, true), $wait, $timeout);
+				'value: expected ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
 		/** Assert strict equality with rendered text, optionally waiting; return this element. */
-		public function textEquals(string $expected, bool $wait = false, ?float $timeout = null): self
+		public function textEquals(string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => $actual === $expected,
-				'text: expected ' . var_export($expected, true), $wait, $timeout);
+				'text: expected ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
 		/** Assert a case-sensitive substring of rendered text, optionally waiting; return this element. */
-		public function textContains(string $expected, bool $wait = false, ?float $timeout = null): self
+		public function textContains(string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => str_contains($actual, $expected),
-				'text: expected to contain ' . var_export($expected, true), $wait, $timeout);
+				'text: expected to contain ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
 		/** Assert strict attribute equality, optionally waiting; null expects absence. Return this element. */
-		public function attributeEquals(string $name, ?string $expected, bool $wait = false, ?float $timeout = null): self
+		public function attributeEquals(string $name, ?string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual === $expected,
-				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout);
+				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
 		/**
 		 * Assert an attribute matches a delimited PHP regex, optionally waiting; absence never matches.
 		 * Invalid patterns throw. Return this element.
 		 */
-		public function attributeMatches(string $name, string $pattern, bool $wait = false, ?float $timeout = null): self
+		public function attributeMatches(string $name, string $pattern, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			// Validate before polling, even when no element can currently be found.
 			Browser::matches($pattern, '');
 			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => Browser::matches($pattern, $actual),
-				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout);
+				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout, $verify);
 		}
 
 		/** Return enabled state according to WebDriver's form-control rules. */
@@ -371,7 +373,7 @@
 		}
 
 		/** Poll observations and report once; only successful retries replace this element's reference. */
-		private function assertObservation(callable $observe, callable $matches, string $expectation, bool $wait, ?float $timeout, bool $absencePasses = false): self
+		private function assertObservation(callable $observe, callable $matches, string $expectation, bool $wait, ?float $timeout, bool $verify, bool $absencePasses = false): self
 		{
 			$browser = $this->window->browser();
 			$refresh = $wait && $this->lookup !== null;
@@ -403,7 +405,7 @@
 					return $absencePasses && (bool)preg_match('/^WebDriver HTTP [45][0-9]{2} no such element: /', $actual);
 				}
 			}, $wait, $timeout);
-			$browser->reportAssertion($passed, 'Element ' . var_export($this->id, true) . ' ' . $expectation . ', got ' . $actual . '.');
+			$browser->reportAssertion($passed, 'Element ' . var_export($this->id, true) . ' ' . $expectation . ', got ' . $actual . '.', $verify);
 			return $this;
 		}
 

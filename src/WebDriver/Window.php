@@ -63,9 +63,9 @@
 		 * every 100 ms; $timeout is positive milliseconds or null for the browser default,
 		 * ignored without waiting. Report once after success or expiry.
 		 * Return this window. Invalid patterns throw. Results report to the active Test;
-		 * failures throw both inside and outside Test::run().
+		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
 		 */
-		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null): self
+		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null, bool $verify = false): self
 		{
 			Browser::matches($pattern, '');
 			$actual = null;
@@ -74,7 +74,7 @@
 				return Browser::matches($pattern, $actual);
 			}, $wait, $timeout);
 			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' URL: expected a match for '
-				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.');
+				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.', $verify);
 			return $this;
 		}
 

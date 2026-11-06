@@ -151,9 +151,26 @@ Declared properties enforce their PHP types. Assigning an unknown option throws
 affect other suites. No reference parameter is needed to change object properties.
 
 Browser assertions automatically report to the current case or suite phase and
-stop it on failure. Explicit `wait: true` still enables retrying; explicit wait
-timeouts are milliseconds, distinct from the browser configuration's seconds.
-Use `$this->test->verify(...)` for continuing verification.
+stop it on failure by default. Comparison methods accept `verify: true` to record
+a failed result and continue, returning their usual receiver for chaining:
+
+```php
+$this->browser->find('#greeting', wait: true)
+    ->textEquals('Hello', wait: true, timeout: 5000, verify: true);
+$this->browser->findAll('.row')->countEquals(3, verify: true);
+```
+
+This option is available on `isVisible()`, `isNotVisible()`, `valueEquals()`,
+`textEquals()`, `textContains()`, `attributeEquals()`, `attributeMatches()`,
+`countEquals()`, and browser/window `urlMatches()`. It applies only to that call.
+A failed verification still fails the case or suite phase overall. Without an
+active `Test`, failed comparisons throw even with `verify: true`.
+
+Explicit `wait: true` enables retrying before the final result is recorded once.
+Explicit wait timeouts are milliseconds, distinct from the browser configuration's
+seconds. Invalid patterns and driver errors still propagate; `find()` and
+`Element::wait()` remain stopping prerequisites. Direct `$this->test->verify(...)`
+is also available for boolean conditions.
 
 Application cleanup must tolerate incomplete setup. `SuiteBrowser` keeps a
 nullable driver reference so its own cleanup also works after configuration or
