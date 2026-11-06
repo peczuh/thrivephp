@@ -151,7 +151,7 @@
 		 * have left a remote session that this client cannot identify for deletion.
 		 * Assertions report automatically to the active Test and stop on failure by default.
 		 * Comparison methods accept $verify to record a failed result and continue instead.
-		 * Outside Test::run(), failures throw. Assertions retry only with $wait.
+		 * Outside Test::run(), failures throw. Assertions retry by default; $wait=false checks once.
 		 */
 		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = []): Browser
 		{

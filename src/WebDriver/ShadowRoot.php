@@ -23,10 +23,11 @@
 
 		/**
 		 * Find within this root using Browser::find() conditions and millisecond timeouts.
-		 * Waiting re-finds the host when it has a lookup. Positive success returns an
-		 * Element; inverted success null. Supported strategies depend on the driver.
+		 * Waiting defaults to true and re-finds the host when it has a lookup;
+		 * $wait=false checks once. Positive success returns an Element; inverted success
+		 * null. Supported strategies depend on the driver.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
 			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
 		}

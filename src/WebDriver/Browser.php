@@ -73,7 +73,8 @@
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
 		 * Assertions report automatically to the active Test and stop on failure by default.
 		 * Comparison methods accept $verify to record a failed result and continue instead.
-		 * Outside Test::run(), failures throw RuntimeException. Assertions retry only with $wait.
+		 * Outside Test::run(), failures throw RuntimeException. Assertions retry by default;
+		 * $wait=false checks once.
 		 */
 		public function __construct(
 			private string $endpoint,
@@ -163,15 +164,16 @@
 		 * the first match to be displayed. $invert instead requires no matches, or no
 		 * displayed matches when $visible is true. Positive success returns an Element;
 		 * inverted success returns null. Unmet conditions throw, even with a recorder.
-		 * $wait repeats the search every 100 ms. $timeout is positive, finite milliseconds,
-		 * defaulting to the constructor timeout; ignored without $wait. In-flight commands
-		 * retain their own timeouts. $assert reports one final result through the recorder.
+		 * By default, repeat the search every 100 ms; $wait=false checks once. $timeout is
+		 * positive, finite milliseconds, defaulting to the constructor timeout; ignored
+		 * without $wait. In-flight commands retain their own timeouts.
+		 * $assert reports one final result through the recorder.
 		 * Invalid selectors and unrelated driver errors propagate without assertion reports.
 		 * Returned elements retain this lookup for waiting assertions; see Window::find().
 		 * $using defaults to 'css selector'; other W3C strategies are 'xpath', 'tag name',
 		 * 'link text', and 'partial link text'. For scoped XPath, use a relative expression.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
 			return $this->window()->find($selector, $using, $visible, $wait, $invert, $assert, $timeout);
 		}
@@ -378,12 +380,13 @@
 		}
 
 		/**
-		 * Assert that the current window URL matches a delimited PHP regex. $wait polls;
+		 * Assert that the current window URL matches a delimited PHP regex.
+		 * Poll by default; $wait=false checks once.
 		 * $timeout is positive milliseconds or null for the browser default, ignored without waiting.
 		 * Return this browser. Invalid patterns throw. Results report to the active Test;
 		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
 		 */
-		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			$this->window()->urlMatches($pattern, $wait, $timeout, $verify);
 			return $this;

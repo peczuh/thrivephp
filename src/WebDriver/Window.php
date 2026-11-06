@@ -59,13 +59,13 @@
 		}
 
 		/**
-		 * Assert this window's top-level URL matches a delimited PHP regex. $wait polls
-		 * every 100 ms; $timeout is positive milliseconds or null for the browser default,
-		 * ignored without waiting. Report once after success or expiry.
+		 * Assert this window's top-level URL matches a delimited PHP regex. Poll every
+		 * 100 ms by default; $wait=false checks once. $timeout is positive milliseconds
+		 * or null for the browser default, ignored without waiting. Report once after success or expiry.
 		 * Return this window. Invalid patterns throw. Results report to the active Test;
 		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
 		 */
-		public function urlMatches(string $pattern, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			Browser::matches($pattern, '');
 			$actual = null;
@@ -107,12 +107,13 @@
 		 * $visible requires the first match to be displayed. $invert requires no matches,
 		 * or no displayed matches with $visible. Positive success returns an Element;
 		 * inverted success returns null. Unmet conditions throw, after reporting if $assert.
-		 * $wait repeats the search every 100 ms, including replacement nodes. $timeout is
-		 * positive, finite milliseconds or null for the browser default; ignored without waiting.
+		 * Repeat the search every 100 ms by default, including replacement nodes.
+		 * $wait=false checks once. $timeout is positive, finite milliseconds or null for
+		 * the browser default; ignored without waiting.
 		 * Commands retain their own timeouts. Driver/context errors propagate; only missing
 		 * matches and recoverable stale references are retried. The result retains its lookup.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
 			return (new Lookup($this, $this->frames, $selector, $using))->find($visible, $wait, $invert, $assert, $timeout);
 		}

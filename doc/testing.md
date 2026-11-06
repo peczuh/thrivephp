@@ -249,8 +249,8 @@ stop it on failure by default. Comparison methods accept `verify: true` to recor
 a failed result and continue, returning their usual receiver for chaining:
 
 ```php
-$this->browser->find('#greeting', wait: true)
-    ->textEquals('Hello', wait: true, timeout: 5000, verify: true);
+$this->browser->find('#greeting')
+    ->textEquals('Hello', timeout: 5000, verify: true);
 $this->browser->findAll('.row')->countEquals(3, verify: true);
 ```
 
@@ -260,7 +260,10 @@ This option is available on `isVisible()`, `isNotVisible()`, `valueEquals()`,
 A failed verification still fails the case or suite phase overall. Without an
 active `Test`, failed comparisons throw even with `verify: true`.
 
-Explicit `wait: true` enables retrying before the final result is recorded once.
+Lookup and comparison methods that expose `wait` default to `true`, retrying before
+the final result is recorded once. Pass `wait: false` for a single check. `countEquals()`
+refreshes retained searches by default; explicit `ElementSet` snapshots without
+a retained search require `wait: false`.
 Explicit wait timeouts are milliseconds, distinct from the browser configuration's
 seconds. Invalid patterns and driver errors still propagate; `find()` and
 `Element::wait()` remain stopping prerequisites. Direct `$this->test->verify(...)`

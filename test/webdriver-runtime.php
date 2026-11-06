@@ -376,18 +376,18 @@ try {
 			$continued = false;
 			[$status, $output] = runChecks(['check' => function () use ($first, &$continued) {
 				check($first->urlMatches('~/fixture$~') === $first, 'Successful assertion lost its receiver.');
-				$first->urlMatches('~/missing$~');
+				$first->urlMatches('~/missing$~', wait: false);
 				$continued = true;
 			}]);
 			check($status === 1 && !$continued && str_contains($output, 'Assertions: 1 passed, 1 failed') && !str_contains($output, 'Execution error'), $output);
-			raises(fn() => $first->urlMatches('~/missing$~'), 'WebDriver assertion failed');
+			raises(fn() => $first->urlMatches('~/missing$~', wait: false), 'WebDriver assertion failed');
 			$first->quit();
 			$second = $driver->browser();
 			[$status, $output] = runChecks(['check' => function () use ($second) {
 				$second->urlMatches('~/fixture$~');
 			}]);
 			check($status === 0 && str_contains($output, 'Assertions: 1 passed, 0 failed'), $output);
-			raises(fn() => $second->urlMatches('~/missing$~'), 'WebDriver assertion failed');
+			raises(fn() => $second->urlMatches('~/missing$~', wait: false), 'WebDriver assertion failed');
 			check(Test::active() === null, 'Factory assertion leaked a recorder.');
 		} finally {
 			$driver->stop();
@@ -480,7 +480,7 @@ try {
 						public function body(): void
 						{
 							$this->trace[] = 'case';
-							$this->browser->urlMatches($this->failure === 'case' ? '~/missing$~' : '~/fixture$~');
+							$this->browser->urlMatches($this->failure === 'case' ? '~/missing$~' : '~/fixture$~', wait: false);
 							$this->trace[] = 'continued';
 						}
 

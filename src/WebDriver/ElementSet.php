@@ -44,14 +44,15 @@
 		}
 
 		/**
-		 * Assert the count and return this set. $wait repeats the retained search every
-		 * 100 ms and adopts membership on success; snapshots without a lookup cannot wait.
+		 * Assert the count and return this set. By default, repeat the retained search every
+		 * 100 ms and adopt membership on success. $wait=false checks the snapshot once;
+		 * snapshots without a lookup require $wait=false.
 		 * $timeout is positive, finite milliseconds, null for the browser default, and
 		 * ignored without waiting. Report once after success or expiry. Driver errors propagate.
 		 * Report to the active Test, including empty explicit snapshots. $verify records
 		 * mismatches and continues. Outside Test::run(), failures always throw.
 		 */
-		public function countEquals(int $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		public function countEquals(int $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			if ($wait && $this->lookup === null):
 				throw new \LogicException('Cannot wait for an ElementSet count without a retained search.');

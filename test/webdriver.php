@@ -227,15 +227,15 @@ foreach (['element', 'browser URL', 'window URL', 'count', 'empty snapshot', 'fi
 			'check' => function (Test $test) use ($url, $operation, &$continued, &$cleaned) {
 				$browser = new Browser($url, 'firefox');
 				try {
-					$element = $browser->find('#node')->isVisible();
+					$element = $browser->find('#node')->isVisible(wait: false);
 					$test->verify(false, 'continuing verification');
 					switch ($operation) {
-						case 'element': $element->textEquals('Expected'); break;
-						case 'browser URL': $browser->urlMatches('~/expected$~'); break;
-						case 'window URL': $browser->window()->urlMatches('~/expected$~'); break;
-						case 'count': $browser->findAll('.missing')->countEquals(1); break;
-						case 'empty snapshot': (new ElementSet())->countEquals(1); break;
-						case 'find': $browser->find('.missing', assert: true); break;
+						case 'element': $element->textEquals('Expected', wait: false); break;
+						case 'browser URL': $browser->urlMatches('~/expected$~', wait: false); break;
+						case 'window URL': $browser->window()->urlMatches('~/expected$~', wait: false); break;
+						case 'count': $browser->findAll('.missing')->countEquals(1, wait: false); break;
+						case 'empty snapshot': (new ElementSet())->countEquals(1, wait: false); break;
+						case 'find': $browser->find('.missing', wait: false, assert: true); break;
 						case 'wait': $element->wait(visible: true, assert: true, timeout: 20); break;
 					}
 					$continued = true;
@@ -288,10 +288,10 @@ scenario('element verification records every comparison and leaves subsequent as
 		try {
 			$element = $browser->find('#name');
 			foreach ($assertionCases as [$method, $arguments]):
-				verify($element->$method(...[...$arguments, 'verify' => true]) === $element, "$method did not preserve the verification receiver.");
+				verify($element->$method(...[...$arguments, 'wait' => false, 'verify' => true]) === $element, "$method did not preserve the verification receiver.");
 				$completed++;
 			endforeach;
-			$element->textEquals('Default must stop');
+			$element->textEquals('Default must stop', wait: false);
 			$stopped = false;
 		} finally {
 			$browser->quit();
@@ -303,7 +303,7 @@ scenario('element verification records every comparison and leaves subsequent as
 	verify(str_contains($output, "Assertions: $passed passed, $failed failed") && !str_contains($output, 'Execution error'), $output);
 });
 
-scenario('waiting verification adopts successful replacements and records timeout once before continuing', function ($listener) {
+scenario('verification waits by default, adopts replacements and records timeout once before continuing', function ($listener) {
 	createSession($listener);
 	$selector = ['using' => 'css selector', 'value' => '#status'];
 	exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'original']);
@@ -321,10 +321,10 @@ scenario('waiting verification adopts successful replacements and records timeou
 		$browser = new Browser($url, 'firefox');
 		try {
 			$element = $browser->find('#status');
-			verify($element->textEquals('Saved', wait: true, timeout: 1000, verify: true)->click() === $element, 'Successful verification lost the receiver.');
+			verify($element->textEquals('Saved', timeout: 1000, verify: true)->click() === $element, 'Successful verification lost the receiver.');
 			verify($element->id() === 'replacement', 'Successful verification did not adopt its replacement.');
 			$start = microtime(true);
-			verify($element->textEquals('Done', wait: true, timeout: 20, verify: true) === $element, 'Failed verification lost the receiver.');
+			verify($element->textEquals('Done', timeout: 20, verify: true) === $element, 'Failed verification lost the receiver.');
 			verify(microtime(true) - $start >= 0.02 && $element->id() === 'replacement', 'Timeout did not wait or changed the retained reference.');
 			$continued = true;
 		} finally {
@@ -350,21 +350,21 @@ scenario('count and URL verification continue after mismatches and preserve snap
 		$browser = new Browser($url, 'firefox');
 		try {
 			$set = $browser->findAll('.row');
-			verify($set->countEquals(1, wait: true, timeout: 20, verify: true) === $set && $set->first()->id() === 'old', 'Failed count verification replaced its snapshot.');
-			$set->countEquals(1);
-			verify($browser->urlMatches('~/done$~', wait: true, timeout: 20, verify: true) === $browser, 'Browser verification lost its receiver.');
+			verify($set->countEquals(1, timeout: 20, verify: true) === $set && $set->first()->id() === 'old', 'Failed count verification replaced its snapshot.');
+			$set->countEquals(1, wait: false);
+			verify($browser->urlMatches('~/done$~', timeout: 20, verify: true) === $browser, 'Browser verification lost its receiver.');
 			$window = $browser->window();
-			verify($window->urlMatches('~/done$~', verify: true) === $window, 'Window verification lost its receiver.');
+			verify($window->urlMatches('~/done$~', wait: false, verify: true) === $window, 'Window verification lost its receiver.');
 			$browser->urlMatches('~/done$~', verify: true);
 			$empty = new ElementSet();
-			verify($empty->countEquals(1, verify: true)->countEquals(0, verify: true) === $empty, 'Explicit empty snapshot lost its receiver.');
+			verify($empty->countEquals(1, wait: false, verify: true)->countEquals(0, wait: false, verify: true) === $empty, 'Explicit empty snapshot lost its receiver.');
 			$continued = true;
 		} finally {
 			$browser->quit();
 		}
 	}]);
 	verify($status === 1 && $continued && str_contains($output, 'Assertions: 3 passed, 4 failed') && !str_contains($output, 'Execution error'), $output);
-	expectError(fn() => (new ElementSet())->countEquals(1, verify: true), 'WebDriver assertion failed');
+	expectError(fn() => (new ElementSet())->countEquals(1, wait: false, verify: true), 'WebDriver assertion failed');
 });
 
 scenario('verification propagates invalid patterns and driver errors instead of recording mismatches', function ($listener) {
@@ -380,7 +380,7 @@ scenario('verification propagates invalid patterns and driver errors instead of 
 			$element = $browser->find('#node');
 			expectError(fn() => $element->attributeMatches('name', '/[/', verify: true), 'Could not evaluate assertion pattern');
 			expectError(fn() => $browser->urlMatches('not delimited', verify: true), 'Could not evaluate assertion pattern');
-			$element->textEquals('Expected', verify: true);
+			$element->textEquals('Expected', wait: false, verify: true);
 			$continued = true;
 		} finally {
 			$browser->quit();
@@ -409,7 +409,7 @@ scenario('protocol assertions report each result once through the recording prob
 	$browser = new RecordingBrowser($url, 'firefox', record: [$recorder, 'assert']);
 	$element = $browser->find('#name');
 	foreach ($assertionCases as $index => [$method, $arguments, $path, $actual, $expected, $message]):
-		verify($element->$method(...$arguments) === $element, "$method lost the fluent receiver.");
+		verify($element->$method(...[...$arguments, 'wait' => false]) === $element, "$method lost the fluent receiver.");
 		verify(count($recorder->results) === $index + 1, "$method did not record exactly once.");
 		verify($recorder->results[$index][0] === $expected, "$method reported the wrong result.");
 		verify(str_contains($recorder->results[$index][1], "Element 'input'") && str_contains($recorder->results[$index][1], $message), "$method lost expected/actual diagnostics.");
@@ -431,10 +431,10 @@ scenario('assertions throw on failure without a recorder and preserve the sessio
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	$element = $browser->find('#name');
-	verify($element->setValue('Jane')->valueEquals('Jane')->isVisible() === $element, 'Action/assertion chain failed.');
-	expectError(fn() => $element->textEquals('Expected', verify: true), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
-	expectError(fn() => $browser->findAll('.missing')->countEquals(1), 'expected 1, got 0');
-	expectError(fn() => $browser->urlMatches('~/expected$~'), "got 'https://example.test/actual'");
+	verify($element->setValue('Jane')->valueEquals('Jane', wait: false)->isVisible(wait: false) === $element, 'Action/assertion chain failed.');
+	expectError(fn() => $element->textEquals('Expected', wait: false, verify: true), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
+	expectError(fn() => $browser->findAll('.missing')->countEquals(1, wait: false), 'expected 1, got 0');
+	expectError(fn() => $browser->urlMatches('~/expected$~', wait: false), "got 'https://example.test/actual'");
 	$browser->quit();
 });
 
@@ -450,16 +450,16 @@ scenario('count assertions report empty window, descendant and shadow searches w
 	$results = [];
 	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$empty = $browser->findAll('.missing');
-	verify($empty->countEquals(0)->countEquals(1) === $empty, 'Empty count assertion lost its set.');
+	verify($empty->countEquals(0, wait: false)->countEquals(1, wait: false) === $empty, 'Empty count assertion lost its set.');
 	$set = $browser->findAll('input');
-	verify($set->countEquals(2)->countEquals(1) === $set, 'Count assertion refreshed membership or lost its set.');
-	$set->first()->findAll('.missing')->countEquals(0);
-	$set->first()->shadowRoot()->findAll('.missing')->countEquals(0);
+	verify($set->countEquals(2, wait: false)->countEquals(1, wait: false) === $set, 'Count assertion refreshed membership or lost its set.');
+	$set->first()->findAll('.missing')->countEquals(0, wait: false);
+	$set->first()->shadowRoot()->findAll('.missing')->countEquals(0, wait: false);
 	$explicit = new ElementSet(...$set->all());
-	verify($explicit->countEquals(2) === $explicit, 'Explicit snapshot lost its element recorder.');
+	verify($explicit->countEquals(2, wait: false) === $explicit, 'Explicit snapshot lost its element recorder.');
 	$standalone = new ElementSet();
-	verify($standalone->countEquals(0) === $standalone, 'Standalone empty snapshot cannot assert its count.');
-	expectError(fn() => $standalone->countEquals(1), 'expected 1, got 0');
+	verify($standalone->countEquals(0, wait: false) === $standalone, 'Standalone empty snapshot cannot assert its count.');
+	expectError(fn() => $standalone->countEquals(1, wait: false), 'expected 1, got 0');
 	verify(array_column($results, 0) === [true, false, true, false, true, true, true], 'Count results were not shared with the browser recorder.');
 	verify($results[1][1] === 'Element count: expected 1, got 0.', 'Count failure lacks expected/actual values.');
 	$browser->quit();
@@ -491,11 +491,11 @@ foreach (['browser', 'window'] as $receiver):
 		foreach (range(1, 2) as $ignored):
 			verify($target->find('.error', visible: true, invert: true, assert: true) === null, 'Inverted find should return null.');
 		endforeach;
-		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'WebDriver find failed');
+		expectError(fn() => $target->find('.error', visible: true, wait: false, invert: true, assert: true), 'WebDriver find failed');
 		verify(array_column($results, 0) === [true, true, false], 'Absent, hidden, or mixed visibility was reported incorrectly.');
 		verify($results[2][1] === "Selector '.error' using 'css selector': expected no visible matches, got visible element 'second'.", 'Selector failure lacks expected/actual diagnostics.');
 		expectError(fn() => $target->find('[broken', visible: true, invert: true, assert: true), 'invalid selector');
-		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'stale element reference');
+		expectError(fn() => $target->find('.error', visible: true, wait: false, invert: true, assert: true), 'stale element reference');
 		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'unknown error');
 		verify(count($results) === 3, 'Driver errors were converted to assertion results.');
 		$browser->quit();
@@ -516,7 +516,7 @@ scenario('selector visibility assertions restore window/frame context and throw 
 	$browser = new Browser($url, 'firefox');
 	$window = $browser->window()->switchFrame(0);
 	$browser->switch('other');
-	expectError(fn() => $window->find('//aside', 'xpath', visible: true, invert: true, assert: true), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible element 'visible'.");
+	expectError(fn() => $window->find('//aside', 'xpath', visible: true, wait: false, invert: true, assert: true), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible element 'visible'.");
 	verify($browser->find('.gone', visible: true, invert: true, assert: true) === null, 'Inverted find should return null.');
 	$browser->quit();
 });
@@ -535,7 +535,7 @@ scenario('URL assertions retain receivers and select the top-level window withou
 	$window = $browser->window()->switchFrame(0);
 	$browser->switch('other');
 	verify($window->urlMatches('~/projects/\d+$~') === $window, 'URL assertion lost its window.');
-	verify($browser->urlMatches('~/missing$~') === $browser, 'URL assertion lost its browser.');
+	verify($browser->urlMatches('~/missing$~', wait: false) === $browser, 'URL assertion lost its browser.');
 	verify(array_column($results, 0) === [true, false], 'URL assertions reported incorrect results.');
 	verify(str_contains($results[1][1], "'~/missing$~'") && str_contains($results[1][1], 'https://example.test/projects/42'), 'URL diagnostics lost expected/actual values.');
 	$browser->quit();
@@ -560,11 +560,11 @@ scenario('element assertions restore captured context and distinguish stale refe
 	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$element = $browser->switchFrame(0)->find('#original');
 	$browser->switch('other');
-	$element->isVisible();
-	verify($element->isNotVisible() === $element, 'Stale visibility assertion lost original identity.');
-	expectError(fn() => $element->isVisible(), 'stale element reference');
-	expectError(fn() => $element->isNotVisible(), 'no such element');
-	expectError(fn() => $element->isNotVisible(), 'unknown error');
+	$element->isVisible(wait: false);
+	verify($element->isNotVisible(wait: false) === $element, 'Stale visibility assertion lost original identity.');
+	expectError(fn() => $element->isVisible(wait: false), 'stale element reference');
+	expectError(fn() => $element->isNotVisible(wait: false), 'no such element');
+	expectError(fn() => $element->isNotVisible(wait: false), 'unknown error');
 	$browser->defaultFrame();
 	expectError(fn() => $element->isNotVisible(), 'frame removed');
 	verify(array_column($results, 0) === [true, true], 'Driver/context errors were reported as assertions.');
@@ -588,7 +588,7 @@ scenario('invalid assertion patterns and callback exceptions propagate without e
 	expectError(fn() => $browser->urlMatches('not delimited', wait: true), 'Could not evaluate assertion pattern');
 	verify($calls === 0, 'Invalid patterns reached the assertion recorder.');
 	try {
-		$element->isNotVisible();
+		$element->isNotVisible(wait: false);
 		throw new RuntimeException('Callback exception was swallowed.');
 	} catch (RuntimeException $error) {
 		verify($error === $expected, 'Callback exception was replaced.');
@@ -607,7 +607,7 @@ $retryAssertions = [
 	['attributeMatches', ['data-state', '/^saved$/'], '/attribute/data-state', 'saving', 'saved'],
 ];
 foreach ($retryAssertions as [$method, $arguments, $path, $pending, $ready]):
-	scenario("waiting $method re-finds replacements in the captured context and updates chained actions", function ($listener) use ($path, $pending, $ready) {
+	scenario("$method waits by default, re-finds replacements in the captured context and updates chained actions", function ($listener) use ($path, $pending, $ready) {
 		createSession($listener);
 		$selector = ['using' => 'xpath', 'value' => '//status'];
 		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
@@ -627,7 +627,7 @@ foreach ($retryAssertions as [$method, $arguments, $path, $pending, $ready]):
 		$browser = new RecordingBrowser($url, 'firefox', record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 		$element = $browser->switchFrame(0)->find('//status', 'xpath');
 		$browser->switch('other');
-		verify($element->$method(...[...$arguments, 'wait' => true, 'timeout' => 1000])->click() === $element, 'Retry lost its fluent receiver.');
+		verify($element->$method(...[...$arguments, 'timeout' => 1000])->click() === $element, 'Retry lost its fluent receiver.');
 		verify($element->id() === 'replacement', 'Successful retry did not adopt the replacement reference.');
 		verify(array_column($results, 0) === [true], 'Retry reported intermediate assertion results.');
 		$browser->quit();
@@ -685,10 +685,13 @@ scenario('selectorless focus and script references poll live nodes but fail imme
 	$browser->quit();
 });
 
-scenario('descendant retries re-find replaced ancestors and count an absent parent as an empty search', function ($listener) {
+scenario('descendant lookups wait by default, re-find ancestors and count an absent parent as an empty search', function ($listener) {
 	createSession($listener);
 	$parent = ['using' => 'css selector', 'value' => '#parent'];
 	$child = ['using' => 'xpath', 'value' => './/span'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => 'parent-old']);
+	exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => 'parent-old']);
+	exchange($listener, 'POST', '/session/session%2F1/element/parent-old/element', $child, ['error' => 'no such element', 'message' => 'not yet'], 404);
 	exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => 'parent-old']);
 	exchange($listener, 'POST', '/session/session%2F1/element/parent-old/element', $child, [Element::REFERENCE => 'child-old']);
 	exchange($listener, 'POST', '/session/session%2F1/element/parent-old/elements', $child, [[Element::REFERENCE => 'child-old']]);
@@ -704,7 +707,7 @@ scenario('descendant retries re-find replaced ancestors and count an absent pare
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	$parent = $browser->find('#parent');
-	$child = $parent->find('.//span', 'xpath');
+	$child = $parent->find('.//span', 'xpath', timeout: 1000);
 	$set = $parent->findAll('.//span', 'xpath');
 	$child->textEquals('Done', wait: true, timeout: 1000)->click();
 	verify($parent->id() === 'parent-old', 'Re-finding a scope changed an independently held reference.');
@@ -713,10 +716,15 @@ scenario('descendant retries re-find replaced ancestors and count an absent pare
 	$browser->quit();
 });
 
-scenario('shadow descendant retries reacquire replaced hosts and roots', function ($listener) {
+scenario('shadow lookups wait by default and descendant retries reacquire replaced hosts and roots', function ($listener) {
 	createSession($listener);
 	$host = ['using' => 'css selector', 'value' => '#host'];
 	$child = ['using' => 'css selector', 'value' => '.status'];
+	exchange($listener, 'POST', '/session/session%2F1/element', $host, [Element::REFERENCE => 'host-old']);
+	exchange($listener, 'GET', '/session/session%2F1/element/host-old/shadow', null, [ShadowRoot::REFERENCE => 'root-old']);
+	exchange($listener, 'POST', '/session/session%2F1/element', $host, [Element::REFERENCE => 'host-old']);
+	exchange($listener, 'GET', '/session/session%2F1/element/host-old/shadow', null, [ShadowRoot::REFERENCE => 'root-old']);
+	exchange($listener, 'POST', '/session/session%2F1/shadow/root-old/element', $child, ['error' => 'no such element', 'message' => 'not yet'], 404);
 	exchange($listener, 'POST', '/session/session%2F1/element', $host, [Element::REFERENCE => 'host-old']);
 	exchange($listener, 'GET', '/session/session%2F1/element/host-old/shadow', null, [ShadowRoot::REFERENCE => 'root-old']);
 	exchange($listener, 'POST', '/session/session%2F1/shadow/root-old/element', $child, [Element::REFERENCE => 'child-old']);
@@ -730,7 +738,7 @@ scenario('shadow descendant retries reacquire replaced hosts and roots', functio
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
-	$browser->find('#host')->shadowRoot()->find('.status')->textEquals('Done', wait: true, timeout: 1000)->click();
+	$browser->find('#host')->shadowRoot()->find('.status', timeout: 1000)->textEquals('Done', wait: true, timeout: 1000)->click();
 	$browser->quit();
 });
 
@@ -750,10 +758,10 @@ scenario('waiting counts refresh empty searches and positional members retain th
 	$results = [];
 	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; });
 	$set = $browser->findAll('.row');
-	verify($set->countEquals(2, wait: true, timeout: 1000) === $set && $set->count() === 2, 'Successful count did not update the snapshot.');
+	verify($set->countEquals(2, timeout: 1000) === $set && $set->count() === 2, 'Successful count did not update the snapshot.');
 	$set->get(1)->textEquals('Done', wait: true, timeout: 1000)->click();
 	verify($set->get(1)->id() === 'new', 'Positional member did not adopt the replacement.');
-	expectError(fn() => (new ElementSet(...$set->all()))->countEquals(3, wait: true), 'without a retained search');
+	expectError(fn() => (new ElementSet(...$set->all()))->countEquals(3), 'without a retained search');
 	verify($results === [true, true], 'Count/member retries reported intermediate results.');
 	$browser->quit();
 });
@@ -834,10 +842,10 @@ scenario('consolidated find reports once and still throws when a prerequisite fa
 }, function ($url) {
 	$results = [];
 	$browser = new RecordingBrowser($url, 'firefox', record: function ($condition) use (&$results) { $results[] = $condition; return false; });
-	verify($browser->find('#new', wait: true, assert: true, timeout: 1000)->id() === 'new', 'Find lost its match.');
-	expectError(fn() => $browser->find('#new', visible: true, assert: true, timeout: -1), 'WebDriver find failed');
+	verify($browser->find('#new', assert: true, timeout: 1000)->id() === 'new', 'Find lost its match.');
+	expectError(fn() => $browser->find('#new', visible: true, wait: false, assert: true, timeout: -1), 'WebDriver find failed');
 	verify($browser->find('#new', wait: true, invert: true, assert: true, timeout: 1000) === null, 'Inverse presence did not return null.');
-	expectError(fn() => $browser->find('#new', assert: true), 'no such element: gone');
+	expectError(fn() => $browser->find('#new', wait: false, assert: true), 'no such element: gone');
 	verify($results === [true, false, true, false], 'Find recorded intermediate results or skipped failures.');
 	foreach (['findWaitPresent', 'findWaitVisible', 'waitNotPresent', 'waitNotVisible', 'isNotVisible'] as $removed):
 		verify(!method_exists($browser, $removed) && !method_exists($browser->window(), $removed), 'Overlapping selector helper still exists.');
@@ -859,10 +867,10 @@ scenario('URL assertion retries report once and preserve timeout/default and cal
 		$results[] = [$condition, $message];
 		if ($throw) throw $expected;
 	});
-	$browser->urlMatches('~/done$~', wait: true, timeout: 1000);
+	$browser->urlMatches('~/done$~', timeout: 1000);
 	foreach ([20, null] as $timeout):
 		$start = microtime(true);
-		$browser->window()->urlMatches('~/done$~', wait: true, timeout: $timeout);
+		$browser->window()->urlMatches('~/done$~', timeout: $timeout);
 		$elapsed = microtime(true) - $start;
 		verify($elapsed >= ($timeout ?? 50) / 1000 && $elapsed < 0.5, 'URL timeout units/default changed.');
 	endforeach;
@@ -914,7 +922,7 @@ scenario('HTTP errors preserve session and driver message', function ($listener)
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$driver = new Browser($url, 'firefox');
-	expectError(fn() => $driver->find('#missing'), 'no such element: Missing selector #missing');
+	expectError(fn() => $driver->find('#missing', wait: false), 'no such element: Missing selector #missing');
 	expectError(fn() => $driver->quit(), 'retry deletion');
 	$driver->quit();
 });
@@ -993,7 +1001,7 @@ scenario('fluent browser, window, and descendant element chains', function ($lis
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	verify($browser->resize(1440, 900)->navigate('https://example.test/') === $browser, 'Browser chain lost identity.');
-	$input = $browser->find('#form')->find('#name');
+	$input = $browser->find('#form')->find('#name', wait: false);
 	verify($input->clear()->type('Hello')->key(Browser::TAB) === $input, 'Element chain lost identity.');
 	verify($input->property('value') === 'Hello', 'Query should return its value.');
 	$window = $browser->window();
@@ -1079,7 +1087,7 @@ scenario('elements and shadow roots restore nested frames across window switches
 	expectError(fn() => $browser->switchFrame($input), 'another browser session or browsing context');
 	$input->click();
 	$top->click();
-	$root->find('button')->click();
+	$root->find('button', wait: false)->click();
 	$browser->open();
 	verify($input->text() === 'Nested' && $browser->window() === $window, 'Element lost its original window/frame.');
 	verify($window->parentFrame() === $window, 'Parent frame is not fluent.');
@@ -1503,7 +1511,7 @@ scenario('wait re-finds missing/stale elements and returns the ready element', f
 }, function ($url) {
 	$driver = new Browser($url, 'firefox');
 	$element = $driver->wait(function ($driver) {
-		$id = $driver->find('#ready');
+		$id = $driver->find('#ready', wait: false);
 		return $id->displayed() && $id->enabled() ? $id : false;
 	}, timeout: 2000);
 	verify($element instanceof Element && $element->id() === 'ready', 'Wait did not return the callback result.');
@@ -1511,7 +1519,7 @@ scenario('wait re-finds missing/stale elements and returns the ready element', f
 	$driver->quit();
 });
 
-scenario('find waits retry searches and return the first present or visible match', function ($listener) {
+scenario('find waits by default and returns the first present or visible match', function ($listener) {
 	createSession($listener);
 	$present = ['using' => 'xpath', 'value' => '//input'];
 	exchange($listener, 'POST', '/session/session%2F1/element', $present, ['error' => 'no such element', 'message' => 'not yet'], 404);
@@ -1525,8 +1533,8 @@ scenario('find waits retry searches and return the first present or visible matc
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
-	verify($browser->find('//input', 'xpath', wait: true, timeout: 1000)->id() === 'hidden', 'Presence should not require displayedness.');
-	verify($browser->window()->find('.ready', visible: true, wait: true, timeout: 1000)->id() === 'replacement', 'Visibility did not re-find after stale reference.');
+	verify($browser->find('//input', 'xpath', timeout: 1000)->id() === 'hidden', 'Presence should not require displayedness.');
+	verify($browser->window()->find('.ready', visible: true, timeout: 1000)->id() === 'replacement', 'Visibility did not re-find after stale reference.');
 	$browser->quit();
 });
 
@@ -2018,14 +2026,14 @@ scenario('plural, scoped, alternate-locator, focused, and shadow lookups', funct
 	expectError(fn() => $rows->get(2), 'out of range');
 	$empty = $driver->findAll('.absent');
 	verify(count($empty) === 0 && $empty->first() === null && $empty->all() === [], 'Empty collection failed.');
-	verify($rows->get(0)->find('.//input', using: 'xpath')->id() === 'input/1', 'Scoped XPath lookup failed.');
+	verify($rows->get(0)->find('.//input', using: 'xpath', wait: false)->id() === 'input/1', 'Scoped XPath lookup failed.');
 	verify($ids($rows->get(1)->findAll('td', using: 'tag name')) === ['cell/1'], 'Scoped plural lookup failed.');
 	verify($driver->find('Continue', using: 'link text')->id() === 'link/1', 'Link lookup failed.');
 	verify($ids($driver->findAll('More', using: 'partial link text')) === ['link/2'], 'Partial-link lookup failed.');
 	verify($driver->activeElement()->id() === 'input/1', 'Focused element was not unwrapped.');
 	$shadow = (new Element($driver->window(), 'host/1'))->shadowRoot();
 	verify($shadow instanceof ShadowRoot && $shadow->id() === 'shadow/1', 'Wrong shadow-root ID.');
-	verify($shadow->find('button')->id() === 'button/1', 'Shadow lookup failed.');
+	verify($shadow->find('button', wait: false)->id() === 'button/1', 'Shadow lookup failed.');
 	verify($ids($shadow->findAll('input')) === ['input/2', 'input/3'], 'Plural shadow lookup failed.');
 	verify(count($shadow->findAll('.absent')) === 0, 'Empty shadow lookup should return an empty set.');
 	$driver->quit();

@@ -4,7 +4,7 @@
 	/**
 	 * A DOM element bound to its browser window and original frame path. Commands
 	 * select that context automatically and return this element for fluent chaining.
-	 * Actions and observations use the current reference. Assertions with $wait re-find
+	 * Actions and observations use the current reference. Assertions wait by default and re-find
 	 * retained selectors, including ancestor scopes, and adopt the successful reference.
 	 * Script/focus references have no lookup: they can be polled but staleness propagates.
 	 * Original-node disappearance waits never re-find. isNotVisible() also accepts a stale
@@ -13,7 +13,8 @@
 	 * $verify records the failure and continues. Outside Test::run(), failures always throw.
 	 * Driver errors propagate in either mode. find() and wait() remain stopping prerequisites.
 	 * Assertion $timeout is positive, finite milliseconds, null for the browser default,
-	 * and ignored without $wait. Polling is every 100 ms; commands retain their own timeouts.
+	 * and ignored with $wait=false, which checks once. Polling is every 100 ms;
+	 * commands retain their own timeouts.
 	 */
 	class Element
 	{
@@ -41,10 +42,11 @@
 
 		/**
 		 * Find a descendant using Browser::find() conditions, millisecond timeouts and reporting.
-		 * Scoped XPath should be relative, e.g. .//input. Waiting re-finds this parent when
-		 * it has a retained lookup. Positive success returns a child; inverted success null.
+		 * Scoped XPath should be relative, e.g. .//input. Waiting defaults to true and
+		 * re-finds this parent when it has a retained lookup; $wait=false checks once.
+		 * Positive success returns a child; inverted success null.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = false, bool $invert = false, bool $assert = false, ?float $timeout = null): ?self
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?self
 		{
 			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
 		}
@@ -266,53 +268,53 @@
 			return $this;
 		}
 
-		/** Assert displayedness, optionally waiting; visibility does not guarantee clickability. */
-		public function isVisible(bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		/** Assert displayedness, waiting by default; visibility does not guarantee clickability. */
+		public function isVisible(bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === true,
 				'visibility: expected true', $wait, $timeout, $verify);
 		}
 
 		/** Assert hiddenness; waiting re-finds retained lookups. Missing matches or stale original nodes pass. */
-		public function isNotVisible(bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		public function isNotVisible(bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === false,
 				'visibility: expected false or stale', $wait, $timeout, $verify, true);
 		}
 
 		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */
-		public function valueEquals(string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		public function valueEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->property('value'), fn($actual) => $actual === $expected,
 				'value: expected ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
-		/** Assert strict equality with rendered text, optionally waiting; return this element. */
-		public function textEquals(string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		/** Assert strict equality with rendered text, waiting by default; return this element. */
+		public function textEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => $actual === $expected,
 				'text: expected ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
-		/** Assert a case-sensitive substring of rendered text, optionally waiting; return this element. */
-		public function textContains(string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		/** Assert a case-sensitive substring of rendered text, waiting by default; return this element. */
+		public function textContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => str_contains($actual, $expected),
 				'text: expected to contain ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
-		/** Assert strict attribute equality, optionally waiting; null expects absence. Return this element. */
-		public function attributeEquals(string $name, ?string $expected, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		/** Assert strict attribute equality, waiting by default; null expects absence. Return this element. */
+		public function attributeEquals(string $name, ?string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual === $expected,
 				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify);
 		}
 
 		/**
-		 * Assert an attribute matches a delimited PHP regex, optionally waiting; absence never matches.
+		 * Assert an attribute matches a delimited PHP regex, waiting by default; absence never matches.
 		 * Invalid patterns throw. Return this element.
 		 */
-		public function attributeMatches(string $name, string $pattern, bool $wait = false, ?float $timeout = null, bool $verify = false): self
+		public function attributeMatches(string $name, string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
 			// Validate before polling, even when no element can currently be found.
 			Browser::matches($pattern, '');
