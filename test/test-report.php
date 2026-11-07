@@ -33,13 +33,19 @@ class ReportBrowser extends Browser
     public function window(?string $handle = null): Window { return $this->fixtureWindow; }
     public function activate(Window $window, ?array $frames): void {}
     public function timeouts(): array { return ['script' => 0]; }
+    public function evaluate(callable $condition, bool $wait, ?float $timeout): bool
+    {
+        return parent::evaluate($condition, $wait, $timeout ?? 1000);
+    }
     public function sessionRequest(string $method, string $path, ?array $body = null, float $extraTimeout = 0): mixed
     {
         $this->trace[] = [$method, $path, $body];
+        if ($path === '/element/input/clear' || $path === '/element/input/value') {
+            $this->value = $path === '/element/input/clear' ? '' : $this->value . $body['text'];
+            return null;
+        }
         return match ($path) {
             '/element' => [Element::REFERENCE => 'input'],
-            '/element/input/clear' => $this->value = '',
-            '/element/input/value' => $this->value .= $body['text'],
             '/element/input/property/value' => $this->value,
             '/element/input/text' => 'Actual',
             '/element/input/click' => throw new RuntimeException('click failed'),
@@ -411,3 +417,38 @@ try {
     Settings::$data = [];
 }
 echo "PASS: project titles use explicit, settings, and Composer precedence without directory guesses\n";
+
+foreach ([false, true] as $exhausted) {
+    $browser = new class extends ReportBrowser {
+        public int $clicks = 0;
+        public bool $exhausted = false;
+        public function sessionRequest(string $method, string $path, ?array $body = null, float $extraTimeout = 0): mixed
+        {
+            if ($path === '/element/input/click') {
+                if (++$this->clicks < 3 || $this->exhausted) {
+                    throw new RuntimeException('WebDriver HTTP 400 element click intercepted: covered');
+                }
+                return null;
+            }
+            return parent::sessionRequest($method, $path, $body, $extraTimeout);
+        }
+    };
+    $browser->exhausted = $exhausted;
+    [$status, $console, $record] = runChecks(['suite' => fn (Runner $test) => function () use ($test, $browser, $exhausted) {
+        $test->browserSession(['capabilities' => []], fn () => $browser->screenshot());
+        $browser->find('#button')->click(timeout: $exhausted ? 20 : 1000);
+    }]);
+    $steps = $record['suites'][0]['attempts'][0]['steps'];
+    check($status === (int)$exhausted && array_column($steps, 'label') === ['find', 'click']
+        && $steps[1]['status'] === ($exhausted ? 'FAIL' : 'PASS')
+        && $record['totals']['assertionsPassed'] === 0 && $record['totals']['assertionsFailed'] === 0,
+        'Action retries created extra steps or assertions.');
+    check($steps[1]['location']['file'] === 'test/test-report.php'
+        && count($steps[1]['screenshots']) === (int)$exhausted
+        && count(array_filter($browser->trace, fn ($entry) => $entry[1] === '/screenshot')) === (int)$exhausted,
+        'Retry screenshots or author location were not final-operation diagnostics.');
+    check(substr_count($console, 'FAIL  STEP') === (int)$exhausted
+        && ($exhausted ? str_contains($steps[1]['error']['previous']['message'], 'covered') : $browser->clicks === 3),
+        'Action retry output or final exception was lost.');
+}
+echo "PASS: action retries retain one step, final-only captures, author source and original timeout diagnostics\n";

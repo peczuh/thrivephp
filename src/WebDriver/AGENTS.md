@@ -172,7 +172,10 @@ Import `Browser` when using constants such as `Browser::TAB`; importing
 - Browser facade methods delegate to the current window while preserving the
   facade receiver for commands.
 - Elements and shadow roots retain their original window and frame path.
-  Restore that context before operating; never silently re-find stale objects.
+  Restore that context before operating. Retrying element comparisons and native
+  click/form-entry actions may re-find retained lookups and adopt a replacement
+  after success. One-shot actions, observations, and original-node waits retain
+  the captured identity; unrecoverable stale nodes and context failures propagate.
 - Keep a window's logical frame selection separate from the driver's actual
   context cache. Top-level endpoints must not require restoring stale frames.
 - Invalidate actual context after an uncertain frame-changing outcome.

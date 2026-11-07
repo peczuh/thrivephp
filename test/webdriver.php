@@ -302,7 +302,7 @@ scenario('check actions reject unsupported controls and propagate click errors',
 	expectError(fn() => $element->check(), 'requires a checkbox or radio input');
 	expectError(fn() => $element->check(), 'requires a checkbox or radio input');
 	expectError(fn() => $element->uncheck(), 'requires a checkbox input');
-	expectError(fn() => $element->check(), 'element click intercepted: covered');
+	expectError(fn() => $element->check(wait: false), 'element click intercepted: covered');
 	$browser->quit();
 });
 
@@ -1617,9 +1617,9 @@ foreach (['unselected', 'selected', 'disabled', 'missing'] as $state):
 		$driver = new Browser($url, 'firefox');
 		$select = new Element($driver->window(), 'select/1');
 		if ($state === 'missing'):
-			expectError(fn() => $select->select('absent'), 'No option matches');
+			expectError(fn() => $select->select('absent', wait: false), 'No option matches');
 		elseif ($state === 'disabled'):
-			expectError(fn() => $select->select('a"b\c'), 'disabled option');
+			expectError(fn() => $select->select('a"b\c', wait: false), 'disabled option');
 		else:
 			verify($select->select('a"b\c') === $select, 'Select lost its receiver.');
 		endif;
@@ -1748,7 +1748,195 @@ scenario('value reads live properties and replaces input in its captured context
 	verify($element->value('Jane €')->type(' Doe') === $element, 'Value replacement lost receiver.');
 	verify($element->value('') === $element, 'Empty replacement should only clear.');
 	verify($element->value('0') === $element, 'Zero should set rather than read.');
-	expectError(fn() => $element->value('blocked'), 'invalid element state');
+	expectError(fn() => $element->value('blocked', wait: false), 'invalid element state');
+	$browser->quit();
+});
+
+foreach (['click', 'type', 'key', 'clear', 'value'] as $method):
+	scenario("$method recovers replacements in the captured frame and adopts the successful node", function ($listener) use ($method) {
+		createSession($listener);
+		$selector = ['using' => 'css selector', 'value' => '#action'];
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'old']);
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => null], null);
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+		$endpoint = in_array($method, ['type', 'key', 'value'], true) ? 'value' : $method;
+		$body = $endpoint === 'value' ? ['text' => $method === 'key' ? Browser::ENTER : 'new'] : [];
+		if ($method === 'value') exchange($listener, 'POST', '/session/session%2F1/element/old/clear', [], null);
+		exchange($listener, 'POST', '/session/session%2F1/element/old/' . $endpoint, $body,
+			['error' => 'stale element reference', 'message' => 'replaced'], 404);
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, ['error' => 'no such element', 'message' => 'rendering'], 404);
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'new']);
+		if ($method === 'value') exchange($listener, 'POST', '/session/session%2F1/element/new/clear', [], null);
+		exchange($listener, 'POST', '/session/session%2F1/element/new/' . $endpoint, $body, null);
+		exchange($listener, 'GET', '/session/session%2F1/element/new/property/value', null, 'new');
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($method) {
+		$browser = new Browser($url, 'firefox');
+		$element = $browser->switchFrame(0)->find('#action');
+		$browser->defaultFrame();
+		$args = in_array($method, ['type', 'key', 'value'], true) ? [$method === 'key' ? Browser::ENTER : 'new'] : [];
+		verify($element->$method(...$args, timeout: 1500) === $element && $element->id() === 'new'
+			&& $element->value() === 'new', 'Action did not adopt the replacement or preserve its receiver.');
+		$browser->quit();
+	});
+endforeach;
+
+foreach (['click' => ['element click intercepted', 'element not interactable'],
+	'type' => ['element not interactable'], 'clear' => ['invalid element state', 'element not interactable']] as $method => $errors):
+	scenario("$method retries rejected input on the original node without an extra lookup", function ($listener) use ($method, $errors) {
+		createSession($listener);
+		$endpoint = $method === 'type' ? 'value' : $method;
+		$body = $method === 'type' ? ['text' => 'append'] : [];
+		foreach ($errors as $error):
+			exchange($listener, 'POST', '/session/session%2F1/element/node/' . $endpoint, $body, ['error' => $error, 'message' => 'temporary'], 400);
+		endforeach;
+		exchange($listener, 'POST', '/session/session%2F1/element/node/' . $endpoint, $body, null);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($method) {
+		$browser = new Browser($url, 'firefox');
+		$element = new Element($browser->window(), 'node');
+		$args = $method === 'type' ? ['append'] : [];
+		verify($element->$method(...$args) === $element, 'Transient action did not succeed.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('value retries typing without clearing the same node again', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/value', ['text' => 'new'], ['error' => 'element not interactable', 'message' => 'temporary'], 400);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/value', ['text' => 'new'], null);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$element = new Element($browser->window(), 'node');
+	verify($element->value('new') === $element, 'Value retry lost its receiver.');
+	$browser->quit();
+});
+
+foreach (['check' => true, 'uncheck' => false] as $method => $selected):
+	scenario("$method rechecks selection after replacement rather than toggling it", function ($listener) use ($selected) {
+		createSession($listener);
+		$selector = ['using' => 'css selector', 'value' => '#choice'];
+		exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'old']);
+		foreach (['old', 'new'] as $id):
+			if ($id === 'new') exchange($listener, 'POST', '/session/session%2F1/element', $selector, [Element::REFERENCE => 'new']);
+			exchange($listener, 'GET', "/session/session%2F1/element/$id/name", null, 'input');
+			exchange($listener, 'GET', "/session/session%2F1/element/$id/property/type", null, 'checkbox');
+			exchange($listener, 'GET', "/session/session%2F1/element/$id/selected", null, $id === 'new' ? $selected : !$selected);
+			if ($id === 'old') exchange($listener, 'POST', '/session/session%2F1/element/old/click', [], ['error' => 'stale element reference', 'message' => 'replaced'], 404);
+		endforeach;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($method) {
+		$browser = new Browser($url, 'firefox');
+		$element = $browser->find('#choice');
+		verify($element->$method() === $element && $element->id() === 'new', 'Selection retry did not adopt the satisfied replacement.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('select waits for options and rechecks selection after an intercepted click', function ($listener) {
+	createSession($listener);
+	foreach (['missing', 'disabled', 'covered', 'selected'] as $state):
+		exchange($listener, 'GET', '/session/session%2F1/element/select/name', null, 'select');
+		exchange($listener, 'GET', '/session/session%2F1/element/select/enabled', null, true);
+		exchange($listener, 'POST', '/session/session%2F1/element/select/elements', ['using' => 'css selector', 'value' => 'option'],
+			$state === 'missing' ? [] : [[Element::REFERENCE => 'option']]);
+		if ($state === 'missing') continue;
+		exchange($listener, 'GET', '/session/session%2F1/element/option/property/value', null, 'choice');
+		exchange($listener, 'GET', '/session/session%2F1/element/option/enabled', null, $state !== 'disabled');
+		if ($state === 'disabled') continue;
+		exchange($listener, 'GET', '/session/session%2F1/element/option/selected', null, $state === 'selected');
+		if ($state === 'covered') exchange($listener, 'POST', '/session/session%2F1/element/option/click', [], ['error' => 'element click intercepted', 'message' => 'covered'], 400);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$element = new Element($browser->window(), 'select');
+	verify($element->select('choice', timeout: 1500) === $element, 'Select did not wait for the desired option.');
+	$browser->quit();
+});
+
+foreach (['one-shot', 'selectorless', 'session', 'navigation', 'unknown', 'timeout', 'default-timeout'] as $mode):
+	scenario("action failure handling: $mode", function ($listener) use ($mode) {
+		createSession($listener);
+		if ($mode === 'one-shot') exchange($listener, 'POST', '/session/session%2F1/element',
+			['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'node']);
+		$error = match ($mode) {
+			'one-shot', 'selectorless' => 'stale element reference', 'session' => 'invalid session id',
+			'navigation' => 'timeout', 'unknown' => 'unknown error', default => 'element click intercepted',
+		};
+		exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], ['error' => $error, 'message' => 'original failure'], 400,
+			$mode === 'timeout' ? 0.05 : 0);
+		if ($mode === 'default-timeout') exchange($listener, 'POST', '/session/session%2F1/element/node/click', [],
+			['error' => $error, 'message' => 'original failure'], 400, 0.06);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($mode) {
+		$browser = new Browser($url, 'firefox', timeout: $mode === 'default-timeout' ? 0.15 : 10);
+		$element = $mode === 'one-shot' ? $browser->find('#node') : new Element($browser->window(), 'node');
+		try {
+			$element->click(wait: $mode !== 'one-shot', timeout: $mode === 'timeout' ? 30 : null);
+			throw new LogicException('Expected action failure.');
+		} catch (RuntimeException $error) {
+			verify(str_contains($error->getMessage(), 'original failure'), 'Original action error was lost.');
+			verify(($error->getPrevious() !== null) === in_array($mode, ['timeout', 'default-timeout'], true), 'Only exhausted retries should wrap the driver error.');
+		}
+		$browser->quit();
+	});
+endforeach;
+
+foreach ([false, true] as $shadow):
+	scenario('action replacement recovers ancestor scopes, shadow=' . (int)$shadow, function ($listener) use ($shadow) {
+		createSession($listener);
+		$parent = ['using' => 'css selector', 'value' => '#parent'];
+		$child = ['using' => 'css selector', 'value' => 'button'];
+		exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => 'parent-old']);
+		if ($shadow) exchange($listener, 'GET', '/session/session%2F1/element/parent-old/shadow', null, [ShadowRoot::REFERENCE => 'root-old']);
+		$scope = $shadow ? 'shadow/root-' : 'element/parent-';
+		exchange($listener, 'POST', '/session/session%2F1/' . $scope . 'old/element', $child, [Element::REFERENCE => 'child-old']);
+		exchange($listener, 'POST', '/session/session%2F1/element/child-old/click', [], ['error' => 'stale element reference', 'message' => 'parent replaced'], 404);
+		exchange($listener, 'POST', '/session/session%2F1/element', $parent, [Element::REFERENCE => 'parent-new']);
+		if ($shadow) exchange($listener, 'GET', '/session/session%2F1/element/parent-new/shadow', null, [ShadowRoot::REFERENCE => 'root-new']);
+		exchange($listener, 'POST', '/session/session%2F1/' . $scope . 'new/element', $child, [Element::REFERENCE => 'child-new']);
+		exchange($listener, 'POST', '/session/session%2F1/element/child-new/click', [], null);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($shadow) {
+		$browser = new Browser($url, 'firefox');
+		$parent = $browser->find('#parent');
+		$scope = $shadow ? $parent->shadowRoot() : $parent;
+		$child = $scope->find('button', wait: false);
+		verify($child->click() === $child && $child->id() === 'child-new' && $parent->id() === 'parent-old',
+			'Recovery changed the search scope or an independently held parent.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('a lost click response is not retried', function ($listener) {
+	createSession($listener);
+	[$stream, $head, $body] = acceptRequest($listener);
+	verify(str_starts_with($head, 'POST /session/session%2F1/element/node/click HTTP/'), 'Expected the original click.');
+	fclose($stream);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	try {
+		(new Element($browser->window(), 'node'))->click();
+		throw new LogicException('Expected transport failure.');
+	} catch (RuntimeException $error) {
+		verify($error->getPrevious() === null && !str_contains($error->getMessage(), 'action timed out'), 'Lost response was retried.');
+	}
+	$browser->quit();
+});
+
+scenario('compound value retry uses one deadline for clear and type', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/clear', [], null, 200, 0.05);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/value', ['text' => 'new'], ['error' => 'element not interactable', 'message' => 'blocked'], 400);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	expectError(fn() => (new Element($browser->window(), 'node'))->value('new', timeout: 30), 'action timed out');
 	$browser->quit();
 });
 
@@ -2004,7 +2192,7 @@ scenario('select rejects custom and disabled dropdowns', function ($listener) {
 }, function ($url) {
 	$driver = new Browser($url, 'firefox');
 	expectError(fn() => (new Element($driver->window(), 'custom'))->select('value'), 'native HTML select');
-	expectError(fn() => (new Element($driver->window(), 'disabled'))->select('value'), 'disabled select');
+	expectError(fn() => (new Element($driver->window(), 'disabled'))->select('value', wait: false), 'disabled select');
 	$driver->quit();
 });
 

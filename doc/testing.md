@@ -601,6 +601,31 @@ when overriding other suite behavior.
 
 ### Element actions and queries
 
+`click()`, `type()`, `key()`, `clear()`, the `value()` setter, `check()`,
+`uncheck()`, and `select()` retry by default. Pass `wait: false` for one attempt
+or `timeout: 5000` for a five-second retry budget. Null timeout uses the browser
+configuration. Polling is every 100 ms; in-flight commands retain their own
+timeouts. Compound operations share one polling deadline.
+
+Actions try the captured node first. A stale node is re-found only when its
+retained selector and ancestor lookups are recoverable, in the original window
+and frame. A successful action adopts the replacement for subsequent chained
+calls. Selectorless nodes cannot recover from staleness. Context restoration
+failures propagate immediately.
+
+Native clicks retry interception and non-interactability; text entry retries
+non-interactability, and clearing also retries invalid element state. These
+WebDriver errors precede input dispatch. Connection failures, lost responses,
+navigation timeouts, and unrelated errors propagate without repeating input.
+`value()` clears each replacement before typing and does not re-clear the same
+node after a rejected typing attempt. Checkbox and select operations re-check
+selection before every click. `select()` also waits for disabled controls/options
+and missing options. Expiry throws with the last failure as its previous exception.
+
+Internal retries remain one reported step, with screenshots only for the final
+outcome. They do not increment assertion counts. Script operations and compound
+pointer sequences such as dragging and double-clicking still execute once.
+
 `visible()` asserts visibility and returns the element. It waits by default and
 re-finds retained lookups. `visible(invert: true)` asserts hiddenness, accepting
 missing matches or stale original nodes. It replaces `isVisible()` and

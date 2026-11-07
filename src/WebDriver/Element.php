@@ -79,32 +79,36 @@
 			return $this;
 		}
 
-		/** Click using native WebDriver interaction. */
-		public function click(): self
+		/** Native click; retry interception, non-interactability and recoverable stale nodes by default. $timeout is milliseconds. */
+		public function click(bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->request('POST', '/click', []);
-			return $this;
+			return $this->action(__FUNCTION__, fn($element) => $element->request('POST', '/click', []), $wait, $timeout,
+				['element click intercepted', 'element not interactable']);
 		}
 
-		/** Check a checkbox or radio with a native click only when not already selected. */
-		public function check(): self
+		/** Check a checkbox or radio, re-checking selection on retries. $wait=false tries once; $timeout is milliseconds. */
+		public function check(bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			if (strtolower($this->tag()) !== 'input' || !in_array($this->property('type'), ['checkbox', 'radio'], true)):
-				throw new \InvalidArgumentException('check() requires a checkbox or radio input.');
-			endif;
-			return $this->selected() ? $this : $this->click();
+			return $this->action(__FUNCTION__, static function ($element) {
+				if (strtolower($element->tag()) !== 'input' || !in_array($element->property('type'), ['checkbox', 'radio'], true)):
+					throw new \InvalidArgumentException('check() requires a checkbox or radio input.');
+				endif;
+				if (!$element->selected()) $element->click(wait: false);
+			}, $wait, $timeout, ['element click intercepted', 'element not interactable']);
 		}
 
-		/** Uncheck a checkbox with a native click only when selected; radios are unsupported. */
-		public function uncheck(): self
+		/** Uncheck a checkbox, re-checking selection on retries; radios are unsupported. $timeout is milliseconds. */
+		public function uncheck(bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			if (strtolower($this->tag()) !== 'input' || $this->property('type') !== 'checkbox'):
-				throw new \InvalidArgumentException('uncheck() requires a checkbox input.');
-			endif;
-			return $this->selected() ? $this->click() : $this;
+			return $this->action(__FUNCTION__, static function ($element) {
+				if (strtolower($element->tag()) !== 'input' || $element->property('type') !== 'checkbox'):
+					throw new \InvalidArgumentException('uncheck() requires a checkbox input.');
+				endif;
+				if ($element->selected()) $element->click(wait: false);
+			}, $wait, $timeout, ['element click intercepted', 'element not interactable']);
 		}
 
 		/**
@@ -161,65 +165,72 @@
 			return $this->script('return arguments[0].previousElementSibling;');
 		}
 
-		/** Send text without clearing existing input. */
-		public function type(string $text): self
+		/** Append text, retrying non-interactability and recoverable stale nodes. $wait=false tries once; $timeout is milliseconds. */
+		public function type(string $text, bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->request('POST', '/value', ['text' => $text]);
-			return $this;
+			return $this->action(__FUNCTION__, fn($element) => $element->request('POST', '/value', ['text' => $text]),
+				$wait, $timeout, ['element not interactable']);
 		}
 
-		/** Empty an editable input, textarea, or contenteditable element. */
-		public function clear(): self
+		/** Empty editable content, retrying invalid state, non-interactability and staleness. $timeout is milliseconds. */
+		public function clear(bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->request('POST', '/clear', []);
-			return $this;
+			return $this->action(__FUNCTION__, fn($element) => $element->request('POST', '/clear', []), $wait, $timeout,
+				['invalid element state', 'element not interactable']);
 		}
 
-		/** Null reads the live DOM value; a string clears then types and returns this element. Empty strings only clear. */
-		public function value(?string $value = null): string|self
+		/**
+		 * Null reads immediately; a string clears then types and returns this element. Empty strings only clear.
+		 * Setter retries share one timeout in milliseconds; each replacement is cleared before typing.
+		 * $wait=false makes one attempt. Reads ignore $wait and $timeout.
+		 */
+		public function value(?string $value = null, bool $wait = true, ?float $timeout = null): string|self
 		{
 			if ($value === null) return $this->property('value');
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->clear();
-			return $value === '' ? $this : $this->type($value);
+			$cleared = null;
+			return $this->action(__FUNCTION__, static function ($element) use ($value, &$cleared) {
+				if ($cleared !== $element->id):
+					$element->clear(wait: false);
+					$cleared = $element->id;
+				endif;
+				if ($value !== '') $element->type($value, wait: false);
+			}, $wait, $timeout, ['invalid element state', 'element not interactable']);
 		}
 
-		/** Send Browser::ENTER or a sequence such as Browser::CONTROL . 'a' . Browser::RELEASE. */
-		public function key(string $key): self
+		/** Send Browser::ENTER or Browser::CONTROL . 'a' . Browser::RELEASE, with type()'s retries and millisecond timeout. */
+		public function key(string $key, bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->type($key);
+			return $this->type($key, $wait, $timeout);
 		}
 
 		/**
 		 * Select the first option with the exact DOM value in a native HTML select.
 		 * Multiple selections are retained; an already selected option is not toggled.
-		 * Custom dropdowns need clicks. Disabled selects/options throw.
+		 * Retry disabled selects/options, missing options, interception and recoverable stale nodes.
+		 * Custom dropdowns need clicks. $wait=false tries once; $timeout is milliseconds.
 		 */
-		public function select(string $value): self
+		public function select(string $value, bool $wait = true, ?float $timeout = null): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			if (strtolower($this->tag()) !== 'select'):
-				throw new \InvalidArgumentException('select() requires a native HTML select element.');
-			endif;
-			if (!$this->enabled()):
-				throw new \RuntimeException('Cannot select an option in a disabled select element.');
-			endif;
-			foreach ($this->findAll('option') as $option):
-				// DOM value handles omitted value attributes and avoids interpolating CSS literals.
-				if ($option->property('value') === $value):
-					if (!$option->enabled()):
-						throw new \RuntimeException('Cannot select a disabled option.');
-					endif;
-					if (!$option->selected()):
-						$option->click();
-					endif;
-					return $this;
+			return $this->action(__FUNCTION__, static function ($element) use ($value) {
+				if (strtolower($element->tag()) !== 'select'):
+					throw new \InvalidArgumentException('select() requires a native HTML select element.');
 				endif;
-			endforeach;
-			throw new \RuntimeException('No option matches the requested value: ' . $value);
+				if (!$element->enabled()) return 'Cannot select an option in a disabled select element.';
+				foreach ($element->findAll('option') as $option):
+					// DOM value handles omitted value attributes and avoids interpolating CSS literals.
+					if ($option->property('value') === $value):
+						if (!$option->enabled()) return 'Cannot select a disabled option.';
+						if (!$option->selected()) $option->click(wait: false);
+						return null;
+					endif;
+				endforeach;
+				return 'No option matches the requested value: ' . $value;
+			}, $wait, $timeout, ['element click intercepted', 'element not interactable']);
 		}
 
 		/** Move the mouse to the in-view center without clicking. */
@@ -493,6 +504,55 @@
 		public function resolve(): ?self
 		{
 			return $this->lookup === null ? $this : $this->lookup->element();
+		}
+
+		/**
+		 * Try the captured node first, then recover stale lookups within one polling deadline.
+		 * Operations return null on success or a reason to wait for local state, such as a missing option.
+		 * Only pre-input protocol errors are retryable; lost responses and context failures propagate.
+		 */
+		private function action(string $name, callable $operation, bool $wait, ?float $timeout, array $errors): self
+		{
+			$browser = $this->window->browser();
+			$element = $this;
+			$refresh = false;
+			$lastError = null;
+			$passed = $browser->evaluate(function () use ($browser, $operation, $wait, $errors, &$element, &$refresh, &$lastError) {
+				// A stale captured frame is a context failure, not a reason to re-find an action target.
+				$browser->activate($this->window, $this->frames);
+				try {
+					if ($refresh):
+						$element = $this->lookup->element();
+						if ($element === null):
+							$lastError = new \RuntimeException('No matching element.');
+							return false;
+						endif;
+						$refresh = false;
+					endif;
+					$reason = $operation($element);
+					if ($reason !== null):
+						$lastError = new \RuntimeException($reason);
+						if (!$wait) throw $lastError;
+						return false;
+					endif;
+					$this->id = $element->id;
+					return true;
+				} catch (\RuntimeException $error) {
+					if (!$wait || !preg_match('/^WebDriver HTTP [45][0-9]{2} ([^:]+): /', $error->getMessage(), $match)) throw $error;
+					if (in_array($match[1], ['stale element reference', 'no such element', 'detached shadow root', 'no such shadow root'], true)):
+						if (!$this->canRefresh()) throw $error;
+						$refresh = true;
+					elseif (!in_array($match[1], $errors, true)):
+						throw $error;
+					endif;
+					$lastError = $error;
+					return false;
+				}
+			}, $wait, $timeout);
+			if (!$passed):
+				throw new \RuntimeException('WebDriver action timed out. ' . $this->description() . ' ' . $name . ': ' . $lastError->getMessage(), 0, $lastError);
+			endif;
+			return $this;
 		}
 
 		/** Poll observations and report once; only successful retries replace this element's reference. */
