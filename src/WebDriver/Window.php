@@ -114,16 +114,17 @@
 		 * $visible requires the first match to be displayed. $invert requires no matches,
 		 * or no displayed matches with $visible. Positive success returns an Element;
 		 * inverted success returns null. Unmet conditions throw, after reporting if $assert.
+		 * $verify reports once and returns null on failure through an active Test.
 		 * Repeat the search at pollInterval by default, including replacement nodes.
 		 * $wait=false checks once. $timeout is positive, finite milliseconds or null for
 		 * waitTimeout; ignored without waiting.
 		 * Commands retain their own timeouts. Driver/context errors propagate; only missing
 		 * matches and recoverable stale references are retried. The result retains its lookup.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?Element
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this, $this->frames, $selector, $using))->find($visible, $wait, $invert, $assert, $timeout);
+			return (new Lookup($this, $this->frames, $selector, $using))->find($visible, $wait, $invert, $assert, $timeout, $verify);
 		}
 
 		/** Return a snapshot in document order, including an empty set when nothing matches. */

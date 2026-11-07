@@ -67,7 +67,7 @@
 		}
 
 		/** Evaluate a presence/visibility condition; positive success returns a node, inverse success null. */
-		public function find(bool $visible, bool $wait, bool $invert, bool $assert, ?float $timeout): ?Element
+		public function find(bool $visible, bool $wait, bool $invert, bool $assert, ?float $timeout, bool $verify = false): ?Element
 		{
 			$browser = $this->window->browser();
 			$element = null;
@@ -114,10 +114,10 @@
 			}, $wait, $timeout);
 			$expected = $invert ? ($visible ? 'no visible matches' : 'no matches') : ($visible ? 'a visible first match' : 'a match');
 			$message = $this->description() . ': expected ' . $expected . ', got ' . $actual . '.';
-			if ($assert):
-				$browser->reportAssertion($passed, $message, comparison: ['expected' => $expected, 'actual' => $actual]);
+			if ($assert || $verify):
+				$browser->reportAssertion($passed, $message, $verify, ['expected' => $expected, 'actual' => $actual]);
 			endif;
-			if (!$passed):
+			if (!$passed && !$verify):
 				if (!$wait && $lastError !== null):
 					throw $lastError;
 				endif;

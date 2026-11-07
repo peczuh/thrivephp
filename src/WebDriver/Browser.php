@@ -182,20 +182,22 @@
 		 * Find in the current window/frame. Presence is the default; $visible requires
 		 * the first match to be displayed. $invert instead requires no matches, or no
 		 * displayed matches when $visible is true. Positive success returns an Element;
-		 * inverted success returns null. Unmet conditions throw, even with a recorder.
+		 * inverted success returns null. Unmet conditions throw unless $verify records
+		 * a failed assertion and returns null through an active Test.
 		 * By default, repeat at pollInterval; $wait=false checks once. $timeout is
 		 * positive, finite milliseconds, defaulting to waitTimeout; ignored
 		 * without $wait. In-flight commands retain their own timeouts.
-		 * $assert reports one final result through the recorder.
+		 * $assert or $verify reports one final result through the recorder, never one per poll.
+		 * $verify takes precedence over $assert; failures still throw outside an active Test.
 		 * Invalid selectors and unrelated driver errors propagate without assertion reports.
 		 * Returned elements retain this lookup for waiting assertions; see Window::find().
 		 * $using defaults to 'css selector'; other W3C strategies are 'xpath', 'tag name',
 		 * 'link text', and 'partial link text'. For scoped XPath, use a relative expression.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?Element
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->window()->find($selector, $using, $visible, $wait, $invert, $assert, $timeout);
+			return $this->window()->find($selector, $using, $visible, $wait, $invert, $assert, $timeout, $verify);
 		}
 
 		/** Return a snapshot of matching elements in document order, possibly empty. */

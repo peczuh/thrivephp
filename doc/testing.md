@@ -576,8 +576,9 @@ affect other suites. No reference parameter is needed to change object propertie
 They are also named arguments on `WebDriver::browser()` and direct `Browser`
 construction. A per-call `timeout:` overrides the applicable retry budget;
 `wait: false` checks once and ignores the timeout. `find(assert: true)` and
-`Element::wait(assert: true)` still use `waitTimeout`, because assertion recording
-does not change the operation's polling category. Each in-flight command retains
+`Element::wait(assert: true)` still use `waitTimeout`, as do their `verify: true`
+forms. Assertion recording does not change the operation's polling category.
+Each in-flight command retains
 its own I/O timeout; polling deadlines are checked between attempts.
 
 Browser assertions automatically report to the current case or suite phase and
@@ -601,9 +602,32 @@ the final result is recorded once. Pass `wait: false` for a single check. `count
 refreshes retained searches by default; explicit `ElementSet` snapshots without
 a retained search require `wait: false`.
 Explicit wait timeouts are milliseconds, distinct from the command timeout's
-seconds. Invalid patterns and driver errors still propagate; `find()` and
-`Element::wait()` remain stopping prerequisites. Direct `$this->test->verify(...)`
-is also available for boolean conditions.
+seconds. Invalid patterns and driver errors still propagate. Direct
+`$this->test->verify(...)` is also available for boolean conditions.
+
+`find()` on a browser, window, element, or shadow root and `Element::wait()`
+are stopping prerequisites by default. They do not count as assertions unless
+`assert: true` or `verify: true` is supplied. Either flag records exactly one final
+result after success or expiry, regardless of the number of polling attempts.
+`assert: true` stops on failure; `verify: true` records the failure and continues
+under an active `Test`. If both flags are true, verification takes precedence.
+
+```php
+$optional = $this->browser->find('#notice', visible: true, verify: true);
+if ($optional !== null) {
+    $optional->textContains('Saved');
+}
+$element->wait(visible: true, timeout: 1000, verify: true);
+```
+
+A failed verified `find()` returns null. Positive success returns the matching
+element; inverted success also returns null. A verified `Element::wait()` returns
+the original element on success or an unmet condition, without replacing its node
+or making it usable. Positive original-node waits still throw on staleness;
+inverted waits accept a stale node as absent. Without an active `Test`, failed
+verifications throw. Invalid selectors, session errors, and context-restoration
+errors remain exceptions rather than failed assertions. Browser/window callback
+`wait()` remains a throwing utility and has no assertion or verification flags.
 
 Application cleanup must tolerate incomplete setup. `SuiteBrowser` keeps a
 nullable driver reference so its own cleanup also works after configuration or

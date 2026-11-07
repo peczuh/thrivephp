@@ -50,12 +50,13 @@
 		 * Find a descendant using Browser::find() conditions, millisecond timeouts and reporting.
 		 * Scoped XPath should be relative, e.g. .//input. Waiting defaults to true and
 		 * re-finds this parent when it has a retained lookup; $wait=false checks once.
-		 * Positive success returns a child; inverted success null.
+		 * Positive success returns a child; inverted success null. $verify records one
+		 * assertion and returns null on an unmet condition through an active Test.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?self
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout, $verify);
 		}
 
 		/** Return matching descendants in document order, possibly an empty collection. */
@@ -356,10 +357,13 @@
 		 * re-find replacements. Return this element on success; a stale reference stays unusable.
 		 * Poll at pollInterval. $timeout is positive, finite milliseconds; null uses
 		 * waitTimeout. In-flight commands retain their own timeouts. $assert reports
-		 * one final result. Expiry always throws. Staleness immediately fails positive
-		 * conditions; context and unrelated driver errors always propagate.
+		 * one final result. $verify also reports once, returning this element on expiry
+		 * through an active Test; this does not make the element usable. Otherwise expiry throws.
+		 * $verify takes precedence over $assert; failures still throw outside an active Test.
+		 * Staleness immediately fails positive conditions; context and unrelated driver
+		 * errors always propagate.
 		 */
-		public function wait(bool $visible = false, bool $invert = false, bool $assert = false, ?float $timeout = null): self
+		public function wait(bool $visible = false, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$browser = $this->window->browser();
@@ -387,10 +391,10 @@
 			}, true, $timeout);
 			$expected = $invert ? ($visible ? 'hidden or stale' : 'stale') : ($visible ? 'visible' : 'present');
 			$message = $this->description() . ': expected ' . $expected . ', got ' . $actual . '.';
-			if ($assert):
-				$browser->reportAssertion($passed, $message, comparison: ['expected' => $expected, 'actual' => $actual]);
+			if ($assert || $verify):
+				$browser->reportAssertion($passed, $message, $verify, ['expected' => $expected, 'actual' => $actual]);
 			endif;
-			if (!$passed):
+			if (!$passed && !$verify):
 				throw new \RuntimeException('WebDriver wait timed out. ' . $message);
 			endif;
 			return $this;

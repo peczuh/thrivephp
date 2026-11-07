@@ -448,3 +448,46 @@ foreach ([false, true] as $exhausted) {
         'Action retry output or final exception was lost.');
 }
 echo "PASS: action retries retain one step, final-only captures, author source and original timeout diagnostics\n";
+
+foreach (['find', 'wait'] as $operation) {
+    foreach ([false, true] as $exhausted) {
+        $browser = new class extends ReportBrowser {
+            public int $polls = 0;
+            public bool $exhausted = false;
+            public function sessionRequest(string $method, string $path, ?array $body = null, float $extraTimeout = 0): mixed
+            {
+                if ($path === '/element/input/displayed') return ++$this->polls >= 2 && !$this->exhausted;
+                return parent::sessionRequest($method, $path, $body, $extraTimeout);
+            }
+        };
+        $browser->exhausted = $exhausted;
+        $line = null;
+        [$status, $console, $record] = runChecks(['suite' => function (Runner $test) use ($browser, $operation, &$line) {
+            return function () use ($test, $browser, $operation, &$line) {
+                $test->browserSession(['capabilities' => []], fn () => $browser->screenshot());
+                $line = __LINE__ + 2;
+                $result = $operation === 'find'
+                    ? $browser->find('#notice', visible: true, timeout: 1100, verify: true)
+                    : (new Element($browser->window(), 'input'))->wait(visible: true, timeout: 1100, verify: true);
+                check(($result === null) === ($operation === 'find' && $browser->exhausted), 'Wrong verification return value.');
+                $browser->trace[] = ['continued', null];
+            };
+        }]);
+        $steps = $record['suites'][0]['attempts'][0]['steps'];
+        check($status === (int)$exhausted && count($steps) === 1 && $browser->polls >= 2
+            && count($steps[0]['assertions']) === 1 && $steps[0]['error'] === null
+            && $record['totals']['assertionsPassed'] === (int)!$exhausted
+            && $record['totals']['assertionsFailed'] === (int)$exhausted,
+            'Wait verification did not record one final assertion.');
+        check($steps[0]['location']['file'] === 'test/test-report.php'
+            && $steps[0]['location']['line'] === $line + (int)($operation === 'wait')
+            && $steps[0]['assertions'][0]['location'] === $steps[0]['location'],
+            'Wait verification lost its author location.');
+        check(count($steps[0]['screenshots']) === (int)$exhausted
+            && count(array_filter($browser->trace, fn ($entry) => $entry[1] === '/screenshot')) === (int)$exhausted
+            && (!$exhausted || $browser->trace[count($browser->trace) - 2][1] === '/screenshot')
+            && substr_count($console, 'AssertionFailure:') === (int)$exhausted,
+            'Wait verification duplicated diagnostics or captured after continuation.');
+    }
+}
+echo "PASS: wait verification polls before one result, captures before continuation and retains author source\n";

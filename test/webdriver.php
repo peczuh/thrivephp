@@ -385,6 +385,110 @@ foreach (['element', 'browser URL', 'window URL', 'count', 'empty snapshot', 'fi
 	});
 endforeach;
 
+foreach (['browser', 'window', 'element', 'shadow'] as $scope):
+	scenario("$scope find verification records once, returns null on failure and leaves assert stopping", function ($listener) use ($scope) {
+		createSession($listener);
+		$path = '/session/session%2F1' . match ($scope) { 'element' => '/element/parent', 'shadow' => '/shadow/root', default => '' };
+		foreach ([true, false] as $record) exchange($listener, 'POST', $path . '/element', ['using' => 'css selector', 'value' => '#ready'], [Element::REFERENCE => 'ready']);
+		exchange($listener, 'POST', $path . '/element', ['using' => 'css selector', 'value' => '#missing'], ['error' => 'no such element', 'message' => 'absent'], 404);
+		exchange($listener, 'POST', $path . '/element', ['using' => 'css selector', 'value' => '#hidden'], [Element::REFERENCE => 'hidden']);
+		exchange($listener, 'GET', '/session/session%2F1/element/hidden/displayed', null, false);
+		exchange($listener, 'POST', $path . '/elements', ['using' => 'css selector', 'value' => '#gone'], []);
+		exchange($listener, 'POST', $path . '/elements', ['using' => 'css selector', 'value' => '#present'], [[Element::REFERENCE => 'present']]);
+		exchange($listener, 'POST', $path . '/element', ['using' => 'css selector', 'value' => '#missing'], ['error' => 'no such element', 'message' => 'absent'], 404);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($scope) {
+		$continued = false;
+		$stopped = true;
+		[$status, $output, $record] = runChecks(['check' => function () use ($url, $scope, &$continued, &$stopped) {
+			$browser = new Browser($url, 'firefox');
+			try {
+				$target = match ($scope) {
+					'browser' => $browser, 'window' => $browser->window(),
+					'element' => new Element($browser->window(), 'parent'),
+					'shadow' => new ShadowRoot($browser->window(), 'root'),
+				};
+				verify($target->find('#ready', wait: false, verify: true)->id() === 'ready', 'Successful verification lost its element.');
+				$target->find('#ready', wait: false);
+				verify($target->find('#missing', timeout: 20, verify: true) === null, 'Expired verification did not return null.');
+				verify($target->find('#hidden', visible: true, wait: false, assert: true, verify: true) === null, 'Hidden verification did not return null.');
+				verify($target->find('#gone', wait: false, invert: true, verify: true) === null, 'Successful inverse verification did not return null.');
+				verify($target->find('#present', wait: false, invert: true, verify: true) === null, 'Failed inverse verification did not return null.');
+				$continued = true;
+				$target->find('#missing', wait: false, assert: true);
+				$stopped = false;
+			} finally {
+				$browser->quit();
+			}
+		}]);
+		verify($status === 1 && $continued && $stopped && str_contains($output, 'Assertions: 2 passed, 4 failed')
+			&& !str_contains($output, 'Execution error'), $output);
+		$steps = array_values(array_filter($record['suites'][0]['attempts'][0]['steps'], fn($step) => $step['label'] === 'find'));
+		verify(array_map(fn($step) => count($step['assertions']), $steps) === [1, 0, 1, 1, 1, 1, 1]
+			&& array_column($steps, 'error') === array_fill(0, 7, null), 'Lookup verification duplicated assertions or errors.');
+	});
+endforeach;
+
+scenario('original-element wait verification continues while preserving identity and explicit assertion counts', function ($listener) {
+	createSession($listener);
+	foreach ([false, false, true] as $visible) exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, $visible);
+	foreach ([true, false] as $record) exchange($listener, 'GET', '/session/session%2F1/element/node/name', null, 'input');
+	exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, false);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$continued = false;
+	$stopped = true;
+	[$status, $output] = runChecks(['check' => function () use ($url, &$continued, &$stopped) {
+		$browser = new Browser($url, 'firefox');
+		try {
+			$element = new Element($browser->window(), 'node');
+			verify($element->wait(visible: true, timeout: 20, verify: true) === $element, 'Expired verification lost its receiver.');
+			verify($element->wait(visible: true, invert: true, verify: true) === $element, 'Hiddenness verification lost its receiver.');
+			$element->wait(visible: true, assert: true, verify: true);
+			$element->wait(invert: true, timeout: 20, verify: true);
+			$element->wait();
+			verify($element->id() === 'node', 'Original-node wait changed identity.');
+			$continued = true;
+			$element->wait(visible: true, assert: true, timeout: 20);
+			$stopped = false;
+		} finally {
+			$browser->quit();
+		}
+	}]);
+	verify($status === 1 && $continued && $stopped && str_contains($output, 'Assertions: 2 passed, 3 failed')
+		&& !str_contains($output, 'Execution error'), $output);
+});
+
+scenario('wait verification failures still throw without an active Test', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#missing'], ['error' => 'no such element', 'message' => 'absent'], 404);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, false);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	expectError(fn() => $browser->find('#missing', wait: false, verify: true), 'assertion failed');
+	expectError(fn() => (new Element($browser->window(), 'node'))->wait(visible: true, timeout: 20, verify: true), 'assertion failed');
+	$browser->quit();
+});
+
+scenario('wait verification propagates selector, session and stale-context errors without assertion reports', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '[broken'], ['error' => 'invalid selector', 'message' => 'broken'], 400);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], ['error' => 'invalid session id', 'message' => 'gone'], 404);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, ['error' => 'stale element reference', 'message' => 'removed'], 404);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], ['error' => 'no such frame', 'message' => 'removed'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$results = [];
+	$browser = new RecordingBrowser($url, 'firefox', record: function ($passed) use (&$results) { $results[] = $passed; });
+	expectError(fn() => $browser->find('[broken', verify: true), 'invalid selector');
+	expectError(fn() => $browser->find('#node', verify: true), 'invalid session id');
+	expectError(fn() => (new Element($browser->window(), 'node'))->wait(visible: true, verify: true), 'stale element reference');
+	expectError(fn() => (new Element($browser->window(), 'node', [0]))->wait(verify: true), 'no such frame');
+	verify($results === [], 'Driver failures became verification mismatches.');
+	$browser->quit();
+});
+
 $assertionCases = [
 	['visible', [], '/displayed', true, true, 'expected true, got true'],
 	['visible', [], '/displayed', false, false, 'expected true, got false'],

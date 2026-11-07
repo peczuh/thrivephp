@@ -25,12 +25,13 @@
 		 * Find within this root using Browser::find() conditions and millisecond timeouts.
 		 * Waiting defaults to true and re-finds the host when it has a lookup;
 		 * $wait=false checks once. Positive success returns an Element; inverted success
-		 * null. Supported strategies depend on the driver.
+		 * null. $verify reports once and returns null on an unmet condition through an
+		 * active Test. Supported strategies depend on the driver.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
+		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?Element
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout, $verify);
 		}
 
 		/** Return matching descendants in document order, possibly empty. */
