@@ -563,7 +563,7 @@ scenario('assertions throw on failure without a recorder and preserve the sessio
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	$element = $browser->find('#name');
-	verify($element->setValue('Jane')->valueEquals('Jane', wait: false)->visible(wait: false) === $element, 'Action/assertion chain failed.');
+	verify($element->value('Jane')->valueEquals('Jane', wait: false)->visible(wait: false) === $element, 'Action/assertion chain failed.');
 	expectError(fn() => $element->textEquals('Expected', wait: false, verify: true), "WebDriver assertion failed: Selector '#name' using 'css selector' text: expected 'Expected', got 'Actual'.");
 	expectError(fn() => $browser->findAll('.missing')->countEquals(1, wait: false), 'expected 1, got 0');
 	expectError(fn() => $browser->urlMatches('~/expected$~', wait: false), "got 'https://example.test/actual'");
@@ -1724,25 +1724,31 @@ foreach (['name', 'displayed'] as $endpoint):
 	});
 endforeach;
 
-scenario('value replacement restores element context and preserves append behavior', function ($listener) {
+scenario('value reads live properties and replaces input in its captured context', function ($listener) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
 	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#name'], [Element::REFERENCE => 'input']);
 	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => null], null);
 	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	exchange($listener, 'GET', '/session/session%2F1/element/input/property/value', null, 'Original');
+	exchange($listener, 'GET', '/session/session%2F1/element/input/property/value', null, 'Changed');
 	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], null);
 	exchange($listener, 'POST', '/session/session%2F1/element/input/value', ['text' => 'Jane €'], null);
 	exchange($listener, 'POST', '/session/session%2F1/element/input/value', ['text' => ' Doe'], null);
 	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/input/value', ['text' => '0'], null);
 	exchange($listener, 'POST', '/session/session%2F1/element/input/clear', [], ['error' => 'invalid element state', 'message' => 'readonly'], 400);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	$element = $browser->switchFrame(0)->find('#name');
 	$browser->defaultFrame();
-	verify($element->setValue('Jane €')->type(' Doe') === $element, 'Value replacement lost receiver.');
-	verify($element->setValue('') === $element, 'Empty replacement should only clear.');
-	expectError(fn() => $element->setValue('blocked'), 'invalid element state');
+	verify($element->value() === 'Original' && $element->value(null) === 'Changed', 'Getter did not read the current DOM value.');
+	verify($element->value('Jane €')->type(' Doe') === $element, 'Value replacement lost receiver.');
+	verify($element->value('') === $element, 'Empty replacement should only clear.');
+	verify($element->value('0') === $element, 'Zero should set rather than read.');
+	expectError(fn() => $element->value('blocked'), 'invalid element state');
 	$browser->quit();
 });
 

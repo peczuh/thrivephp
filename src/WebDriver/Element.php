@@ -177,9 +177,10 @@
 			return $this;
 		}
 
-		/** Clear then type a replacement value; an empty string only clears. Return this element. */
-		public function setValue(string $value): self
+		/** Null reads the live DOM value; a string clears then types and returns this element. Empty strings only clear. */
+		public function value(?string $value = null): string|self
 		{
+			if ($value === null) return $this->property('value');
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->clear();
 			return $value === '' ? $this : $this->type($value);

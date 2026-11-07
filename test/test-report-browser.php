@@ -38,7 +38,7 @@ return new class($test) extends SuiteBrowser {
     }
     #[Test('Retry a body', retry: 1)]
     public function retry_body(): void {
-        $this->browser->find('#name')->setValue('Jane </script>');
+        $this->browser->find('#name')->value('Jane </script>');
         $this->browser->find('#name')->valueEquals('Jane </script>');
         $this->test->assert(++$this->attempt === 2, 'second attempt passes');
     }

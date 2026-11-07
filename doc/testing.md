@@ -131,8 +131,8 @@ record steps automatically. Pure observations such as `text()`, `property()` get
 and `displayed()` do not. Inputs are recorded without redaction.
 
 ```php
-$this->browser->find('#name')->setValue('Jane');
-// Two steps: find, then setValue. Internal clear/type calls do not add steps.
+$this->browser->find('#name')->value('Jane');
+// Two steps: find, then value. Internal clear/type calls do not add steps.
 ```
 
 The recorder suppresses nested operations across browser objects, including calls
@@ -615,6 +615,9 @@ if ($element->displayed()) {
 }
 
 $element->property('value');                 // Get the live DOM value.
+$element->value();                           // Read the live value; null also reads.
+$element->value('example');                  // Clear then type, returning the element.
+$element->value('');                         // Clear without typing.
 $element->property('value', 'example');      // Set and return the element.
 $element->property('checked', false);
 $element->property('customData', null);      // Assign JavaScript null.
@@ -624,7 +627,10 @@ $element->attribute('disabled', '');         // Set an empty attribute.
 $element->attribute('disabled', null);       // Remove the attribute.
 ```
 
-Supplying a second argument selects setter behavior, including explicit `null`.
+`value()` replaces the former `setValue()` method. Its getter is an observation;
+its setter records one step and uses native clear/type commands, including for `'0'`.
+
+For `property()` and `attribute()`, supplying a second argument selects setter behavior, including explicit `null`.
 Setters return the original element and dispatch no automatic `input` or `change`
 events. Property values use the usual script argument/reference conversion.
 Attribute getters retain WebDriver's boolean-attribute behavior of `'true'` or null.

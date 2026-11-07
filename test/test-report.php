@@ -57,7 +57,7 @@ class ReportBrowser extends Browser
 /** A helper call must retain this source location rather than the owning case invocation. */
 function reportHelper(Element $element): void
 {
-    $element->setValue('Jane </script><script>window.injected=true</script>');
+    $element->value('Jane </script><script>window.injected=true</script>');
 }
 
 $browser = null;
@@ -84,6 +84,8 @@ Settings::$data['test']['screenshots']['suites'] = 'always';
             reportHelper($element);
             $element->valueEquals('Jane </script><script>window.injected=true</script>', wait: false);
             $element->property('value');
+            $element->value();
+            $element->value(null);
             $element->firstChild();
             $this->browser->sleep(0);
             $this->browser->trace[] = ['body returned'];
@@ -120,7 +122,7 @@ $first = $suite['cases'][0]['attempts'][0];
 $second = $suite['cases'][1]['attempts'][0];
 check($record['environment']['browserVersion'] === '123.4' && $record['environment']['platform'] === 'test-platform'
     && $suite['session']['sessionId'] === 'session-1', 'Session capabilities were lost.');
-check(array_column($first['steps'], 'label') === ['assert', 'find', 'setValue', 'valueEquals', 'sleep', 'assert'],
+check(array_column($first['steps'], 'label') === ['assert', 'find', 'value', 'valueEquals', 'sleep', 'assert'],
     'Nested actions or observations became steps: ' . json_encode(array_column($first['steps'], 'label')));
 check(array_column($second['steps'], 'label') === ['assert', 'find', 'textEquals', 'wait', 'find', 'click', 'assert'],
     'Callback/internal steps were not suppressed or the guard leaked after failure.');
