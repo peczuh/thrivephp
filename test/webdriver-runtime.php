@@ -493,7 +493,7 @@ try {
 				return $suite;
 			}], browser: 'firefox');
 			check($status === 1 && str_contains($output, $skip ? 'Cases: 0 passed, 1 failed, 1 skipped' : 'Cases: 1 passed, 1 failed, 0 skipped'), $output);
-			check(str_contains($output, 'SKIP suite > later browser case (previous case failed)') === $skip, $output);
+			check(str_contains($output, 'SKIP  CASE  suite > second: later browser case (previous case failed)') === $skip, $output);
 			check($suite->trace === ($skip ? ['continued', 'cleanup'] : ['continued', 'second', 'cleanup']), json_encode($suite->trace));
 			check(!$suite->process->running() && !$suite->browser->active(), 'Failure leaked a driver or session.');
 			check(count(array_filter(events($log), fn($event) => ($event['method'] ?? '') === 'DELETE')) === 1, 'Browser cleanup was skipped or repeated.');
@@ -524,9 +524,9 @@ try {
 			$suite->fail = !$suites;
 			return $suites[] = $suite;
 		}], browser: 'firefox');
-		check($status === 0 && str_contains($output, 'PASS Retry browser suite (attempt 2)')
+		check($status === 0 && str_contains($output, 'PASS  SUITE suite: Retry browser suite (attempt 2/2)')
 			&& str_contains($output, 'Cases: 2 passed, 0 failed, 0 skipped')
-			&& str_contains($output, 'SKIP Retry browser suite > later browser case (previous case failed)')
+			&& str_contains($output, 'SKIP  CASE  suite (attempt 1/2) > later: later browser case (previous case failed)')
 			&& str_contains($output, 'Assertions: 2 passed, 0 failed'), $output);
 		check(count($suites) === 2 && $suites[0]->browser !== $suites[1]->browser
 			&& $suites[0]->settings !== $suites[1]->settings, 'Retry reused browser or configuration.');
@@ -588,7 +588,7 @@ try {
 				},
 				'next' => function (TestRunner $test) { $test->assert(true, 'next file runs'); },
 			], headless: true);
-			check($status === 1 && str_contains($output, 'PASS next') && in_array('cleanup', $suite->trace, true), $output);
+			check($status === 1 && str_contains($output, 'PASS  SUITE next') && in_array('cleanup', $suite->trace, true), $output);
 			check($suite->process === null || !$suite->process->running(), 'Failure leaked a driver.');
 			check(!isset($suite->browser) || !$suite->browser->active(), 'Failure leaked a browser session.');
 			if (in_array($failure, ['config', 'exit', 'session-error'], true)):

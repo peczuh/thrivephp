@@ -43,6 +43,12 @@
 			return count($this->elements);
 		}
 
+		/** The retained query, or a description of an explicitly constructed snapshot. */
+		public function description(): string
+		{
+			return $this->lookup?->description() ?? 'element set';
+		}
+
 		/**
 		 * Assert the count and return this set. By default, repeat the retained search every
 		 * 100 ms and adopt membership on success. $wait=false checks the snapshot once;
@@ -54,6 +60,7 @@
 		 */
 		public function countEquals(int $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if ($wait && $this->lookup === null):
 				throw new \LogicException('Cannot wait for an ElementSet count without a retained search.');
 			endif;
@@ -81,12 +88,12 @@
 			$passed = $this->browser === null ? $condition() : $this->browser->evaluate($condition, $wait, $timeout);
 			$message = 'Element count: expected ' . $expected . ', got ' . $actual . '.';
 			if ($this->browser !== null):
-				$this->browser->reportAssertion($passed, $message, $verify);
-			elseif (($test = \ThriveData\ThrivePHP\Test::active()) !== null):
+				$this->browser->reportAssertion($passed, $message, $verify, ['expected' => $expected, 'actual' => ctype_digit($actual) ? (int)$actual : $actual]);
+			elseif (class_exists(\ThriveData\ThrivePHP\Test::class) && ($test = \ThriveData\ThrivePHP\Test::active()) !== null):
 				if ($verify):
-					$test->verify($passed, $message);
+					$test->verify($passed, $message, ['expected' => $expected, 'actual' => (int)$actual]);
 				else:
-					$test->assert($passed, $message);
+					$test->assert($passed, $message, ['expected' => $expected, 'actual' => (int)$actual]);
 				endif;
 			elseif (!$passed):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);

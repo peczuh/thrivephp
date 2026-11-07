@@ -25,6 +25,7 @@ abstract class SuiteBrowser extends Suite
             timeout: $config->timeout,
             capabilities: $config->capabilities,
         );
+        $this->test->browserSession($this->browser->session(), fn () => $this->browser->screenshot());
     }
 
     /** Driver creation is overridable so protocol fixtures can exercise the real lifecycle. */

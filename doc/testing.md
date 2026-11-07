@@ -1,6 +1,6 @@
 # Test suites
 
-Requires PHP 8.5 or later. `ThriveData\ThrivePHP\Test` runs PHP files below `/test/checks` by default. Each
+Requires PHP 8.5 or later. `ThriveData\ThrivePHP\Test` runs PHP files below `<project root>/test/cases` by default. Each
 file receives the runner as `$test` and returns either a `Test\Suite` or an
 existing callable check. A file's relative path, without `.php`, is its name.
 
@@ -15,6 +15,160 @@ exit($test->run());
 Pass names to `run(['layouts', 'login'])` to select files. A nonzero return value
 means at least one file failed. Callable checks continue to receive the runner
 as their argument and report one result per file.
+
+## Paths and reports
+
+The constructor accepts the project root only. The former `$pathChecks` argument
+has been removed. Paths resolve when `run()` starts, after application bootstrap:
+
+| Setting | Default | Anchor for relative values |
+| --- | --- | --- |
+| `test.basepath` | `<project root>/test` | Project root |
+| `test.casepath` | `<basepath>/cases` | Test base |
+| `test.savepath` | `<basepath>/runs` | Test base |
+
+A leading `/` means an absolute path. Subclasses used by fixtures may override
+the protected `basePath()`, `casePath()`, and `savePath()` methods. The parent
+resolves the run directory once and passes it to workers.
+
+Every run produces live console output and both report files:
+
+```text
+<savepath>/YYYY-MM-DD_HH-MM-SS/
+    report.json
+    report.html
+    screenshots/
+```
+
+The timestamp uses local time. There is no session suffix. An existing run
+directory causes an exception before any suites execute; files are never overwritten
+by a later run. Move or archive the entire run directory to retain its images.
+
+### Console
+
+Suite and case starts and results print live, labeled `SUITE` or `CASE`. Completed
+cases and suites include duration; cases also include assertion counts.
+Suite entries use `file: description`; case entries use
+`file > method: description`. Matching names and descriptions appear only once.
+The initial suite start identifies the file before its description is loaded.
+Failed steps print as soon as they finish, labeled `STEP`, with their suite/case context,
+phase, duration, supplied values, assertion messages and comparisons, author
+locations with source excerpts, and screenshot paths. Failed assertions print
+once as `AssertionFailure: message`. Unexpected exceptions also include stacks.
+Set `test.console.steps` to `true` to print successful steps as they finish too.
+Its default is `false`; a failing case or suite does not expose passing steps.
+Each step's diagnostic block prints together, including with parallel workers.
+Non-step execution errors print when received. Retry notices identify the failed
+attempt as `attempt X/Y`, where Y is the configured maximum, including the initial
+attempt. Case and suite retry contexts and results use the same numbering.
+Completed steps are not replayed at retries or in final results.
+
+Failure screenshots render inline on a Ghostty TTY through the Kitty graphics
+protocol. Redirected output and other terminals show the relative image path.
+Successful screenshots always appear as paths. The final summary includes
+environment information, totals, duration, and the output directory. Console
+source, screenshot, and report paths within the project are displayed relative
+to `environment.root`. JSON and HTML screenshot paths remain run-relative so
+the report directory can be moved with its images.
+
+### JSON and HTML
+
+Both files use the same event-built record. `report.json` is pretty-printed with
+stable key order. Schema version 1 contains `schemaVersion`, `generatedAt`,
+`startedAt`, `endedAt`, `duration`, `status`, `environment`, `totals`, and `suites`.
+Durations are seconds. Timestamps include the local UTC offset.
+
+The hierarchy is suite, suite attempt, case, case attempt, step. Arrays retain
+all retry attempts; totals count only final outcomes. IDs derive from the file
+identity, attempt indexes, method, and step ordinal, independently of descriptions.
+IDs retain readable file and method names without URL encoding, for example
+`folder/one_case/a1/retry_body/a2/s1`.
+Suite and case records store `maxAttempts` as one plus their configured retries;
+each attempt stores its one-based `index`. HTML labels attempts as `Attempt X/Y`,
+including when execution succeeds before using every allowed attempt.
+Filtered suites are marked `FILTERED` and excluded from totals. Executed results
+use `PASS`, `FAIL`, and `SKIP`. Each attempt has a flat step list tagged with
+`suite-setup`, `case-setup`, `test`, `case-teardown`, or `suite-teardown`.
+
+Steps contain the operation label, target, supplied values, status, timing,
+location, assertions, error, and screenshots. Comparison assertions retain typed
+`expected` and `actual` values. Plain assertions retain their boolean result and
+message. Failed assertions add `class: "AssertionFailure"` and retain the author's
+location, without a duplicate step error or instrumentation stack. Source locations
+include a short excerpt. Unexpected errors contain their class, message, location,
+stack and previous exception. Capture diagnostics do not change
+the result. Partial worker records retain completed steps and mark interrupted
+work as failed, with remaining cases skipped.
+
+`environment.root` records the resolved absolute project root. Suite file paths,
+source-location `file` fields, and stack-frame paths beneath that root are stored
+relative to it; join the root and relative path to reconstruct the absolute path
+without project configuration. Files outside that root retain absolute paths.
+Source excerpts are still read from the original files before paths are shortened.
+
+`environment.project` identifies the project in the HTML banner and browser title.
+It resolves at run time from `run(title: 'Sunnyside')`, then `test.project`, then
+the `name` in the project root's `composer.json`, using the first non-null value.
+If none is available, it is null and the HTML title remains "Test report" without
+a project prefix. Directory names are not used as project names.
+
+Environment information includes PHP, OS, worker count, selected browser,
+headless mode and `site.url`. Browser version and platform come from negotiated
+session capabilities; each suite attempt also keeps its session ID and capabilities.
+Runs without browser sessions have null browser version and platform.
+
+`report.html` embeds its viewer code and the same record in
+`<script id="test-report-data" type="application/json">`. Embedded JSON uses
+`JSON_HEX_TAG`, preserving literal HTML in inputs without allowing it to terminate
+the data element. The viewer provides dashboard totals, search and status filters,
+expandable suites/cases/steps, retry history, failure details, and screenshot zoom.
+It loads no remote assets. Screenshots use paths relative to the run folder.
+
+### Steps and screenshots
+
+Browser actions, comparisons, waits, `find()`, `findAll()`, `script()` and `sleep()`
+record steps automatically. Pure observations such as `text()`, `property()` getters
+and `displayed()` do not. Inputs are recorded without redaction.
+
+```php
+$this->browser->find('#name')->setValue('Jane');
+// Two steps: find, then setValue. Internal clear/type calls do not add steps.
+```
+
+The recorder suppresses nested operations across browser objects, including calls
+inside wait callbacks. Each outer operation preserves its return value and errors.
+Standalone WebDriver usage records nothing. Actions do not increment assertions;
+`find(assert: true)` and comparison methods retain their assertion counting.
+
+| Setting | Default | Allowed values |
+| --- | --- | --- |
+| `test.screenshots.steps` | `failure` | `off`, `failure`, `always` |
+| `test.screenshots.cases` | `always` | `off`, `failure`, `always` |
+| `test.screenshots.suites` | `off` | `off`, `failure`, `always` |
+
+`SuiteBrowser` supplies the screenshot source; ordinary `Suite` does not create
+browser captures. A failure capture happens before another operation proceeds,
+including after a continuing verification failure. Successful case captures occur
+after the body and before `CaseAfter`. Case teardown failures retain an additional
+capture. Enabled suite captures occur after cases and before `SuiteAfter`.
+Skipped cases and suites capture nothing. Retried attempts retain their images.
+An action failure and its case can reference the same PNG.
+
+Workers write PNG bytes to disk and send paths and dimensions over TCP. Filenames
+join suite and case names, both retry indexes, step ordinal when applicable,
+and capture point/outcome with `__`, for example
+`folder-one_case__a1__failure_body__a1__s2__fail.png`. Name characters outside
+`A–Z`, `a–z`, `0–9`, `.`, `_`, and `-` become `-`; filenames are not URL-encoded.
+Suite paths must remain distinct after these replacements.
+Capture failures produce a diagnostic in the report
+without replacing the test's result.
+
+Reporting regression checks are `php test/test-report.php` and
+`php test/test-parallel.php`. For installed-browser coverage, run
+`php test/test-report-browser.php chrome 2` or
+`php test/test-report-browser.php firefox 1`. These use isolated `data:` pages,
+exercise intentional failures and retries, and print a retained artifact directory
+after checking the final counts and PNG files.
 
 ## Selecting files, cases, and tags
 
@@ -160,7 +314,7 @@ assertion to the assertion count.
 
 `SuiteConfig::$idleTimeout` is also nullable with no timeout by default. In parallel
 mode, a positive finite value limits seconds without structured worker progress.
-Hook boundaries, case boundaries, and assertions reset it; incidental stdout/stderr
+Hook boundaries, case boundaries, assertions, and recorded step events reset it; incidental stdout/stderr
 does not. A suite can exceed this duration overall while continuing to make
 progress. This timeout starts when the worker reports its suite configuration,
 so application loading and `configure()` are not covered. In-process serial runs
@@ -342,7 +496,7 @@ are counted separately from individual cases and can fail the suite even when
 all cases pass. An empty suite fails with `No cases found.` unless explicitly skipped.
 
 Case results appear as `PASS layouts > The initial collection contains one item`.
-Each file also has an overall result. `Checks` counts file results; `Cases` counts
+Each file also has an overall result. `Suites` counts file results; `Cases` counts
 suite cases, including cases skipped after suite setup fails; `Assertions` counts
 all recorded results, including hooks and legacy checks.
 

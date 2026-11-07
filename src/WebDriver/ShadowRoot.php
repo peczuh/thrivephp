@@ -29,12 +29,14 @@
 		 */
 		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return matching descendants in document order, possibly empty. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->all(false);
 		}
 

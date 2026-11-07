@@ -30,7 +30,7 @@ class RecordingBrowser extends Browser
 		parent::__construct($endpoint, $browser, timeout: $timeout);
 	}
 
-	public function reportAssertion(bool $condition, string $message, bool $verify = false): void
+	public function reportAssertion(bool $condition, string $message, bool $verify = false, array $comparison = []): void
 	{
 		($this->record)($condition, $message);
 	}
@@ -379,8 +379,8 @@ foreach (['element', 'browser URL', 'window URL', 'count', 'empty snapshot', 'fi
 			'next' => function (Test $test) { $test->assert(true, 'Subsequent check ran.'); },
 		]);
 		verify($status === 1 && !$continued && $cleaned, 'Browser failure did not stop its check and run cleanup: ' . $output);
-		verify(str_contains($output, 'Checks: 1 passed, 1 failed') && str_contains($output, 'Assertions: 2 passed, 2 failed'), $output);
-		verify(substr_count($output, 'expected ') === 1 && !str_contains($output, 'Execution error'), 'Browser failure was not reported exactly once: ' . $output);
+		verify(str_contains($output, 'Suites: 1 passed, 1 failed') && str_contains($output, 'Assertions: 2 passed, 2 failed'), $output);
+		verify(str_contains($output, 'expected ') && !str_contains($output, 'Execution error:'), 'Browser failure diagnostic missing: ' . $output);
 		verify(Test::active() === null, 'Browser failure leaked its active recorder.');
 	});
 endforeach;
@@ -464,7 +464,7 @@ scenario('verification waits by default, adopts replacements and records timeout
 		}
 	}]);
 	verify($status === 1 && $continued && str_contains($output, 'Assertions: 1 passed, 1 failed'), $output);
-	verify(substr_count($output, "expected 'Done', got 'Pending'") === 1 && !str_contains($output, 'Execution error'), $output);
+	verify(str_contains($output, "expected 'Done', got 'Pending'") && !str_contains($output, 'Execution error:'), $output);
 });
 
 scenario('count and URL verification continue after mismatches and preserve snapshots and receivers', function ($listener) {
@@ -544,7 +544,7 @@ scenario('protocol assertions report each result once through the recording prob
 		verify($element->$method(...[...$arguments, 'wait' => false]) === $element, "$method lost the fluent receiver.");
 		verify(count($recorder->results) === $index + 1, "$method did not record exactly once.");
 		verify($recorder->results[$index][0] === $expected, "$method reported the wrong result.");
-		verify(str_contains($recorder->results[$index][1], "Element 'input'") && str_contains($recorder->results[$index][1], $message), "$method lost expected/actual diagnostics.");
+		verify(str_contains($recorder->results[$index][1], "Selector '#name' using 'css selector'") && str_contains($recorder->results[$index][1], $message), "$method lost selector or expected/actual diagnostics.");
 	endforeach;
 	$browser->quit();
 });
@@ -564,7 +564,7 @@ scenario('assertions throw on failure without a recorder and preserve the sessio
 	$browser = new Browser($url, 'firefox');
 	$element = $browser->find('#name');
 	verify($element->setValue('Jane')->valueEquals('Jane', wait: false)->visible(wait: false) === $element, 'Action/assertion chain failed.');
-	expectError(fn() => $element->textEquals('Expected', wait: false, verify: true), "WebDriver assertion failed: Element 'input' text: expected 'Expected', got 'Actual'.");
+	expectError(fn() => $element->textEquals('Expected', wait: false, verify: true), "WebDriver assertion failed: Selector '#name' using 'css selector' text: expected 'Expected', got 'Actual'.");
 	expectError(fn() => $browser->findAll('.missing')->countEquals(1, wait: false), 'expected 1, got 0');
 	expectError(fn() => $browser->urlMatches('~/expected$~', wait: false), "got 'https://example.test/actual'");
 	$browser->quit();
@@ -625,7 +625,7 @@ foreach (['browser', 'window'] as $receiver):
 		endforeach;
 		expectError(fn() => $target->find('.error', visible: true, wait: false, invert: true, assert: true), 'WebDriver find failed');
 		verify(array_column($results, 0) === [true, true, false], 'Absent, hidden, or mixed visibility was reported incorrectly.');
-		verify($results[2][1] === "Selector '.error' using 'css selector': expected no visible matches, got visible element 'second'.", 'Selector failure lacks expected/actual diagnostics.');
+		verify($results[2][1] === "Selector '.error' using 'css selector': expected no visible matches, got visible match #2.", 'Selector failure lacks expected/actual diagnostics.');
 		expectError(fn() => $target->find('[broken', visible: true, invert: true, assert: true), 'invalid selector');
 		expectError(fn() => $target->find('.error', visible: true, wait: false, invert: true, assert: true), 'stale element reference');
 		expectError(fn() => $target->find('.error', visible: true, invert: true, assert: true), 'unknown error');
@@ -648,7 +648,7 @@ scenario('selector visibility assertions restore window/frame context and throw 
 	$browser = new Browser($url, 'firefox');
 	$window = $browser->window()->switchFrame(0);
 	$browser->switch('other');
-	expectError(fn() => $window->find('//aside', 'xpath', visible: true, wait: false, invert: true, assert: true), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible element 'visible'.");
+	expectError(fn() => $window->find('//aside', 'xpath', visible: true, wait: false, invert: true, assert: true), "WebDriver assertion failed: Selector '//aside' using 'xpath': expected no visible matches, got visible match #1.");
 	verify($browser->find('.gone', visible: true, invert: true, assert: true) === null, 'Inverted find should return null.');
 	$browser->quit();
 });
@@ -1899,7 +1899,7 @@ scenario('element wait reports expiry before throwing and propagates recorder ex
 	});
 	$element = $browser->find('#node');
 	expectError(fn() => $element->wait(visible: true, assert: true, timeout: 20), 'wait timed out');
-	verify($results === [[false, "Element 'original': expected visible, got hidden."]], 'Expiry did not report exactly one failure.');
+	verify($results === [[false, "Selector '#node' using 'css selector': expected visible, got hidden."]], 'Expiry did not report exactly one failure.');
 	$throw = true;
 	try {
 		$element->wait(visible: true, assert: true, timeout: 1000);

@@ -111,7 +111,7 @@ try {
     file_put_contents($root . '/checks/folderA/one.php', '<?php return ($GLOBALS["selectorFactory"])($test);');
     file_put_contents($root . '/checks/folderA/archive/two.php', '<?php throw new RuntimeException("Excluded file loaded.");');
     $GLOBALS['selectorFactory'] = $make;
-    $test = new TestRunner($root, '/checks');
+    $test = new FixtureTest($root, '/checks');
     foreach ([
         [[], ['^folderA/!!/archive/::^create3$'], ['configure', 'create3']],
         [['folderA/one'], ['::Deprecated$'], ['configure', 'createDeprecated']],
@@ -127,11 +127,11 @@ try {
             ob_end_clean();
         }
         check($status === 0 && $GLOBALS['selectorTrace'] === $expected, $output);
-        if (!$expected) check(str_contains($output, 'Checks: 0 passed, 0 failed, 0 skipped'), $output);
+        if (!$expected) check(str_contains($output, 'Suites: 0 passed, 0 failed, 0 skipped'), $output);
     }
     ob_start();
     try {
-        $empty = new TestRunner($root, '/checks/folderA/archive/empty');
+        $empty = new FixtureTest($root, '/checks/folderA/archive/empty');
         mkdir($root . '/checks/folderA/archive/empty');
         $status = $empty->run(workers: 1, selectors: ['.*']);
         $output = ob_get_contents();
@@ -139,7 +139,7 @@ try {
         ob_end_clean();
         rmdir($root . '/checks/folderA/archive/empty');
     }
-    check($status === 0 && str_contains($output, 'Checks: 0 passed, 0 failed, 0 skipped'), $output);
+    check($status === 0 && str_contains($output, 'Suites: 0 passed, 0 failed, 0 skipped'), $output);
 } finally {
     unlink($root . '/checks/folderA/one.php');
     unlink($root . '/checks/folderA/archive/two.php');

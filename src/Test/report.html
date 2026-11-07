@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Test report</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #192c37;
+            --muted: #60727e;
+            --line: #dbe3e7;
+            --paper: #fff;
+            --layer: var(--paper);
+            --background: #ffffff;
+            --accent: #146c70;
+            --pass: #17744d;
+            --pass-bg: #e7f5ec;
+            --fail: #b33342;
+            --fail-bg: #fff0f1;
+            --skip: #896316;
+            --skip-bg: #fff6df;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: var(--ink); background: var(--background); line-height: 1.5; }
+        button, input, select { font: inherit; }
+        button, select { cursor: pointer; }
+        button, select, input {
+            border: 1px solid var(--line);
+            border-radius: 7px;
+            background: var(--paper);
+            color: var(--ink);
+            padding: .6rem .8rem;
+        }
+        button:hover { border-color: var(--accent); background: #f0f8f7; }
+        :focus-visible { outline: 3px solid #36a6ae; outline-offset: 3px; }
+        [hidden] { display: none !important; }
+        h1, h2, h3, p { margin: 0; }
+        h1 { font-size: 1.4rem; letter-spacing: -.03em; line-height: 1.2; }
+        h2 { font-size: 1.15rem; letter-spacing: -.02em; }
+        h3 { font-size: .9rem; }
+        .mono, pre, code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+        .muted { color: var(--muted); }
+        .wrap { margin: auto; padding: 0 12px; }
+        .masthead {
+            background: var(--background);
+            color: var(--ink);
+            padding: 12px 0;
+            & .headline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+            & h1 { min-width: 0; overflow-wrap: anywhere; }
+            & .run-date { color: var(--muted); margin-left: auto; font-size: .8rem; }
+        }
+        main.wrap { padding-bottom: 12px; }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            & .metric {
+                display: grid; grid-template-columns: auto 1fr; align-content: start; align-items: baseline; gap: 2px 8px;
+                padding: 8px 12px; min-width: 0;
+                & + .metric { border-left: 1px solid var(--line); }
+            }
+            & .label { color: var(--muted); font-size: .8rem; font-weight: 600; }
+            & .value { font-size: 1rem; font-weight: 650; }
+            & .description { grid-column: 1 / -1; font-size: .75rem; color: var(--muted); }
+        }
+        .rate-bar { grid-column: 1 / -1; display: flex; height: 3px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 3px; }
+        .rate-pass { background: var(--pass); }
+        .rate-fail { background: var(--fail); }
+        .rate-skip { background: #d7a637; }
+        details > summary { cursor: pointer; }
+        .environment > .fields {
+            margin: 0; padding: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            & > .full-width { grid-column: 1 / -1; }
+        }
+        .toolbar {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: #eef1f4; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; margin-bottom: 12px;
+            & .search { flex: 1; min-width: 180px; }
+            & button, & input, & select { height: 32px; padding: .4rem .6rem; font-size: .8rem; }
+            & select:focus-visible { outline: none; }
+            & .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        }
+        .badge {
+            --badge-bg: #eaf0f3;
+            display: inline-flex; align-items: center; border-radius: 5px; padding: 3px 8px;
+            border: 1px solid color-mix(in srgb, var(--badge-bg), currentColor 30%);
+            font-size: .68rem; font-weight: 750; letter-spacing: .055em; white-space: nowrap;
+            background: var(--badge-bg); color: #536570;
+            &.pass { --badge-bg: var(--pass-bg); color: var(--pass); }
+            &.fail { --badge-bg: var(--fail-bg); color: var(--fail); }
+            &.skip { --badge-bg: var(--skip-bg); color: var(--skip); }
+            &.retry { --badge-bg: #f0ebfa; color: #64518e; letter-spacing: 0; }
+        }
+        .node {
+            border: 1px solid var(--line); border-radius: 8px; background: var(--layer); margin-top: 10px; overflow: hidden;
+            & > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 13px 15px; }
+            & > summary::-webkit-details-marker { display: none; }
+            & > summary::before { content: "›"; font-size: 1.3rem; color: var(--muted); width: 12px; flex: 0 0 12px; line-height: 1; }
+            &[open] > summary::before { transform: rotate(90deg); }
+            & > summary:hover { background: color-mix(in srgb, var(--layer), black 2%); }
+            & > summary .name { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+            & > summary .method { display: inline-block; max-width: 100%; border: 1px solid color-mix(in srgb, #eaf0f3, currentColor 30%); border-radius: 4px; padding: 2px 6px; font-size: .75rem; font-weight: 400; color: var(--muted); background: #eaf0f3; }
+            & > summary .timing { margin-left: auto; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+            & > .body { padding: 0 16px 16px; border-top: 1px solid var(--line); }
+            /* Safari can retain a closed child's height when its parent is reopened. */
+            &:not([open]) > .body { display: none; }
+        }
+        .suite { --layer: #dce7f3; --line: #b3bdca; }
+        .suite-tabs > .tabpanel > .inner-tabs { --layer: #e7def0; }
+        .case, .cases-heading { --layer: #e2e5e9; }
+        .case-tabs > .tabpanel > .inner-tabs { --layer: #d7e9ed; }
+        .step, .steps-heading { --layer: #d4deea; }
+        /* Connected folder tabs: inactive tabs keep a bottom border; the active tab drops it
+           (and covers the panel's top border) so it reads as one surface with the panel below. */
+        /* Break the tab strip out of the node body padding so tabs meet the card edges;
+           the panel keeps its own padding for readable content. */
+        .tabs { margin: 0 -16px -16px; }
+        .tabs > .tablist { display: flex; flex-wrap: wrap; }
+        .tab {
+            display: inline-flex; align-items: center; gap: 7px;
+            border: 1px solid var(--line); border-top: none; border-left: none; border-radius: 0;
+            margin-bottom: -1px;
+            padding: .5rem .85rem; font-size: .8rem; font-weight: 600;
+            background: transparent; color: var(--muted);
+            & > .tab-dot { width: 8px; height: 8px; border-radius: 50%; background: #9aacb3; flex: 0 0 auto; }
+            &.pass > .tab-dot { background: var(--pass); }
+            &.fail > .tab-dot { background: var(--fail); }
+            &.skip > .tab-dot { background: #f5cf24; border: 1px solid color-mix(in srgb, var(--skip-bg), var(--skip) 60%); }
+            &:hover { border-color: var(--line); }
+            &:not([aria-selected="true"]):hover { background: transparent; }
+            &[aria-selected="true"] {
+                background: linear-gradient(to bottom, color-mix(in srgb, var(--layer), black 8%), var(--layer));
+                color: var(--ink); font-weight: 700;
+                border-bottom-color: var(--layer);
+            }
+        }
+        .tabs > .tabpanel { border-top: 1px solid var(--line); background: var(--layer); padding: 16px; }
+        .tabs > .tabpanel:not(.is-active) { display: none; }
+        /* Inner section tabs sit inset within an attempt panel as a self-contained bordered card. */
+        .inner-tabs { margin: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--layer); overflow: hidden; }
+        .inner-tabs > .tabpanel { padding: 14px; }
+        .inner-tab { font-size: .74rem; }
+        .run-tabs {
+            --layer: #eef1f4;
+            margin: 12px 0; border: 1px solid var(--line); border-radius: 7px; background: var(--layer); overflow: hidden;
+            & > .tabpanel { padding: 0; }
+        }
+        /* Case tablists sit inside a suite attempt panel; the smaller size keeps the nested level distinct. */
+        .case-tabs > .tablist > .tab { font-size: .74rem; }
+        /* Hidden results do not participate in the shared borders or outer group corners. */
+        .case, .step {
+            margin-top: 0; border-radius: 0;
+            &:nth-child(1 of .case:not([hidden])),
+            &:nth-child(1 of .step:not([hidden])) { border-top-left-radius: 8px; border-top-right-radius: 8px; }
+            &:nth-last-child(1 of .case:not([hidden])),
+            &:nth-last-child(1 of .step:not([hidden])) { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+        }
+        .case:not([hidden]) ~ .case,
+        .step:not([hidden]) ~ .step { border-top: 0; }
+        .suite { margin-top: 0; }
+        .suite:not([hidden]) ~ .suite { margin-top: 12px; }
+        .phase { color: var(--accent); background: #e9f4f4; border: 1px solid color-mix(in srgb, #e9f4f4, currentColor 30%); border-radius: 4px; padding: 2px 6px; font-size: .7rem; overflow-wrap: anywhere; }
+        .section-label { margin-top: 18px; margin-bottom: 8px; color: var(--muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; }
+        .steps-heading, .cases-heading {
+            margin-bottom: 0; padding: 10px 15px;
+            border: 1px solid var(--line); border-radius: 8px 8px 0 0; background: var(--layer);
+        }
+        .result-block {
+            margin-top: 18px;
+            & > summary { margin: 0; list-style: none; display: flex; align-items: center; gap: 10px; }
+            & > summary::-webkit-details-marker { display: none; }
+            & > summary::before { content: "›"; font-size: 1.3rem; width: 12px; line-height: 1; }
+            &[open] > summary::before { transform: rotate(90deg); }
+            &:not([open]) > summary { border-radius: 8px; }
+            &:not([open]) > :not(summary) { display: none; }
+        }
+        .inner-steps > .result-block:nth-child(1 of :not([hidden])) { margin-top: 0; }
+        .steps-heading:not([hidden]) ~ .step:nth-child(1 of .step:not([hidden])),
+        .cases-heading:not([hidden]) ~ .case:nth-child(1 of .case:not([hidden])) {
+            border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0;
+        }
+        .fields {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px 24px; margin: 14px 0 0;
+            & > div { min-width: 0; }
+            & dt { font-size: .72rem; color: var(--muted); margin-bottom: 3px; }
+            & dd { margin: 0; font-size: .85rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+        }
+        .file { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; margin-top: 12px; }
+        .reason { border-left: 3px solid #d7a637; background: var(--skip-bg); padding: 10px 12px; margin-top: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+        .error {
+            background: #e8ebef; border: 1px solid var(--line); border-radius: 7px; padding: 14px; margin-top: 12px;
+            & .error-class { color: var(--fail); font-size: .75rem; font-weight: 700; margin-bottom: 4px; }
+            & .error-message { white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 600; }
+        }
+        pre { font-size: .8rem; line-height: 1.65; overflow: auto; margin: 8px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: #f6f8fa; color: #284250; tab-size: 4; }
+        .source {
+            padding: 8px 0;
+            & .source-line { display: block; padding: 0 12px; min-width: max-content; }
+            & .source-line.current { background: #c9e1f5; }
+            &.failed .source-line.current { background: #fce1e4; color: #8d2530; }
+            & .line-number { display: inline-block; min-width: 4ch; margin-right: 16px; text-align: right; color: var(--muted); user-select: none; }
+        }
+        .stack { margin-top: 12px; font-size: .8rem; color: var(--muted); }
+        .assertion {
+            border: 1px solid var(--line); border-radius: 6px; background: #e8ebef; margin-top: 8px; padding: 10px 12px;
+            & .assertion-title { display: flex; align-items: baseline; gap: 10px; overflow-wrap: anywhere; }
+        }
+        .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; min-width: 0; }
+        .value-label { font-size: .72rem; color: var(--muted); }
+        .comparison > div { min-width: 0; }
+        .screenshots {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 10px;
+            & figure { margin: 0; min-width: 0; }
+            & button { display: block; width: 100%; padding: 0; overflow: hidden; text-align: left; }
+            & img { width: 100%; height: 130px; object-fit: contain; background: #e9eef0; display: block; }
+            & figcaption { font-size: .75rem; color: var(--muted); padding: 7px 1px; overflow-wrap: anywhere; }
+            & .diagnostic { padding: 12px; border: 1px dashed #c7d1d6; border-radius: 7px; color: var(--muted); font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+        }
+        .empty { text-align: center; border: 1px dashed #bccbd2; border-radius: 9px; padding: 40px 20px; margin-top: 18px; color: var(--muted); }
+        .fatal { margin: 24px auto; max-width: 800px; padding: 20px; color: var(--fail); background: var(--fail-bg); border: 1px solid #efccd0; border-radius: 9px; }
+        dialog {
+            max-width: 94vw; width: 1100px; max-height: 94vh; padding: 0; border: 1px solid #b7c7cf; border-radius: 10px; color: var(--ink); background: var(--paper);
+            &::backdrop { background: #0b202bca; }
+            & .modal-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+            & h2 { font-size: .95rem; overflow-wrap: anywhere; flex: 1; }
+            & .image-stage { overflow: auto; max-height: 76vh; background: #e5ebee; }
+            & img { display: block; max-width: 100%; margin: auto; }
+            &.actual-size img { max-width: none; }
+            & .modal-hint { font-size: .75rem; padding: 8px 16px; color: var(--muted); }
+        }
+        @media (max-width: 700px) {
+            .masthead .run-date { flex-basis: 100%; margin-left: 0; }
+            .metrics {
+                grid-template-columns: 1fr 1fr;
+                & .metric:nth-child(odd) { border-left: 0; }
+                & .metric:nth-child(n + 3) { border-top: 1px solid var(--line); }
+            }
+            .node > summary { flex-wrap: wrap; gap: 7px; padding: 12px 10px; }
+            .node > summary .name { flex: 1; }
+            .node > .body { padding: 0 9px 12px; }
+            .comparison { grid-template-columns: 1fr; }
+            dialog .modal-head { flex-wrap: wrap; }
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            button, summary { transition: background-color .12s; }
+        }
+    </style>
+</head>
+<body>
+    <header class="masthead">
+        <div class="wrap headline">
+            <h1 id="report-title">Test report</h1><span id="run-status"></span>
+            <p id="run-date" class="run-date"></p>
+        </div>
+    </header>
+    <main class="wrap" id="report">
+        <section class="tabs run-tabs" id="run-tabs" aria-label="Run information">
+            <div class="tablist" role="tablist" aria-label="Run information">
+                <button class="tab" type="button" id="stats-tab" role="tab" aria-controls="stats-panel" aria-selected="true" tabindex="0">Stats</button>
+                <button class="tab" type="button" id="details-tab" role="tab" aria-controls="environment" aria-selected="false" tabindex="-1">Details</button>
+            </div>
+            <div class="tabpanel is-active" id="stats-panel" role="tabpanel" aria-labelledby="stats-tab" tabindex="0">
+                <section class="metrics" id="metrics" aria-label="Run totals"></section>
+            </div>
+            <div class="tabpanel environment" id="environment" role="tabpanel" aria-labelledby="details-tab" tabindex="0"></div>
+        </section>
+        <div class="toolbar">
+            <input class="search" id="search" type="search" aria-label="Search results" placeholder="Search suite, case, step, error, or input…" autocomplete="off">
+            <select id="status" aria-label="Status"><option value="ALL">All statuses</option><option value="FAIL">Failed</option><option value="PASS">Passed</option><option value="SKIP">Skipped</option><option value="FILTERED">Filtered</option><option value="RUN">Running</option><option value="PENDING">Pending</option></select>
+            <div class="actions"><button type="button" id="expand">Expand all</button><button type="button" id="collapse">Collapse all</button><button type="button" id="reset">Reset filters</button></div>
+        </div>
+        <section id="suites" aria-label="Test suites"></section>
+        <p class="empty" id="empty" hidden>No results match these filters.</p>
+    </main>
+    <noscript><p class="fatal">Enable JavaScript to view this report.</p></noscript>
+    <dialog id="screenshot-modal" aria-labelledby="screenshot-title">
+        <div class="modal-head"><h2 id="screenshot-title">Screenshot</h2><button type="button" id="zoom" aria-pressed="false">Actual size</button><button type="button" id="close-modal">Close</button></div>
+        <div class="image-stage"><img id="screenshot-image" alt=""></div>
+        <p class="modal-hint">Use Actual size to inspect pixels. Press Escape to close.</p>
+    </dialog>
+    <script id="test-report-data" type="application/json">{{REPORT_DATA}}</script>
+    <script>
+        (() => {
+            'use strict';
+
+            const byId = id => document.getElementById(id);
+            const list = value => Array.isArray(value) ? value : [];
+            const present = value => value !== undefined && value !== null;
+            const text = value => typeof value === 'string' ? value : JSON.stringify(value, null, 2) ?? '';
+            const status = value => ['PASS', 'FAIL', 'SKIP', 'FILTERED', 'RUN', 'PENDING'].includes(value) ? value : 'UNKNOWN';
+            const date = value => {
+                if (!present(value) || value === '') return 'Not recorded';
+                const parsed = new Date(value);
+                return Number.isNaN(parsed.getTime()) ? text(value) : parsed.toLocaleString();
+            };
+            const duration = value => {
+                if (!present(value) || !Number.isFinite(Number(value))) return 'Not recorded';
+                const seconds = Number(value);
+                if (seconds > 0 && seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+                if (seconds < 60) return `${Number(seconds.toFixed(2))} s`;
+                return `${Math.floor(seconds / 60)}m ${Number((seconds % 60).toFixed(1))}s`;
+            };
+
+            // Record values are always text, including source code, input values, and failures.
+            function element(tag, className, value) {
+                const node = document.createElement(tag);
+                if (className) node.className = className;
+                if (present(value)) node.textContent = text(value);
+                return node;
+            }
+
+            function badge(value) {
+                const normalized = status(value);
+                return element('span', `badge ${normalized.toLowerCase()}`, normalized);
+            }
+
+            function fields(parent, entries) {
+                const populated = entries.filter(([, value]) => present(value));
+                if (!populated.length) return;
+                const dl = element('dl', 'fields');
+                for (const [label, value] of populated) {
+                    const item = element('div');
+                    item.append(element('dt', '', label), element('dd', '', value));
+                    dl.append(item);
+                }
+                parent.append(dl);
+            }
+
+            // Search each result's own fields so a child match does not include its siblings.
+            const results = new WeakMap();
+            function disclosure(parent, label, record, kind, open = false) {
+                const details = element('details', `node ${kind} ${status(record.status).toLowerCase()}`);
+                details.dataset.status = status(record.status);
+                const { attempts, cases, steps, ...context } = record;
+                results.set(details, text(context).toLowerCase());
+                details.open = open;
+                const summary = element('summary');
+                const name = element('span', 'name', label);
+                if (kind === 'case' && record.method && record.method !== label) name.append(document.createTextNode(' '), element('span', 'method mono', record.method));
+                summary.append(badge(record.status), name);
+                const contextBadge = element('span', 'badge context', 'Context');
+                contextBadge.hidden = true;
+                summary.append(contextBadge);
+                if (present(record.phase)) summary.append(element('span', 'phase', record.phase));
+                if (present(record.hook)) summary.append(element('span', 'phase', `Hook: ${record.hook}`));
+                if (record.maxAttempts > 1 && list(record.attempts).length) summary.append(element('span', 'badge retry', `Attempt ${record.attempts[record.attempts.length - 1].index}/${record.maxAttempts}`));
+                summary.append(element('span', 'timing', duration(record.duration)));
+                const body = element('div', 'body');
+                details.append(summary, body);
+                parent.append(details);
+                return { details, body };
+            }
+
+            function location(parent, record, failed = false) {
+                if (!record) return;
+                if (record.file) parent.append(element('p', 'file mono', `${record.file}${present(record.line) ? `:${record.line}` : ''}`));
+                if (!list(record.source).length) return;
+                const source = element('pre', `source${failed ? ' failed' : ''}`);
+                for (const line of record.source) {
+                    const row = element('span', `source-line${line.line === record.line ? ' current' : ''}`);
+                    row.append(element('span', 'line-number', line.line), element('span', '', line.text));
+                    source.append(row);
+                }
+                parent.append(source);
+            }
+
+            function error(parent, record) {
+                if (!record) return;
+                const box = element('div', 'error');
+                if (record.class === 'AssertionFailure') {
+                    box.append(element('p', 'error-message', `AssertionFailure: ${record.message || 'No error message recorded.'}`));
+                } else {
+                    box.append(element('p', 'error-class', record.class || 'Error'), element('p', 'error-message', record.message || 'No error message recorded.'));
+                }
+                fields(box, [['Phase', record.phase], ['Hook', record.hook]]);
+                location(box, record.location, true);
+                if (record.stack) {
+                    const stack = element('details', 'stack');
+                    stack.append(element('summary', '', 'Stack trace'), element('pre', '', record.stack));
+                    box.append(stack);
+                }
+                if (record.previous) {
+                    const previous = element('details', 'stack');
+                    previous.append(element('summary', '', 'Previous exception'));
+                    error(previous, record.previous);
+                    box.append(previous);
+                }
+                parent.append(box);
+            }
+
+            const modal = byId('screenshot-modal');
+            function openScreenshot(path, title) {
+                byId('screenshot-title').textContent = title;
+                byId('screenshot-image').src = path;
+                byId('screenshot-image').alt = title;
+                modal.classList.remove('actual-size');
+                byId('zoom').textContent = 'Actual size';
+                byId('zoom').setAttribute('aria-pressed', 'false');
+                modal.showModal();
+                modal.querySelector('.image-stage').scrollTo(0, 0);
+            }
+
+            // `bare` renders the gallery directly (used by the attempt Screenshots tab);
+            // otherwise it sits in a collapsed disclosure (used inside a step).
+            function screenshots(parent, records, bare) {
+                if (!list(records).length) return;
+                let host = parent;
+                if (!bare) {
+                    const details = element('details', 'node');
+                    host = element('div', 'body');
+                    details.append(element('summary', '', 'Screenshots'), host);
+                    parent.append(details);
+                }
+                const gallery = element('div', 'screenshots');
+                for (const shot of records) {
+                    const title = shot.point || 'Screenshot';
+                    const figure = element('figure');
+                    if (shot.path) {
+                        // Paths are filesystem names; literal percent escapes must not become URL separators.
+                        const url = shot.path.split('/').map(encodeURIComponent).join('/');
+                        const button = element('button');
+                        button.type = 'button';
+                        button.setAttribute('aria-label', `Open screenshot: ${title}`);
+                        const image = element('img');
+                        image.alt = title;
+                        image.loading = 'lazy';
+                        image.src = url;
+                        image.addEventListener('error', () => {
+                            button.hidden = true;
+                            figure.prepend(element('p', 'diagnostic', `Image unavailable: ${shot.path}`));
+                        }, { once: true });
+                        button.append(image);
+                        button.addEventListener('click', () => openScreenshot(url, title));
+                        figure.append(button);
+                    }
+                    if (shot.diagnostic) figure.append(element('p', 'diagnostic', shot.diagnostic));
+                    const caption = element('figcaption', '', `${title}${shot.width && shot.height ? ` · ${shot.width} × ${shot.height}` : ''}${shot.path ? `\n${shot.path}` : ''}`);
+                    if (present(shot.status)) caption.prepend(badge(shot.status), document.createTextNode(' '));
+                    figure.append(caption);
+                    gallery.append(figure);
+                }
+                host.append(gallery);
+            }
+
+            function assertion(parent, record) {
+                const box = element('div', `assertion${record.passed === false ? ' failed' : ''}`);
+                const heading = element('div', 'assertion-title');
+                heading.append(element('span', '', `${record.passed === false ? 'AssertionFailure: ' : ''}${record.message || 'Assertion'}`));
+                box.append(heading);
+                const comparison = element('div', 'comparison');
+                for (const key of ['expected', 'actual']) {
+                    if (!Object.prototype.hasOwnProperty.call(record, key)) continue;
+                    const value = element('div');
+                    value.append(element('p', 'value-label', key === 'expected' ? 'Expected' : 'Actual'), element('pre', '', text(record[key])));
+                    comparison.append(value);
+                }
+                if (comparison.children.length) box.append(comparison);
+                location(box, record.location, record.passed === false);
+                parent.append(box);
+            }
+
+            // Steps and cases share a collapsible group header, expanded when the report opens.
+            function resultBlock(parent, kind, label) {
+                const block = element('details', `result-block ${kind}s-block`);
+                block.open = true;
+                block.append(element('summary', `section-label ${kind}s-heading`, label));
+                parent.append(block);
+                return block;
+            }
+
+            // Attempt-level errors and the recorded steps; per-step screenshots stay inside each step.
+            function stepsList(parent, record) {
+                for (const item of list(record.errors)) error(parent, item);
+                if (!list(record.steps).length) return;
+                const block = resultBlock(parent, 'step', 'Steps');
+                for (const step of list(record.steps)) {
+                    const node = disclosure(block, step.label || 'Step', step, 'step', step.status === 'FAIL');
+                    fields(node.body, [['Target', step.target], ['Started', present(step.startedAt) ? date(step.startedAt) : null], ['Ended', present(step.endedAt) ? date(step.endedAt) : null]]);
+                    if (Object.prototype.hasOwnProperty.call(step, 'values')) {
+                        node.body.append(element('h3', 'section-label', 'Input values'), element('pre', '', text(step.values)));
+                    }
+                    if (!list(step.assertions).some(item => item.location && step.location && item.location.file === step.location.file && item.location.line === step.location.line)) {
+                        location(node.body, step.location, step.status === 'FAIL');
+                    }
+                    for (const item of list(step.assertions)) assertion(node.body, item);
+                    error(node.body, step.error);
+                    screenshots(node.body, step.screenshots);
+                }
+            }
+
+            // Inner tabbed container within an attempt panel. Steps (suites: Steps/Cases) is the
+            // default; Screenshots and Session appear only when the attempt has that content.
+            function attemptPanel(parent, record, isSuite, renderCases) {
+                const inner = element('div', 'tabs inner-tabs');
+                const tablist = element('div', 'tablist');
+                tablist.setAttribute('role', 'tablist');
+                tablist.setAttribute('aria-label', `${isSuite ? 'Suite' : 'Case'} attempt sections`);
+                inner.append(tablist);
+                const add = (label, cls, isDefault) => {
+                    tabSeq += 1;
+                    const tab = element('button', `tab inner-tab${isDefault ? ' default-tab' : ''}`);
+                    tab.type = 'button';
+                    tab.id = `tab-${tabSeq}`;
+                    tab.setAttribute('role', 'tab');
+                    tab.setAttribute('aria-controls', `tabpanel-${tabSeq}`);
+                    tab.setAttribute('aria-selected', 'false');
+                    tab.tabIndex = -1;
+                    tab.textContent = label;
+                    const panel = element('div', `tabpanel ${cls}`);
+                    panel.id = `tabpanel-${tabSeq}`;
+                    panel.setAttribute('role', 'tabpanel');
+                    panel.setAttribute('aria-labelledby', tab.id);
+                    panel.tabIndex = 0;
+                    tablist.append(tab);
+                    inner.append(panel);
+                    return panel;
+                };
+                const summary = add('Summary', 'inner-summary', false);
+                fields(summary, [['Started', present(record.startedAt) ? date(record.startedAt) : null], ['Ended', present(record.endedAt) ? date(record.endedAt) : null], ['Assertions passed', record.assertionsPassed], ['Assertions failed', record.assertionsFailed]]);
+                const steps = add(isSuite ? 'Steps / Cases' : 'Steps', 'inner-steps', true);
+                stepsList(steps, record);
+                if (isSuite) renderCases(steps);
+                if (list(record.screenshots).length) screenshots(add('Screenshots', 'inner-screens', false), record.screenshots, true);
+                if (isSuite && record.session) {
+                    const session = add('Session', 'inner-session', false);
+                    fields(session, [['Session ID', record.session.sessionId]]);
+                    if (record.session.capabilities) session.append(element('pre', '', record.session.capabilities));
+                }
+                tablist.addEventListener('keydown', event => tablistKeydown(event, inner));
+                tablist.addEventListener('click', event => {
+                    const tab = event.target.closest('.tab');
+                    if (!tab || !tablist.contains(tab)) return;
+                    event.stopPropagation();
+                    selectTab(inner, tab, true);
+                    tab.focus();
+                });
+                parent.append(inner);
+                selectTab(inner, tablist.querySelector(':scope > .default-tab'), false);
+            }
+
+            let tabSeq = 0;
+
+            // Show the panel for the chosen tab and update the roving tabindex and ARIA state.
+            // `user` records a deliberate choice so the filter will not later override it.
+            function selectTab(wrap, tab, user) {
+                if (!tab) return;
+                if (user) wrap.dataset.userSelected = 'true';
+                const tablist = wrap.querySelector(':scope > .tablist');
+                for (const candidate of tablist.querySelectorAll(':scope > .tab')) {
+                    const selected = candidate === tab;
+                    candidate.setAttribute('aria-selected', String(selected));
+                    candidate.tabIndex = selected ? 0 : -1;
+                }
+                const activeId = tab.getAttribute('aria-controls');
+                for (const panel of wrap.querySelectorAll(':scope > .tabpanel')) panel.classList.toggle('is-active', panel.id === activeId);
+            }
+
+            // Move focus and selection between the visible tabs of one tablist. Stopping the event
+            // keeps a nested case tablist from also driving its ancestor suite tablist.
+            function tablistKeydown(event, wrap) {
+                const tabsEls = [...event.currentTarget.querySelectorAll(':scope > .tab')].filter(tab => !tab.hidden);
+                const index = tabsEls.indexOf(document.activeElement);
+                if (index === -1) return;
+                let next;
+                if (event.key === 'ArrowRight') next = (index + 1) % tabsEls.length;
+                else if (event.key === 'ArrowLeft') next = (index - 1 + tabsEls.length) % tabsEls.length;
+                else if (event.key === 'Home') next = 0;
+                else if (event.key === 'End') next = tabsEls.length - 1;
+                else return;
+                event.preventDefault();
+                event.stopPropagation();
+                selectTab(wrap, tabsEls[next], true);
+                tabsEls[next].focus();
+            }
+
+            // After filtering, hide tabs whose attempt panel no longer matches, then pick a visible
+            // panel: the final attempt by default, the user's own choice when they made one, or the
+            // first visible attempt when the preferred tab was filtered out.
+            function syncTabs(wrap) {
+                const tablist = wrap.querySelector(':scope > .tablist');
+                // Inner section tabs carry no status; keep the user's choice, else the default (Steps).
+                if (wrap.classList.contains('inner-tabs')) {
+                    const current = tablist.querySelector(':scope > .tab[aria-selected="true"]');
+                    const target = wrap.dataset.userSelected === 'true' && current ? current : tablist.querySelector(':scope > .default-tab');
+                    selectTab(wrap, target, false);
+                    return;
+                }
+                const attemptTabs = [...tablist.querySelectorAll(':scope > .attempt-tab')];
+                const sourceTab = tablist.querySelector(':scope > .source-tab');
+                const summaryTab = tablist.querySelector(':scope > .summary-tab');
+                for (const tab of attemptTabs) tab.hidden = byId(tab.getAttribute('aria-controls')).hidden;
+                const visible = attemptTabs.filter(tab => !tab.hidden);
+                const current = tablist.querySelector(':scope > .tab[aria-selected="true"]');
+                const finalTab = attemptTabs[attemptTabs.length - 1];
+                let target;
+                if (wrap.dataset.userSelected === 'true' && current && !current.hidden) target = current;
+                else if (finalTab && !finalTab.hidden && wrap.dataset.userSelected !== 'true') target = finalTab;
+                else target = visible[0] || summaryTab || sourceTab;
+                selectTab(wrap, target, false);
+            }
+
+            // Build one tablist for a suite or case: an Attempt tab per recorded attempt followed by a
+            // Source tab. `renderAttempt` fills each attempt panel; `renderSource` fills the final Source
+            // panel with the declaration citation and snippet. The Source tab is omitted when no source
+            // is recorded. A supplied skip reason gets a leading Summary tab. Each attempt panel
+            // keeps its data-status so the status filter can hide it.
+            function tabsFor(parent, level, attempts, maxAttempts, renderAttempt, renderSource, summaryReason = null) {
+                const wrap = element('div', `tabs ${level}-tabs`);
+                const tablist = element('div', 'tablist');
+                tablist.setAttribute('role', 'tablist');
+                tablist.setAttribute('aria-label', `${level === 'suite' ? 'Suite' : 'Case'} attempts and source`);
+                wrap.append(tablist);
+                const addTab = (panel, labelNodes, extraClass, statusValue) => {
+                    tabSeq += 1;
+                    const tab = element('button', `tab ${extraClass}${statusValue ? ` ${statusValue.toLowerCase()}` : ''}`);
+                    tab.type = 'button';
+                    tab.id = `tab-${tabSeq}`;
+                    tab.setAttribute('role', 'tab');
+                    tab.setAttribute('aria-controls', `tabpanel-${tabSeq}`);
+                    tab.setAttribute('aria-selected', 'false');
+                    tab.tabIndex = -1;
+                    tab.append(...labelNodes);
+                    panel.id = `tabpanel-${tabSeq}`;
+                    panel.setAttribute('role', 'tabpanel');
+                    panel.setAttribute('aria-labelledby', tab.id);
+                    panel.tabIndex = 0;
+                    tablist.append(tab);
+                    wrap.append(panel);
+                    return tab;
+                };
+                if (present(summaryReason)) {
+                    const panel = element('div', 'tabpanel summary-panel');
+                    panel.append(element('p', '', summaryReason));
+                    addTab(panel, [document.createTextNode('Summary')], 'summary-tab');
+                }
+                attempts.forEach((attempt, index) => {
+                    const panel = element('div', 'tabpanel attempt');
+                    panel.dataset.status = status(attempt.status);
+                    const { cases, steps, ...context } = attempt;
+                    results.set(panel, text(context).toLowerCase());
+                    renderAttempt(panel, attempt, index);
+                    const statusValue = status(attempt.status);
+                    const label = `Attempt ${attempt.index}/${maxAttempts}`;
+                    const tab = addTab(panel, [element('span', 'tab-dot'), document.createTextNode(label)], 'attempt-tab', statusValue);
+                    // The status dot is colour only; name the status for assistive technology.
+                    tab.setAttribute('aria-label', `${label}, ${statusValue}`);
+                });
+                const sourcePanel = element('div', 'tabpanel source-panel');
+                renderSource(sourcePanel);
+                if (sourcePanel.children.length) addTab(sourcePanel, [document.createTextNode('Source')], 'source-tab');
+                tablist.addEventListener('keydown', event => tablistKeydown(event, wrap));
+                tablist.addEventListener('click', event => {
+                    const tab = event.target.closest('.tab');
+                    if (!tab || !tablist.contains(tab)) return;
+                    event.stopPropagation();
+                    selectTab(wrap, tab, true);
+                    tab.focus();
+                });
+                parent.append(wrap);
+                return wrap;
+            }
+
+            // Keep every attempt reachable as a tab so a failed retry stays inspectable after a pass.
+            function renderSuite(record) {
+                const suite = disclosure(byId('suites'), record.name || record.id || 'Unnamed suite', record, 'suite', record.status === 'FAIL');
+                if (present(record.reason) && record.reason !== 'marked skip') suite.body.append(element('p', 'reason', record.reason));
+                const attempts = list(record.attempts);
+                if (!attempts.length) suite.body.append(element('p', 'file', 'No suite attempts recorded.'));
+                tabsFor(suite.body, 'suite', attempts, record.maxAttempts,
+                    (panel, attempt) => attemptPanel(panel, attempt, true, stepsPanel => {
+                        if (!list(attempt.cases).length) return;
+                        const block = resultBlock(stepsPanel, 'case', 'Cases');
+                        for (const testCase of list(attempt.cases)) renderCase(block, testCase);
+                    }),
+                    sourcePanel => location(sourcePanel, record.location || { file: record.file }));
+                return suite.details;
+            }
+
+            function renderCase(parent, testCase) {
+                const caseNode = disclosure(parent, testCase.name || testCase.method || 'Unnamed case', testCase, 'case', testCase.status === 'FAIL');
+                const attempts = list(testCase.attempts);
+                tabsFor(caseNode.body, 'case', attempts, testCase.maxAttempts,
+                    (panel, caseAttempt) => attemptPanel(panel, caseAttempt, false),
+                    sourcePanel => location(sourcePanel, testCase.location),
+                    testCase.reason !== 'marked skip' ? testCase.reason : null);
+                return caseNode.details;
+            }
+
+            function metric(label, value, description) {
+                const card = element('div', 'metric');
+                card.append(element('p', 'label', label), element('p', 'value', value), element('p', 'description', description));
+                byId('metrics').append(card);
+                return card;
+            }
+
+            try {
+                const data = JSON.parse(byId('test-report-data').textContent);
+                const env = data.environment || {};
+                const project = env.project;
+                const title = project ? `${project} · Test report` : 'Test report';
+                byId('report-title').textContent = title;
+                const totals = data.totals || {};
+                const count = key => Number(totals[key]) || 0;
+                const runTabs = byId('run-tabs');
+                const runTablist = runTabs.querySelector(':scope > .tablist');
+                runTablist.addEventListener('keydown', event => tablistKeydown(event, runTabs));
+                runTablist.addEventListener('click', event => {
+                    const tab = event.target.closest('.tab');
+                    if (!tab || !runTablist.contains(tab)) return;
+                    selectTab(runTabs, tab, true);
+                });
+                const passed = count('checksPassed');
+                const failed = count('checksFailed');
+                const skipped = count('checksSkipped');
+                const total = passed + failed + skipped;
+                byId('run-status').append(badge(data.status));
+                byId('run-date').textContent = `Started ${date(data.startedAt)}`;
+                document.title = `${status(data.status)} · ${title}`;
+                const checks = metric('Suites', total, `${passed} passed · ${failed} failed · ${skipped} skipped`);
+                const bar = element('div', 'rate-bar');
+                bar.setAttribute('aria-hidden', 'true');
+                for (const [className, value] of [['pass', passed], ['fail', failed], ['skip', skipped]]) {
+                    const segment = element('span', `rate-${className}`);
+                    segment.style.width = `${total ? value / total * 100 : 0}%`;
+                    bar.append(segment);
+                }
+                checks.append(bar);
+                metric('Pass rate', passed + failed ? `${Number((passed / (passed + failed) * 100).toFixed(1))}%` : 'N/A', 'Passed suites / executed suites');
+                metric('Duration', duration(data.duration), `${list(data.suites).filter(suite => suite.status !== 'FILTERED').length} suites · ${count('casesPassed') + count('casesFailed') + count('casesSkipped')} cases`);
+                metric('Assertions', count('assertionsPassed') + count('assertionsFailed'), `${count('assertionsPassed')} passed · ${count('assertionsFailed')} failed`);
+                fields(byId('environment'), [['PHP', env.php], ['Workers', env.workers], ['Browser', env.browser], ['Browser version', env.browserVersion], ['Headless', present(env.headless) ? text(env.headless) : null], ['Platform', env.platform], ['URL', env.url], ['Started', date(data.startedAt)], ['Ended', date(data.endedAt)], ['Generated', date(data.generatedAt)], ['Cases passed', count('casesPassed')], ['Cases failed', count('casesFailed')], ['Cases skipped', count('casesSkipped')], ['OS', env.os], ['Project root', env.root]]);
+                for (const field of byId('environment').querySelectorAll('.fields > div')) {
+                    if (['OS', 'Project root'].includes(field.querySelector('dt').textContent)) field.classList.add('full-width');
+                }
+                const suites = list(data.suites).map(renderSuite);
+                function filter(autoExpand = true) {
+                    const query = byId('search').value.trim().toLowerCase();
+                    const selected = byId('status').value;
+                    // Match each level by its own status or a matching descendant, and keep the
+                    // ancestors of a match as context. Attempts are now tab panels rather than
+                    // nested disclosures, so the child set differs between a suite/case node (its
+                    // attempt panels) and an attempt panel (its cases and steps).
+                    function filterNode(node, ancestorMatches = false) {
+                        const searchMatches = ancestorMatches || (results.get(node) || '').includes(query);
+                        const statusMatches = selected === 'ALL' || node.dataset.status === selected;
+                        const isPanel = node.classList.contains('tabpanel');
+                        const children = isPanel
+                            ? node.querySelectorAll(':scope > .inner-tabs > .tabpanel.inner-steps > .result-block > [data-status]')
+                            : node.querySelectorAll(':scope > .body > .tabs > .tabpanel.attempt');
+                        let childMatches = false;
+                        for (const child of children) {
+                            if (filterNode(child, searchMatches)) childMatches = true;
+                        }
+                        const matches = searchMatches && statusMatches || childMatches;
+                        node.hidden = !matches;
+                        const contextBadge = node.querySelector(':scope > summary > .context');
+                        if (contextBadge) contextBadge.hidden = !matches || statusMatches;
+                        if (isPanel) {
+                            const stepsPanel = node.querySelector(':scope > .inner-tabs > .tabpanel.inner-steps');
+                            if (stepsPanel) for (const kind of ['step', 'case']) {
+                                const block = stepsPanel.querySelector(`:scope > .${kind}s-block`);
+                                if (block) {
+                                    block.hidden = !block.querySelector(`:scope > .${kind}:not([hidden])`);
+                                    if (autoExpand && !block.hidden && (query || selected !== 'ALL')) block.open = true;
+                                }
+                            }
+                        }
+                        const body = node.querySelector(':scope > .body');
+                        if (body) body.hidden = ![...body.children].some(child => !child.hidden);
+                        if (autoExpand && childMatches && (query || selected !== 'ALL')) node.open = true;
+                        return matches;
+                    }
+                    for (const suite of suites) filterNode(suite);
+                    // Reconcile each tablist with the new hidden state: hide filtered-out attempt
+                    // tabs and reselect a visible panel without disturbing counts.
+                    for (const wrap of byId('suites').querySelectorAll('.tabs')) syncTabs(wrap);
+                    const visible = suites.filter(suite => !suite.hidden).length;
+                    byId('empty').hidden = visible > 0;
+                    byId('empty').textContent = suites.length ? 'No results match these filters.' : 'No suites were recorded in this run.';
+                }
+                byId('search').addEventListener('input', () => filter());
+                byId('status').addEventListener('change', () => filter(false));
+                byId('reset').addEventListener('click', () => {
+                    byId('search').value = '';
+                    byId('status').value = 'ALL';
+                    for (const wrap of byId('suites').querySelectorAll('.tabs')) delete wrap.dataset.userSelected;
+                    filter();
+                });
+                for (const [id, open] of [['expand', true], ['collapse', false]]) {
+                    byId(id).addEventListener('click', () => {
+                        for (const node of byId('suites').querySelectorAll('details')) node.open = open;
+                    });
+                }
+                filter();
+            } catch (exception) {
+                byId('report').replaceChildren(element('p', 'fatal', `This report could not be read: ${exception.message}`));
+            }
+
+            byId('close-modal').addEventListener('click', () => modal.close());
+            byId('zoom').addEventListener('click', () => {
+                const actual = modal.classList.toggle('actual-size');
+                byId('zoom').textContent = actual ? 'Fit to window' : 'Actual size';
+                byId('zoom').setAttribute('aria-pressed', String(actual));
+            });
+            modal.addEventListener('click', event => {
+                const bounds = modal.getBoundingClientRect();
+                if (event.target === modal && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) modal.close();
+            });
+        })();
+    </script>
+</body>
+</html>

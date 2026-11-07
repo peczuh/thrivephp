@@ -13,9 +13,10 @@ final class Parallel
     private mixed $listener = null;
     private Report $report;
 
-    public function run(array $files, int $limit, array $configuration): int
+    public function run(array $files, int $limit, array $configuration, Report $report): int
     {
-        $this->report = new Report();
+        $this->report = $report;
+        $diagnostic = new Diagnostic($configuration['root']);
         $signals = [];
         $async = null;
         $reference = \WeakReference::create($this);
@@ -43,17 +44,15 @@ final class Parallel
                 while ($files && count($this->workers) < $limit) {
                     $name = array_key_first($files);
                     $job = $configuration + ['name' => $name, 'file' => $files[$name]];
-                    unset($files[$name]);
                     $token = bin2hex(random_bytes(16));
                     $process = new WorkerProcess($php, $address, $token, $job);
+                    unset($files[$name]);
                     $this->workers[$token] = ['process' => $process, 'name' => $name, 'label' => $name,
                         'started' => hrtime(true) / 1e9, 'lastProgress' => hrtime(true) / 1e9,
                         'connection' => null, 'connected' => false, 'configured' => false,
                         'idleTimeout' => null, 'activity' => 'connecting', 'cases' => [], 'activeCase' => null,
-                        'error' => null, 'result' => null, 'hasSuites' => false,
-                        'casesPassed' => 0, 'casesFailed' => 0, 'casesSkipped' => 0,
-                        'assertionsPassed' => 0, 'assertionsFailed' => 0];
-                    echo "RUN $name (worker {$process->pid})" . PHP_EOL;
+                        'error' => null, 'result' => null];
+                    $this->report->event($name, ['type' => 'suite_started', 'file' => $diagnostic->path($job['file']), 'worker' => $process->pid]);
                 }
                 $read = [$this->listener];
                 foreach ($this->connections as $connection) {
@@ -127,6 +126,14 @@ final class Parallel
             return $this->report->summary();
         } catch (\Throwable $error) {
             echo 'ERROR ' . $error->getMessage() . PHP_EOL;
+            foreach ($this->workers as $worker) {
+                $this->report->interrupt($worker['name'], $error->getMessage() . ' Suite incomplete.');
+            }
+            foreach ($files as $name => $file) {
+                $this->report->event($name, ['type' => 'suite_started', 'file' => $diagnostic->path($file)]);
+                $this->report->interrupt($name, 'Run interrupted before worker startup.');
+            }
+            $this->report->summary();
             return 1;
         } finally {
             $this->cleanup();
@@ -188,20 +195,29 @@ final class Parallel
         if ($worker['result'] !== null) {
             throw new \RuntimeException('Message received after the final result.');
         }
+        if (!is_int($message['suiteAttempt'] ?? null) || $message['suiteAttempt'] < 1
+            || !is_string($message['time'] ?? null) || !is_numeric($message['clock'] ?? null) || !is_finite((float) $message['clock'])
+            || (isset($message['method']) && !is_string($message['method']))
+            || (isset($message['caseAttempt']) && (!is_int($message['caseAttempt']) || $message['caseAttempt'] < 1))) {
+            throw new \RuntimeException('Invalid event identity or timing.');
+        }
         switch ($message['type']) {
             case 'configured':
                 $timeout = $message['idleTimeout'];
                 if ($worker['configured'] || !is_string($message['name'] ?? null)
                     || ($timeout !== null && (!is_numeric($timeout) || !is_finite((float) $timeout) || $timeout <= 0))
                     || !is_array($message['cases']) || !array_is_list($message['cases'])
-                    || array_any($message['cases'], fn ($name) => !is_string($name))) {
+                    || array_any($message['cases'], fn ($name) => !is_string($name))
+                    || ($message['cases'] && (!is_array($message['definitions'] ?? null)
+                        || count($message['definitions']) !== count($message['cases'])
+                        || array_any($message['definitions'], fn ($case) => !is_array($case)
+                            || !is_string($case['method'] ?? null) || !is_string($case['name'] ?? null))))) {
                     throw new \RuntimeException('Invalid suite configuration.');
                 }
                 $worker['configured'] = true;
                 $worker['label'] = $message['name'];
                 $worker['idleTimeout'] = $timeout;
                 $worker['cases'] = $message['cases'];
-                $worker['hasSuites'] = $message['cases'] !== [];
                 $worker['activity'] = 'suite configured';
                 break;
             case 'activity':
@@ -214,61 +230,51 @@ final class Parallel
                 if (!is_bool($message['passed'] ?? null)) {
                     throw new \RuntimeException('Invalid assertion result.');
                 }
-                $worker[$message['passed'] ? 'assertionsPassed' : 'assertionsFailed']++;
                 break;
             case 'case_started':
-                if ($worker['activeCase'] !== null || ($worker['cases'][0] ?? null) !== ($message['name'] ?? null)) {
+                if (!isset($message['method']) || $worker['activeCase'] !== null || ($worker['cases'][0] ?? null) !== ($message['name'] ?? null)) {
                     throw new \RuntimeException('Unexpected case start.');
                 }
                 $worker['activeCase'] = $message['name'];
-                $worker['caseAssertions'] = [$worker['assertionsPassed'], $worker['assertionsFailed']];
                 $worker['activity'] = 'case setup: ' . $message['name'];
-                echo 'RUN ' . $worker['label'] . ' > ' . $message['name'] . PHP_EOL;
                 break;
             case 'case_finished':
-                if (!isset($worker['cases'][0]) || $worker['cases'][0] !== ($message['name'] ?? null)
+                if (!isset($message['method']) || !isset($worker['cases'][0]) || $worker['cases'][0] !== ($message['name'] ?? null)
                     || !in_array($message['status'] ?? null, ['PASS', 'FAIL', 'SKIP'], true)) {
                     throw new \RuntimeException('Unexpected case result.');
                 }
                 array_shift($worker['cases']);
                 $worker['activeCase'] = null;
-                $worker[match ($message['status']) { 'PASS' => 'casesPassed', 'FAIL' => 'casesFailed', 'SKIP' => 'casesSkipped' }]++;
                 $worker['activity'] = 'case finished: ' . $message['name'];
-                $this->report->caseResult($worker['label'], $message);
                 break;
             case 'retry':
-                if (!is_int($message['attempt'] ?? null) || $message['attempt'] < 2 || !is_array($message['failures'] ?? null)) {
+                if (!is_int($message['attempt'] ?? null) || $message['attempt'] < 1 || !is_array($message['failures'] ?? null)) {
                     throw new \RuntimeException('Invalid retry result.');
                 }
                 if ($message['scope'] === 'case') {
                     if ($worker['activeCase'] === null || $worker['activeCase'] !== ($message['name'] ?? null)) {
                         throw new \RuntimeException('Unexpected case retry.');
                     }
-                    // Keep completed cases and suite-hook assertions when discarding this attempt.
-                    [$worker['assertionsPassed'], $worker['assertionsFailed']] = $worker['caseAssertions'];
                 } elseif ($message['scope'] === 'suite') {
                     if ($worker['activeCase'] !== null || $worker['cases']) {
                         throw new \RuntimeException('Unexpected suite retry.');
                     }
                     $worker['configured'] = false;
-                    $worker['hasSuites'] = false;
                     $worker['idleTimeout'] = null;
-                    foreach (['casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed'] as $key) {
-                        $worker[$key] = 0;
-                    }
                 } else {
                     throw new \RuntimeException('Unknown retry scope.');
                 }
                 $worker['activity'] = $message['scope'] . ' retry';
-                $this->report->retry($worker['label'], $message);
                 break;
             case 'result':
                 $result = $message['result'] ?? null;
                 if (!is_array($result) || !is_bool($result['hasSuites'] ?? null) || !is_array($result['failures'] ?? null)) {
                     throw new \RuntimeException('Invalid terminal result.');
                 }
-                foreach (['checksPassed', 'checksFailed', 'checksSkipped', 'casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed'] as $key) {
-                    if (!is_int($result[$key] ?? null) || $result[$key] < 0 || (isset($worker[$key]) && $result[$key] !== $worker[$key])) {
+                $counts = $this->report->record->counts($worker['name']);
+                foreach (array_keys(Record::TOTALS) as $key) {
+                    if (!is_int($result[$key] ?? null) || $result[$key] < 0
+                        || (!str_starts_with($key, 'checks') && $result[$key] !== $counts[$key])) {
                         throw new \RuntimeException('Inconsistent result count: ' . $key);
                     }
                 }
@@ -280,8 +286,56 @@ final class Parallel
                 $worker['result'] = $result;
                 $worker['activity'] = 'worker shutdown';
                 break;
+            case 'suite_started':
+                if (!is_string($message['file'] ?? null)) {
+                    throw new \RuntimeException('Invalid suite start.');
+                }
+                break;
+            case 'suite_attempt_finished':
+            case 'case_attempt_finished':
+                if (!in_array($message['status'] ?? null, ['PASS', 'FAIL', 'SKIP', 'FILTERED'], true)
+                    || !is_numeric($message['duration'] ?? null) || !is_finite((float) $message['duration']) || $message['duration'] < 0) {
+                    throw new \RuntimeException('Invalid attempt completion.');
+                }
+                break;
+            case 'case_attempt_started':
+                if (!isset($message['method']) || $worker['activeCase'] !== ($message['name'] ?? null)) {
+                    throw new \RuntimeException('Unexpected case attempt.');
+                }
+                break;
+            case 'step_started':
+            case 'step_updated':
+            case 'step_finished':
+                $step = $message['step'] ?? null;
+                if (!is_array($step) || !is_string($step['id'] ?? null) || !is_string($step['label'] ?? null)
+                    || !is_string($step['phase'] ?? null) || !in_array($step['status'] ?? null, ['RUN', 'PASS', 'FAIL'], true)
+                    || !is_array($step['values'] ?? null) || !is_array($step['assertions'] ?? null)
+                    || !is_array($step['screenshots'] ?? null) || !is_numeric($step['duration'] ?? null)
+                    || !is_finite((float) $step['duration']) || $step['duration'] < 0) {
+                    throw new \RuntimeException('Invalid step record.');
+                }
+                break;
+            case 'session':
+                if (!is_array($message['session'] ?? null) || !is_array($message['session']['capabilities'] ?? null)) {
+                    throw new \RuntimeException('Invalid browser session.');
+                }
+                break;
+            case 'screenshot':
+                if (!is_array($message['screenshot'] ?? null)
+                    || (!is_string($message['screenshot']['path'] ?? null) && !is_string($message['screenshot']['diagnostic'] ?? null))) {
+                    throw new \RuntimeException('Invalid screenshot reference.');
+                }
+                break;
+            case 'error':
+                if (!is_array($message['error'] ?? null) || !is_string($message['error']['message'] ?? null)) {
+                    throw new \RuntimeException('Invalid error diagnostic.');
+                }
+                break;
             default:
                 throw new \RuntimeException('Unknown message type: ' . $message['type']);
+        }
+        if ($message['type'] !== 'result') {
+            $this->report->event($worker['name'], $message);
         }
         $worker['lastProgress'] = hrtime(true) / 1e9;
     }
@@ -299,22 +353,10 @@ final class Parallel
         }
         if ($worker['error'] !== null) {
             $worker['error'] .= ' Suite incomplete.';
-            if ($worker['activeCase'] !== null) {
-                $this->report->caseResult($worker['label'], ['name' => array_shift($worker['cases']), 'status' => 'FAIL',
-                    'failures' => [$worker['error']]]);
-                $worker['casesFailed']++;
-            }
-            foreach ($worker['cases'] as $case) {
-                $this->report->caseResult($worker['label'], ['name' => $case, 'status' => 'SKIP', 'reason' => 'worker failed']);
-                $worker['casesSkipped']++;
-            }
-            $result = array_intersect_key($worker, array_flip(['hasSuites', 'casesPassed', 'casesFailed', 'casesSkipped', 'assertionsPassed', 'assertionsFailed']));
-            $result += ['checksPassed' => 0, 'checksFailed' => 1, 'checksSkipped' => 0, 'name' => $worker['label'],
-                'failures' => [...($worker['result']['failures'] ?? []), $worker['error']]];
+            $this->report->interrupt($worker['name'], $worker['error']);
         } else {
-            $result = $worker['result'];
+            $this->report->event($worker['name'], ['type' => 'result', 'result' => $worker['result']]);
         }
-        $this->report->result($worker['name'], $result);
         unset($this->workers[$token]);
     }
 

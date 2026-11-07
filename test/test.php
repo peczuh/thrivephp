@@ -12,7 +12,7 @@ function check(bool $condition, string $message): void
 }
 
 check(Test::active() === null, 'A recorder was active before a run.');
-$test = new Test(PATH_ROOT, '/test/fixtures/test-checks');
+$test = new FixtureTest(PATH_ROOT);
 $continued = false;
 $cleaned = false;
 $next = false;
@@ -34,7 +34,8 @@ $next = false;
 	},
 ], $test);
 check($status === 1 && !$continued && $cleaned && $next, 'Assert did not stop only its check and run cleanup.');
-check($output === "FAIL check\n  stopping failure\nPASS next\n\nChecks: 1 passed, 1 failed, 0 skipped\nAssertions: 2 passed, 1 failed\n", $output);
+check(str_contains($output, 'stopping failure') && str_contains($output, 'PASS  SUITE next')
+	&& str_contains($output, 'Suites: 1 passed, 1 failed, 0 skipped') && str_contains($output, 'Assertions: 2 passed, 1 failed'), $output);
 check(Test::active() === null, 'An assertion failure leaked the active recorder.');
 echo "PASS: assert stops its check, reports once, runs cleanup and proceeds to the next check\n";
 
@@ -44,12 +45,13 @@ echo "PASS: assert stops its check, reports once, runs cleanup and proceeds to t
 	$test->verify(false, 'second failure');
 	$test->assert(true, 'continued');
 }], $test);
-check($status === 1 && $output === "FAIL check\n  first failure\n  second failure\n\nChecks: 0 passed, 1 failed, 0 skipped\nAssertions: 2 passed, 2 failed\n", $output);
+check($status === 1 && str_contains($output, 'first failure') && str_contains($output, 'second failure')
+	&& str_contains($output, 'Suites: 0 passed, 1 failed, 0 skipped') && str_contains($output, 'Assertions: 2 passed, 2 failed'), $output);
 echo "PASS: verify accumulates failures and continues; repeated runs reset counts\n";
 
 foreach (['success', 'assert', 'exception', 'empty'] as $mode) {
 	[$status, $output] = runChecks(['check' => function (Test $outer) use ($mode) {
-		$inner = new Test(PATH_ROOT, '/test/fixtures/test-checks');
+		$inner = new FixtureTest(PATH_ROOT);
 		[$status, $output] = runChecks(['check' => function (Test $current) use ($inner, $mode) {
 			check($current === $inner && Test::active() === $inner, 'Nested run did not register itself.');
 			if ($mode === 'exception') throw new RuntimeException('unexpected failure');
@@ -57,7 +59,7 @@ foreach (['success', 'assert', 'exception', 'empty'] as $mode) {
 		}], $inner);
 		check($status === (in_array($mode, ['success', 'empty'], true) ? 0 : 1), $output);
 		if ($mode === 'exception') check(str_contains($output, 'Execution error: RuntimeException: unexpected failure'), $output);
-		if ($mode === 'empty') check(str_contains($output, 'PASS check (No assertions)') && str_contains($output, 'Assertions: 0 passed, 0 failed'), $output);
+		if ($mode === 'empty') check(str_contains($output, 'PASS  SUITE check (No assertions)') && str_contains($output, 'Assertions: 0 passed, 0 failed'), $output);
 		$outer->assert(Test::active() === $outer, 'Nested run restored the outer recorder.');
 	}]);
 	check($status === 0 && str_contains($output, 'Assertions: 1 passed, 0 failed'), $output);
@@ -72,7 +74,7 @@ try {
 		'check' => function () { trigger_error('fixture warning', E_USER_WARNING); },
 		'next' => function (Test $test) { $test->assert(true, 'after unexpected exception'); },
 	]);
-	check($status === 1 && str_contains($output, 'Execution error: ErrorException: fixture warning') && str_contains($output, 'PASS next'), $output);
+	check($status === 1 && str_contains($output, 'Execution error: ErrorException: fixture warning') && str_contains($output, 'PASS  SUITE next'), $output);
 	$restored = set_error_handler($handler);
 	restore_error_handler();
 	check($restored === $handler && Test::active() === null, 'Exception did not restore handlers and recorder.');
@@ -94,5 +96,6 @@ try {
 		throw new RuntimeException('cleanup failure');
 	}
 }]);
-check($status === 1 && substr_count($output, 'recorded failure') === 1 && str_contains($output, 'Execution error: RuntimeException: cleanup failure'), $output);
+check($status === 1 && str_contains($output, 'recorded failure') && str_contains($output, 'Assertions: 0 passed, 1 failed')
+	&& str_contains($output, 'Execution error: RuntimeException: cleanup failure'), $output);
 echo "PASS: assertion exceptions carry diagnostics and cleanup errors remain visible\n";

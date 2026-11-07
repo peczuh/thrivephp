@@ -83,9 +83,9 @@
 							$actual = $elements->count() . ' matches';
 							return $elements->count() === 0;
 						endif;
-						foreach ($elements as $match):
+						foreach ($elements as $index => $match):
 							if ($match->displayed()):
-								$actual = 'visible element ' . var_export($match->id(), true);
+								$actual = 'visible match #' . ($index + 1);
 								return false;
 							endif;
 						endforeach;
@@ -93,7 +93,7 @@
 						return true;
 					endif;
 					$match = $this->element($wait);
-					$actual = $match === null ? 'no matches' : 'element ' . var_export($match->id(), true);
+					$actual = $match === null ? 'no matches' : 'a match';
 					if ($match === null):
 						return false;
 					endif;
@@ -115,7 +115,7 @@
 			$expected = $invert ? ($visible ? 'no visible matches' : 'no matches') : ($visible ? 'a visible first match' : 'a match');
 			$message = $this->description() . ': expected ' . $expected . ', got ' . $actual . '.';
 			if ($assert):
-				$browser->reportAssertion($passed, $message);
+				$browser->reportAssertion($passed, $message, comparison: ['expected' => $expected, 'actual' => $actual]);
 			endif;
 			if (!$passed):
 				if (!$wait && $lastError !== null):

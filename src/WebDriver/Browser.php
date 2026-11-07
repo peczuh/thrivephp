@@ -53,6 +53,7 @@
 
 		/** Remote session identifier; null before creation or after successful deletion. */
 		private ?string $sessionId = null;
+		private array $capabilities = [];
 		private ?WebSocket $socket = null;
 		/** BiDi events received while waiting for a command response, in arrival order. */
 		private array $events = [];
@@ -95,6 +96,7 @@
 				throw new \RuntimeException('WebDriver did not return a session ID.');
 			endif;
 			$this->sessionId = $result['sessionId'];
+			$this->capabilities = $result['capabilities'] ?? [];
 			try {
 				if ($bidi):
 					$url = $result['capabilities']['webSocketUrl'] ?? null;
@@ -128,6 +130,7 @@
 		/** Navigate the current window, using the driver's configured page-load strategy. */
 		public function navigate(string $url): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->navigate($url);
 			return $this;
 		}
@@ -141,6 +144,7 @@
 		/** Navigate one entry backward in the current window's history. */
 		public function back(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->back();
 			return $this;
 		}
@@ -148,6 +152,7 @@
 		/** Navigate one entry forward in the current window's history. */
 		public function forward(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->forward();
 			return $this;
 		}
@@ -155,6 +160,7 @@
 		/** Reload the current window's page. */
 		public function refresh(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->refresh();
 			return $this;
 		}
@@ -175,12 +181,14 @@
 		 */
 		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->window()->find($selector, $using, $visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return a snapshot of matching elements in document order, possibly empty. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->window()->findAll($selector, $using);
 		}
 
@@ -193,6 +201,7 @@
 		/** Accept the current JavaScript alert, confirmation, or prompt. */
 		public function alertAccept(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->alertAccept();
 			return $this;
 		}
@@ -200,6 +209,7 @@
 		/** Dismiss the current JavaScript dialog, e.g. cancel a confirmation or prompt. */
 		public function alertDismiss(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->alertDismiss();
 			return $this;
 		}
@@ -213,6 +223,7 @@
 		/** Enter a response in the current JavaScript prompt without accepting it. */
 		public function alertType(string $text): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->alertType($text);
 			return $this;
 		}
@@ -220,6 +231,7 @@
 		/** Switch into a frame element or zero-based index in the current context. */
 		public function switchFrame(Element|int $element): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->switchFrame($element);
 			return $this;
 		}
@@ -227,6 +239,7 @@
 		/** Move up one frame level; has no effect when already at the top level. */
 		public function parentFrame(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->parentFrame();
 			return $this;
 		}
@@ -234,6 +247,7 @@
 		/** Return to the current window's top-level document. */
 		public function defaultFrame(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->defaultFrame();
 			return $this;
 		}
@@ -267,6 +281,7 @@
 		/** Create and select a tab or window, returning its fluent Window object. */
 		public function open(string $type = 'tab'): Window
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$result = $this->window()->request('POST', '/window/new', ['type' => $type], topLevel: true);
 			if (!is_string($result['handle'] ?? null) || $result['handle'] === ''):
 				throw new \RuntimeException('WebDriver did not return a window handle.');
@@ -283,6 +298,7 @@
 		/** Resize the outer window in CSS pixels; rect() reads the actual dimensions. */
 		public function resize(int $width, int $height): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->resize($width, $height);
 			return $this;
 		}
@@ -290,6 +306,7 @@
 		/** Move the outer window to screen coordinates in CSS pixels. */
 		public function move(int $x, int $y): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->move($x, $y);
 			return $this;
 		}
@@ -297,6 +314,7 @@
 		/** Maximize the current window. */
 		public function maximize(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->maximize();
 			return $this;
 		}
@@ -304,6 +322,7 @@
 		/** Minimize the current window. */
 		public function minimize(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->minimize();
 			return $this;
 		}
@@ -311,6 +330,7 @@
 		/** Enter fullscreen in the current window. */
 		public function fullscreen(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->fullscreen();
 			return $this;
 		}
@@ -318,6 +338,7 @@
 		/** Select a window/tab and reset its frame context to the top level. */
 		public function switch(Window|string $window): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$window = is_string($window) ? $this->window($window) : $window;
 			$this->activate($window, []);
 			return $this;
@@ -329,12 +350,14 @@
 		 */
 		public function close(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->window()->close();
 		}
 
 		/** Pause locally for nonnegative, finite seconds (including fractions), preserving the chain. */
 		public function sleep(float $seconds): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if (!is_finite($seconds) || $seconds < 0):
 				throw new \InvalidArgumentException('Sleep duration must be finite and nonnegative.');
 			endif;
@@ -355,6 +378,7 @@
 		 */
 		public function wait(callable $condition, ?float $timeout = null): mixed
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$deadline = $this->deadline($timeout === null ? $this->timeout : $timeout / 1000);
 			$lastError = null;
 			do {
@@ -388,18 +412,19 @@
 		 */
 		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->urlMatches($pattern, $wait, $timeout, $verify);
 			return $this;
 		}
 
 		/** @internal Report once; $verify continues only when an active Test records the result. */
-		public function reportAssertion(bool $condition, string $message, bool $verify = false): void
+		public function reportAssertion(bool $condition, string $message, bool $verify = false, array $comparison = []): void
 		{
-			if (($test = Test::active()) !== null):
+			if (class_exists(Test::class) && ($test = Test::active()) !== null):
 				if ($verify):
-					$test->verify($condition, $message);
+					$test->verify($condition, $message, $comparison);
 				else:
-					$test->assert($condition, $message);
+					$test->assert($condition, $message, $comparison);
 				endif;
 			elseif (!$condition):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);
@@ -495,6 +520,7 @@
 			?string $sameSite = null,
 			?int $expiry = null,
 		): string|self {
+			if ($value !== null && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$result = $this->window()->cookie($name, $value, $domain, $path, $secure, $httpOnly, $sameSite, $expiry);
 			return $value === null ? $result : $this;
 		}
@@ -502,6 +528,7 @@
 		/** Delete matching cookies by name in the active document's scope. */
 		public function cookieDelete(string $name): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->cookieDelete($name);
 			return $this;
 		}
@@ -509,6 +536,7 @@
 		/** Delete all cookies associated with the active document, not every browser domain. */
 		public function cookieDeleteAll(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->cookieDeleteAll();
 			return $this;
 		}
@@ -607,6 +635,7 @@
 		 */
 		public function actions(array $sources): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->actions($sources);
 			return $this;
 		}
@@ -614,6 +643,7 @@
 		/** Release held keys/buttons and clear the session's input-source state. */
 		public function releaseActions(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window()->releaseActions();
 			return $this;
 		}
@@ -627,6 +657,7 @@
 		/** Set the browser navigation timeout in seconds; the constructor's HTTP timeout still applies. */
 		public function pageLoadTimeout(float $seconds): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->setTimeout('pageLoad', $seconds);
 			return $this;
 		}
@@ -634,6 +665,7 @@
 		/** Set element-search retries in seconds; these also lengthen find() calls inside wait(). */
 		public function implicitTimeout(float $seconds): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->setTimeout('implicit', $seconds);
 			return $this;
 		}
@@ -670,12 +702,14 @@
 		 */
 		public function script(string $script, bool $async = false, array $arguments = [], bool $inject = false): mixed
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->window()->script($script, $async, $arguments, $inject);
 		}
 
 		/** Set the browser's script execution timeout in seconds, rounded to whole milliseconds. */
 		public function scriptTimeout(float $seconds): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->setTimeout('script', $seconds);
 			return $this;
 		}
@@ -683,6 +717,7 @@
 		/** Subscribe to BiDi event names, e.g. ['log.entryAdded'], and return the subscription ID. */
 		public function subscribe(array $events): string
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$result = $this->command('session.subscribe', ['events' => array_values($events)]);
 			if (!is_string($result['subscription'] ?? null) || $result['subscription'] === ''):
 				throw new \RuntimeException('WebDriver BiDi did not return a subscription ID.');
@@ -693,6 +728,7 @@
 		/** Cancel subscription IDs returned by subscribe(); events already queued remain available. */
 		public function unsubscribe(array $subscriptions): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->command('session.unsubscribe', ['subscriptions' => array_values($subscriptions)]);
 			return $this;
 		}
@@ -705,6 +741,7 @@
 		 */
 		public function command(string $method, array $params = []): array
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if ($this->socket === null):
 				throw new \LogicException('No active WebDriver BiDi connection.');
 			endif;
@@ -740,6 +777,7 @@
 		 */
 		public function event(?float $timeout = null): array
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$deadline = $this->deadline($timeout ?? $this->timeout);
 			if ($this->events):
 				return array_shift($this->events);
@@ -759,6 +797,7 @@
 		 */
 		public function quit(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if ($this->sessionId === null):
 				return $this;
 			endif;
@@ -776,6 +815,12 @@
 		public function active(): bool
 		{
 			return $this->sessionId !== null;
+		}
+
+		/** Session identity and negotiated capabilities, including browserVersion and platformName. */
+		public function session(): array
+		{
+			return ['sessionId' => $this->sessionId, 'capabilities' => $this->capabilities];
 		}
 
 		/** @internal Forget local session state after deletion or termination of its owned service. */

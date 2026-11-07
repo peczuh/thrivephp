@@ -12,7 +12,21 @@ class Test
     private int $failed = 0;
     private array $failures = [];
     private string $pathRoot;
-    private string $pathChecks;
+    private Test\Diagnostic $diagnostic;
+    private string $runDirectory = '';
+    private string $checkId = '';
+    private int $suiteAttempt = 1;
+    private ?string $caseMethod = null;
+    private int $caseAttempt = 1;
+    private string $phase = 'suite-setup';
+    private ?string $hook = null;
+    private int $ordinal = 0;
+    private ?array $step = null;
+    /** Getter implementations and screenshot callbacks must not open script/action steps. */
+    private bool $suppressSteps = false;
+    private ?\Closure $screenshotSource = null;
+    private ?array $failureCapture = null;
+    private array $capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
     private bool $bootstrapped = false;
     private ?string $selectedBrowser = null;
     private bool $browserResolved = false;
@@ -24,11 +38,10 @@ class Test
     private ?Test\Report $report = null;
     private string $currentCheck = '';
 
-    /** Set the project root and its relative checks directory; bootstrap defines PATH_ROOT. */
-    public function __construct(string $pathRoot, string $pathChecks = '/test/checks')
+    /** Set the project root; discovery and report paths resolve from Settings when run() starts. */
+    public function __construct(string $pathRoot)
     {
         $this->pathRoot = $pathRoot;
-        $this->pathChecks = $pathChecks;
     }
 
     /** Initialize the application without command dispatch; exit with status 1 on failure. */
@@ -67,9 +80,12 @@ class Test
     }
 
     /** Record a result; failure throws Test\AssertionFailure to stop the current case or hook. */
-    public function assert(bool $condition, string $message): bool
+    public function assert(bool $condition, string $message, array $comparison = []): bool
     {
-        $this->verify($condition, $message);
+        if ($this->canRecordStep()) {
+            return $this->recordStep('assert', null, [], fn () => $this->assert($condition, $message, $comparison));
+        }
+        $this->verify($condition, $message, $comparison);
         if (!$condition) {
             throw new Test\AssertionFailure($message);
         }
@@ -78,8 +94,11 @@ class Test
     }
 
     /** Record a result and continue, returning the condition for prerequisite guards. */
-    public function verify(bool $condition, string $message): bool
+    public function verify(bool $condition, string $message, array $comparison = []): bool
     {
+        if ($this->canRecordStep()) {
+            return $this->recordStep('verify', null, [], fn () => $this->verify($condition, $message, $comparison));
+        }
         if ($condition) {
             $this->passed++;
         } else {
@@ -87,8 +106,171 @@ class Test
             $this->failures[] = $message;
         }
         $this->event(['type' => 'assertion', 'passed' => $condition]);
+        if ($this->step !== null) {
+            $this->step['assertions'][] = ['passed' => $condition, 'message' => $message,
+                'location' => $this->diagnostic->author()] + ($condition ? [] : ['class' => 'AssertionFailure']) + $comparison;
+            if (!$condition) {
+                $this->step['status'] = 'FAIL';
+                $this->captureStep();
+            }
+            $this->event(['type' => 'step_updated', 'step' => $this->step]);
+        }
 
         return $condition;
+    }
+
+    /** One recorder-wide guard covers nested calls across all browser objects. */
+    public function canRecordStep(): bool
+    {
+        return self::$active === $this && $this->step === null && !$this->suppressSteps;
+    }
+
+    /** Execute one author operation, preserving its return value and thrown exception. */
+    public function recordStep(string $label, ?string $target, array $values, callable $operation): mixed
+    {
+        if (!$this->canRecordStep()) {
+            return $operation();
+        }
+        $started = hrtime(true);
+        $this->failureCapture = null;
+        $this->step = ['id' => $this->attemptId() . '/s' . ++$this->ordinal, 'label' => $label,
+            'target' => $target, 'values' => $values, 'phase' => $this->phase, 'hook' => $this->hook, 'status' => 'RUN',
+            'startedAt' => Test\Record::now(), 'endedAt' => null, 'duration' => 0,
+            'location' => $this->diagnostic->author(), 'assertions' => [], 'error' => null, 'screenshots' => []];
+        try {
+            $this->event(['type' => 'step_started', 'step' => $this->step]);
+            return $operation();
+        } catch (\Throwable $error) {
+            $this->step['status'] = 'FAIL';
+            // assert() already recorded its diagnostic before throwing to stop the operation.
+            if (!$error instanceof Test\AssertionFailure || !array_any($this->step['assertions'],
+                static fn ($assertion) => !$assertion['passed'] && $assertion['message'] === $error->getMessage())) {
+                $this->step['error'] = $this->diagnostic->error($error);
+            }
+            throw $error;
+        } finally {
+            try {
+                if ($this->step['status'] === 'RUN') {
+                    $this->step['status'] = 'PASS';
+                }
+                $this->captureStep();
+                $this->step['endedAt'] = Test\Record::now();
+                $this->step['duration'] = (hrtime(true) - $started) / 1e9;
+                $this->event(['type' => 'step_finished', 'step' => $this->step]);
+            } finally {
+                $this->step = null;
+            }
+        }
+    }
+
+    /** Observation implementations can call public script methods without creating action steps. */
+    public function withoutSteps(callable $operation): mixed
+    {
+        $previous = $this->suppressSteps;
+        $this->suppressSteps = true;
+        try {
+            return $operation();
+        } finally {
+            $this->suppressSteps = $previous;
+        }
+    }
+
+    /** SuiteBrowser registers capabilities and an eager PNG source for this suite attempt. */
+    public function browserSession(array $session, callable $source): void
+    {
+        $this->screenshotSource = \Closure::fromCallable($source);
+        $this->event(['type' => 'session', 'session' => $session]);
+    }
+
+    private function attemptId(): string
+    {
+        return $this->checkId . '/a' . $this->suiteAttempt
+            . ($this->caseMethod === null ? '' : '/' . $this->caseMethod . '/a' . $this->caseAttempt);
+    }
+
+    private function captureStep(): void
+    {
+        $failure = $this->step['status'] === 'FAIL';
+        if (!$this->step['screenshots'] && $this->captureEnabled('steps', $failure)) {
+            $image = $this->capture($failure ? 'fail' : 'pass', $failure, $this->ordinal);
+            if ($image !== null) {
+                $this->step['screenshots'][] = $image;
+                if ($failure) {
+                    $this->failureCapture = $image;
+                }
+            }
+        }
+    }
+
+    private function captureEnabled(string $level, bool $failure): bool
+    {
+        return $this->capturePolicy[$level] === 'always' || ($failure && $this->capturePolicy[$level] === 'failure');
+    }
+
+    /** Capture errors are report diagnostics; they must not change the test's outcome. */
+    private function capture(string $point, bool $failed, ?int $step = null): ?array
+    {
+        if ($this->screenshotSource === null) {
+            return null;
+        }
+        try {
+            $image = $this->withoutSteps($this->screenshotSource);
+            $clean = static fn (string $name): string => preg_replace('/[^A-Za-z0-9._-]/', '-', $name);
+            $parts = [$clean($this->checkId), 'a' . $this->suiteAttempt];
+            if ($this->caseMethod !== null) {
+                $parts[] = $clean($this->caseMethod);
+                $parts[] = 'a' . $this->caseAttempt;
+            }
+            if ($step !== null) {
+                $parts[] = 's' . $step;
+            }
+            $path = 'screenshots/' . implode('__', $parts) . '__' . $point . '.png';
+            $image->save($this->runDirectory . '/' . $path);
+            return ['path' => $path, 'point' => $point, 'status' => $failed ? 'FAIL' : 'PASS',
+                'width' => $image->width(), 'height' => $image->height()];
+        } catch (\Throwable $error) {
+            return ['point' => $point, 'status' => $failed ? 'FAIL' : 'PASS', 'diagnostic' => $error->getMessage()];
+        }
+    }
+
+    private function captureCompletion(string $level, bool $failed = false): void
+    {
+        $failed = $failed || $this->failures !== [];
+        if ($this->captureEnabled($level, $failed)) {
+            $point = $level === 'cases' ? ($this->phase === 'case-teardown' ? 'case-teardown' : 'case') : 'suite';
+            $image = $failed && $this->failureCapture !== null ? $this->failureCapture
+                : $this->capture($point, $failed);
+            if ($image !== null) {
+                $this->event(['type' => 'screenshot', 'screenshot' => $image]);
+            }
+        }
+    }
+
+    private function executionError(\Throwable $error, string $prefix = 'Execution error'): void
+    {
+        $this->failures[] = $prefix . ': ' . get_class($error) . ': ' . $error->getMessage();
+        $this->event(['type' => 'error', 'error' => $this->diagnostic->error($error) + ['phase' => $this->phase, 'hook' => $this->hook]]);
+    }
+
+    /** Test umbrella directory; relative settings resolve against the constructor's project root. */
+    protected function basePath(): string
+    {
+        $path = Settings::fetch('test.basepath') ?? 'test';
+        return str_starts_with($path, '/') ? $path : $this->pathRoot . '/' . $path;
+    }
+
+    /** Discovery directory; relative settings resolve against the test base. Overridable by fixtures. */
+    protected function casePath(): string
+    {
+        $path = Settings::fetch('test.casepath') ?? 'cases';
+        return str_starts_with($path, '/') ? $path : $this->basePath() . '/' . $path;
+    }
+
+    /** Parent of timestamped runs; relative settings resolve against the test base. */
+    protected function savePath(): string
+    {
+        $path = Settings::fetch('test.savepath') ?? 'runs';
+        return str_starts_with($path, '/') ? $path : $this->basePath() . '/' . $path;
     }
 
     /** Return a required application setting by dot-separated key; missing values throw. */
@@ -246,14 +428,15 @@ class Test
      * Null workers prefers two parallel processes, falling back to serial for Safari.
      * Explicit workers > 1 requires a parallel-capable selected browser; 1 runs in-process.
      * Browser and headless apply to every managed SuiteBrowser in this run.
+     * Title identifies the project; null uses test.project, then the root Composer package name.
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
      * @param list<string> $selectors Regex selectors: files!!exclude::cases:!exclude##tags#!exclude.
      * Empty selects all; each alternative combines its supplied conditions with AND.
      */
     public function run(array $names = [], ?int $workers = null, ?string $browser = null, bool $headless = false,
-        array $selectors = []): int
+        array $selectors = [], ?string $title = null): int
     {
-        $directory = $this->pathRoot . '/' . trim($this->pathChecks, '/') . '/';
+        $directory = rtrim($this->casePath(), '/') . '/';
         $files = [];
 
         try {
@@ -297,9 +480,6 @@ class Test
             if ($this->selectors) {
                 $names = array_values(array_filter($names, fn ($name) => array_any($this->selectors,
                     fn ($selector) => $selector->file($name))));
-                if (!$names) {
-                    return (new Test\Report())->summary();
-                }
             }
             $this->headless = $headless;
             $this->browserResolved = false;
@@ -320,21 +500,55 @@ class Test
             return 1;
         }
 
-        if ($workers !== 1) {
+        $savePath = $this->savePath();
+        if (!is_dir($savePath) && !mkdir($savePath, 0777, true)) {
+            throw new \RuntimeException('Could not create test save directory: ' . $savePath);
+        }
+        $this->runDirectory = $savePath . '/' . date('Y-m-d_H-i-s');
+        if (!@mkdir($this->runDirectory)) {
+            throw new \RuntimeException('Could not create run directory (it may already exist): ' . $this->runDirectory);
+        }
+        if (!mkdir($this->runDirectory . '/screenshots')) {
+            throw new \RuntimeException('Could not create screenshots directory.');
+        }
+        $this->capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
+        foreach ($this->capturePolicy as $level => &$policy) {
+            $policy = Settings::fetch('test.screenshots.' . $level) ?? $policy;
+            if (!in_array($policy, ['off', 'failure', 'always'], true)) {
+                throw new \InvalidArgumentException('test.screenshots.' . $level . ' must be off, failure, or always.');
+            }
+        }
+        unset($policy);
+        $root = realpath($this->pathRoot);
+        $title ??= Settings::fetch('test.project');
+        if ($title === null && is_file($root . '/composer.json')) {
+            $title = json_decode(file_get_contents($root . '/composer.json'), true, flags: JSON_THROW_ON_ERROR)['name'] ?? null;
+        }
+        $this->diagnostic = new Test\Diagnostic($root);
+        $environment = ['root' => $root, 'project' => $title, 'php' => PHP_VERSION, 'os' => php_uname(), 'workers' => max(1, min($workers ?? 2, count($names))),
+            'browser' => $this->selectedBrowser, 'headless' => $headless, 'url' => Settings::fetch('site.url'),
+            'browserVersion' => null, 'platform' => null];
+        $this->report = new Test\Report($this->runDirectory, $environment, (bool) Settings::fetch('test.console.steps'));
+        if ($workers !== 1 && $names) {
             $selected = [];
             foreach ($names as $name) {
                 $selected[$name] = $files[$name];
             }
-            return (new Test\Parallel())->run($selected, min($workers ?? 2, count($names)), [
-                'root' => realpath($this->pathRoot), 'checks' => $this->pathChecks,
-                'browser' => $this->selectedBrowser, 'headless' => $headless, 'bootstrap' => $this->bootstrapped,
-                'selectors' => $selectors,
-            ]);
+            try {
+                return (new Test\Parallel())->run($selected, min($workers ?? 2, count($names)), [
+                    'root' => $root, 'cases' => $directory, 'runDirectory' => $this->runDirectory,
+                    'capturePolicy' => $this->capturePolicy,
+                    'browser' => $this->selectedBrowser, 'headless' => $headless, 'bootstrap' => $this->bootstrapped,
+                    'selectors' => $selectors,
+                ], $this->report);
+            } finally {
+                $this->report = null;
+            }
         }
-        $this->report = new Test\Report();
         try {
             foreach ($names as $name) {
-                $this->report->result($name, $this->executeFile($name, $files[$name]));
+                $result = $this->executeFile($name, $files[$name]);
+                $this->event(['type' => 'result', 'result' => $result]);
             }
             return $this->report->summary();
         } finally {
@@ -389,6 +603,9 @@ class Test
     public function runWorker(array $job, Test\Channel $channel): int
     {
         $this->channel = $channel;
+        $this->diagnostic = new Test\Diagnostic($job['root']);
+        $this->runDirectory = $job['runDirectory'];
+        $this->capturePolicy = $job['capturePolicy'];
         $this->selectedBrowser = $job['browser'];
         $this->browserResolved = true;
         $this->headless = $job['headless'];
@@ -410,6 +627,7 @@ class Test
     private function executeFile(string $name, string $path): array
     {
         $this->currentCheck = $name;
+        $this->checkId = $name;
         $started = hrtime(true);
         set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
             if (!(error_reporting() & $severity)) {
@@ -424,6 +642,15 @@ class Test
             $retry = 0;
             do {
                 $attempt++;
+                $this->suiteAttempt = $attempt;
+                $this->caseMethod = null;
+                $this->phase = 'suite-setup';
+                $this->hook = null;
+                $this->ordinal = 0;
+                $this->screenshotSource = null;
+                $this->failureCapture = null;
+                $attemptStarted = hrtime(true);
+                $this->event(['type' => 'suite_started', 'file' => $this->diagnostic->path($path)]);
                 $this->passed = $this->failed = 0;
                 $this->failures = [];
                 $casesPassed = $casesFailed = $casesSkipped = 0;
@@ -445,7 +672,7 @@ class Test
                         [$casesPassed, $casesFailed, $casesSkipped, $skipped, $filtered] = $this->runSuite($check, $metadata, $selectors);
                         $duration = (hrtime(true) - $suiteStarted) / 1e9;
                         if (!$skipped && !$filtered && $metadata->deadline !== null && $duration > $metadata->deadline) {
-                            $this->failures[] = sprintf('Suite deadline exceeded: %.3fs > %.3fs.', $duration, $metadata->deadline);
+                            $this->executionError(new \RuntimeException(sprintf('Suite deadline exceeded: %.3fs > %.3fs.', $duration, $metadata->deadline)));
                         }
                     } else {
                         if (!is_callable($check)) {
@@ -454,6 +681,7 @@ class Test
                         $this->event(['type' => 'configured', 'name' => $name, 'idleTimeout' => null, 'cases' => []]);
                         $filtered = $selectors && !array_any($selectors, fn ($selector) => $selector->test(null, []));
                         if (!$filtered) {
+                            $this->phase = 'test';
                             $this->event(['type' => 'activity', 'activity' => 'callable check']);
                             $check($this);
                         }
@@ -461,17 +689,21 @@ class Test
                 } catch (Test\AssertionFailure $error) {
                     // assert() already recorded this failure before stopping the check.
                 } catch (\Throwable $error) {
-                    $this->failures[] = 'Execution error: ' . get_class($error) . ': ' . $error->getMessage();
+                    $this->executionError($error);
                 }
                 $failed = $casesFailed > 0 || $this->failures;
+                $this->event(['type' => 'suite_attempt_finished', 'status' => $failed ? 'FAIL' : ($skipped ? 'SKIP' : ($filtered ? 'FILTERED' : 'PASS')),
+                    'duration' => (hrtime(true) - $attemptStarted) / 1e9, 'maxAttempts' => $retry + 1]);
                 if (!$failed || $attempt > $retry || $skipped || $filtered) {
                     break;
                 }
-                $this->event(['type' => 'retry', 'scope' => 'suite', 'attempt' => $attempt + 1,
+                $this->event(['type' => 'retry', 'scope' => 'suite', 'attempt' => $attempt,
                     'failures' => $this->failures]);
                 unset($check);
             } while (true);
         } finally {
+            $this->screenshotSource = null;
+            $this->failureCapture = null;
             self::$active = $previous;
             restore_error_handler();
             // Application::init installs a shutdown handler that rethrows even suppressed errors.
@@ -489,12 +721,14 @@ class Test
 
     private function event(array $message): void
     {
+        $message += ['suiteAttempt' => $this->suiteAttempt, 'time' => Test\Record::now(), 'clock' => hrtime(true) / 1e9];
+        if ($this->caseMethod !== null) {
+            $message += ['method' => $this->caseMethod, 'caseAttempt' => $this->caseAttempt];
+        }
         if ($this->channel !== null) {
             $this->channel->send($message);
-        } elseif ($message['type'] === 'case_finished') {
-            $this->report?->caseResult($this->currentCheck, $message);
-        } elseif ($message['type'] === 'retry') {
-            $this->report?->retry($this->currentCheck, $message);
+        } else {
+            $this->report?->event($this->checkId, $message);
         }
     }
 
@@ -510,18 +744,25 @@ class Test
             return !$selectors || array_any($selectors, fn ($selector) => $selector->test($case['method']->getName(), $tags));
         }));
         $filtered = !$cases && $selectors !== [];
+        $definitions = array_map(fn ($case) => ['method' => $case['method']->getName(), 'name' => $case['name'],
+            'maxAttempts' => $case['retry'] + 1,
+            'location' => $this->diagnostic->location($case['method']->getFileName(), $case['method']->getStartLine())], $cases);
+        $class = new \ReflectionObject($suite);
+        $location = $this->diagnostic->location($class->getFileName(), $class->getStartLine());
         $skipped = !$filtered && ($metadata->skip || ($cases && array_all($cases, fn ($case) => $case['skip'])));
         if ($filtered || $skipped) {
             $this->event(['type' => 'configured', 'name' => $metadata->description, 'idleTimeout' => null,
-                'cases' => array_column($cases, 'name')]);
+                'cases' => array_column($cases, 'name'), 'definitions' => $definitions, 'location' => $location,
+                'maxAttempts' => $metadata->retry + 1]);
             foreach ($cases as $case) {
                 $this->event(['type' => 'case_finished', 'name' => $case['name'], 'status' => 'SKIP',
-                    'reason' => 'marked skip', 'duration' => 0]);
+                    'method' => $case['method']->getName(), 'reason' => 'marked skip', 'duration' => 0]);
             }
             return [0, 0, count($cases), $skipped, $filtered];
         }
         $casesPassed = $casesFailed = $casesSkipped = $assertionsPassed = $assertionsFailed = 0;
         $suiteState = [$this->passed, $this->failed, $this->failures];
+        $suiteOrdinal = $this->ordinal;
         try {
             $ready = false;
             $idleTimeout = null;
@@ -530,48 +771,65 @@ class Test
                 $idleTimeout = $config->idleTimeout;
                 $ready = true;
             } catch (\Throwable $error) {
-                $this->failures[] = 'Suite configuration: ' . get_class($error) . ': ' . $error->getMessage();
+                $this->executionError($error, 'Suite configuration');
             }
             $this->event(['type' => 'configured', 'name' => $metadata->description, 'idleTimeout' => $idleTimeout,
-                'cases' => array_column($cases, 'name')]);
+                'cases' => array_column($cases, 'name'), 'definitions' => $definitions, 'location' => $location,
+                'maxAttempts' => $metadata->retry + 1]);
             if ($ready) {
                 $ready = $this->runHooks($suite, $methods[Test\SuiteBefore::class], 'SuiteBefore');
             }
             $suiteState = [$this->passed, $this->failed, $this->failures];
+            $suiteOrdinal = $this->ordinal;
             foreach ($cases as $case) {
                 if ($case['skip'] || !$ready || ($config->skipRemainingOnFailure && $casesFailed > 0)) {
                     $casesSkipped++;
                     $this->event(['type' => 'case_finished', 'name' => $case['name'], 'status' => 'SKIP',
+                        'method' => $case['method']->getName(),
                         'reason' => $case['skip'] ? 'marked skip' : ($ready ? 'previous case failed' : 'suite setup failed'), 'duration' => 0]);
                     continue;
                 }
 
                 $started = hrtime(true);
+                $this->caseMethod = $case['method']->getName();
                 $this->event(['type' => 'case_started', 'name' => $case['name']]);
                 $attempt = 0;
                 do {
                     $attempt++;
+                    $this->caseAttempt = $attempt;
+                    $this->ordinal = 0;
+                    $this->failureCapture = null;
+                    $attemptStarted = hrtime(true);
+                    $this->event(['type' => 'case_attempt_started', 'name' => $case['name']]);
                     $this->passed = $this->failed = 0;
                     $this->failures = [];
                     try {
                         if ($this->runHooks($suite, $methods[Test\CaseBefore::class], 'CaseBefore')) {
-                            $this->event(['type' => 'activity', 'activity' => 'case body: ' . $case['name']]);
+                            $this->phase = 'test';
+                            $this->event(['type' => 'activity', 'activity' => 'case test: ' . $case['name']]);
                             $bodyStarted = hrtime(true);
                             $this->invokeSuiteMethod($suite, $case['method']);
                             $duration = (hrtime(true) - $bodyStarted) / 1e9;
                             if ($case['deadline'] !== null && $duration > $case['deadline']) {
-                                $this->failures[] = sprintf('Case deadline exceeded: %.3fs > %.3fs.', $duration, $case['deadline']);
+                                $this->executionError(new \RuntimeException(sprintf('Case deadline exceeded: %.3fs > %.3fs.', $duration, $case['deadline'])));
                             }
-                            $this->event(['type' => 'activity', 'activity' => 'case body finished: ' . $case['name'], 'duration' => $duration]);
+                            $this->event(['type' => 'activity', 'activity' => 'case test finished: ' . $case['name'], 'duration' => $duration]);
                         }
                     } finally {
+                        $this->captureCompletion('cases');
+                        $beforeCleanup = count($this->failures);
                         $this->runHooks($suite, $methods[Test\CaseAfter::class], 'CaseAfter', teardown: true);
+                        if (count($this->failures) > $beforeCleanup) {
+                            $this->captureCompletion('cases');
+                        }
                     }
+                    $this->event(['type' => 'case_attempt_finished', 'status' => $this->failures ? 'FAIL' : 'PASS',
+                        'duration' => (hrtime(true) - $attemptStarted) / 1e9]);
                     if (!$this->failures || $attempt > $case['retry']) {
                         break;
                     }
                     $this->event(['type' => 'retry', 'scope' => 'case', 'name' => $case['name'],
-                        'attempt' => $attempt + 1, 'failures' => $this->failures]);
+                        'attempt' => $attempt, 'failures' => $this->failures]);
                 } while (true);
                 if ($this->failures) {
                     $casesFailed++;
@@ -585,9 +843,14 @@ class Test
                     'duration' => (hrtime(true) - $started) / 1e9]);
                 $assertionsPassed += $this->passed;
                 $assertionsFailed += $this->failed;
+                $this->caseMethod = null;
             }
         } finally {
+            $this->caseMethod = null;
+            $this->ordinal = $suiteOrdinal;
+            $this->failureCapture = null;
             [$this->passed, $this->failed, $this->failures] = $suiteState;
+            $this->captureCompletion('suites', $casesFailed > 0);
             $this->runHooks($suite, $methods[Test\SuiteAfter::class], 'SuiteAfter', teardown: true);
             $this->passed += $assertionsPassed;
             $this->failed += $assertionsFailed;
@@ -598,11 +861,17 @@ class Test
     /** Stop setup at its first thrown failure; attempt every teardown hook independently. */
     private function runHooks(Test\Suite $suite, array $hooks, string $phase, bool $teardown = false): bool
     {
+        $this->phase = match ($phase) {
+            'SuiteBefore' => 'suite-setup', 'CaseBefore' => 'case-setup',
+            'CaseAfter' => 'case-teardown', 'SuiteAfter' => 'suite-teardown',
+        };
         foreach ($hooks as $hook) {
+            $this->hook = $phase . ' ' . $hook['name'];
             $start = count($this->failures);
             $started = hrtime(true);
             $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name']]);
             $completed = $this->invokeSuiteMethod($suite, $hook['method']);
+            $this->hook = null;
             $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name'] . ' finished',
                 'duration' => (hrtime(true) - $started) / 1e9]);
             for ($index = $start; $index < count($this->failures); $index++) {
@@ -624,7 +893,7 @@ class Test
         } catch (Test\AssertionFailure $error) {
             return false;
         } catch (\Throwable $error) {
-            $this->failures[] = 'Execution error: ' . get_class($error) . ': ' . $error->getMessage();
+            $this->executionError($error);
             return false;
         }
     }

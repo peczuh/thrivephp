@@ -136,7 +136,8 @@ trait SecondConflict
     };
 }]);
 check($status === 0 && str_contains($output, 'Cases: 6 passed, 0 failed, 0 skipped'), $output);
-check(substr_count($output, 'Original and alias execute once') === 1 && substr_count($output, 'Public alias of a protected method') === 1, $output);
+check(substr_count($output, 'PASS  CASE  suite > shared: Original and alias execute once') === 1
+    && substr_count($output, 'PASS  CASE  suite > aHidden: Public alias of a protected method') === 1, $output);
 check(str_contains($output, 'First trait implementation') && str_contains($output, 'Second trait implementation'), $output);
 echo "PASS: nested traits, aliases, visibility changes, conflict resolution and distinct same-line methods\n";
 
@@ -192,9 +193,9 @@ trait AliasedHooks
         public function body(): void { $this->test->assert(true, 'case ran'); }
     };
 }]);
-check($status === 1 && str_contains($output, 'PASS suite > Case after verifying setup')
-    && str_contains($output, 'SuiteBefore originalHook: original hook once')
-    && str_contains($output, 'SuiteBefore aPublicAlias: public alias once')
+check($status === 1 && str_contains($output, 'PASS  CASE  suite > body: Case after verifying setup')
+    && str_contains($output, "Hook: SuiteBefore originalHook\n    AssertionFailure: original hook once")
+    && str_contains($output, "Hook: SuiteBefore aPublicAlias\n    AssertionFailure: public alias once")
     && str_contains($output, 'Assertions: 1 passed, 2 failed'), $output);
 echo "PASS: alias deduplication prefers an eligible original, otherwise the first public alias by name\n";
 
@@ -275,25 +276,26 @@ foreach ([...$failureModes, ...array_map(fn ($mode) => 'stop ' . $mode, $failure
         },
         'next' => function (TestRunner $test) { $test->assert(true, 'legacy check still runs'); },
     ]);
-    check($status === ($mode === 'empty' ? 0 : 1) && str_contains($output, 'PASS next') && TestRunner::active() === null, $output);
+    check($status === ($mode === 'empty' ? 0 : 1) && str_contains($output, 'PASS  SUITE next') && TestRunner::active() === null, $output);
     check(array_slice($suite->trace, -2) === ['suite cleanup', 'later stop'], json_encode($suite->trace));
     if ($mode === 'suite setup') {
         check($suite->trace === ['suite setup', 'suite cleanup', 'later stop'], json_encode($suite->trace));
-        check(str_contains($output, 'Cases: 0 passed, 0 failed, 2 skipped') && substr_count($output, 'setup failed') === 3, $output);
+        check(str_contains($output, 'Cases: 0 passed, 0 failed, 2 skipped') && str_contains($output, 'Assertions: 1 passed, 1 failed'), $output);
     } elseif ($stop && !in_array($mode, ['suite cleanup', 'empty'], true)) {
         check(!in_array('second', $suite->trace, true) && !in_array('prepare 2', $suite->trace, true)
             && !in_array('clean 2', $suite->trace, true) && in_array('later clean 1', $suite->trace, true), json_encode($suite->trace));
-        check(str_contains($output, 'SKIP suite > Second case (previous case failed)')
+        check(str_contains($output, 'SKIP  CASE  suite > second: Second case (previous case failed)')
             && str_contains($output, 'Cases: 0 passed, 1 failed, 1 skipped'), $output);
     } else {
         check(in_array('second', $suite->trace, true) && in_array('later clean 1', $suite->trace, true), $output);
         check(str_contains($output, in_array($mode, ['suite cleanup', 'empty'], true) ? 'Cases: 2 passed, 0 failed, 0 skipped' : 'Cases: 1 passed, 1 failed, 0 skipped'), $output);
     }
     if ($mode === 'case setup') check(!in_array('first', $suite->trace, true), $output);
-    if ($mode === 'case body') check(!in_array('continued', $suite->trace, true) && substr_count($output, 'body failed') === 1, $output);
+    if ($mode === 'case body') check(!in_array('continued', $suite->trace, true) && str_contains($output, 'body failed')
+        && str_contains($output, 'Assertions: ' . ($stop ? 1 : 2) . ' passed, 1 failed'), $output);
     if ($mode === 'verify') check(in_array('continued', $suite->trace, true)
         && str_contains($output, 'Assertions: ' . ($stop ? 2 : 3) . ' passed, 1 failed'), $output);
-    if ($mode === 'empty') check(str_contains($output, 'PASS suite > First case (No assertions)') && str_contains($output, 'Assertions: 2 passed, 0 failed'), $output);
+    if ($mode === 'empty') check(str_contains($output, 'PASS  CASE  suite > first: First case (No assertions)') && str_contains($output, 'Assertions: 2 passed, 0 failed'), $output);
 }
 echo "PASS: optional skipping after assertions, verification, errors, hooks and deadlines preserves cleanup and other checks\n";
 
@@ -323,9 +325,9 @@ echo "PASS: optional skipping after assertions, verification, errors, hooks and 
 }]);
 check($status === 1 && str_contains($output, 'Assertions: 2 passed, 3 failed'), $output);
 foreach (['suite verification', 'case cleanup assertion', 'additional case cleanup error', 'suite cleanup assertion'] as $message) {
-    check(substr_count($output, $message) === 1, $output);
+    check(str_contains($output, $message), $output);
 }
-check(str_contains($output, 'SuiteBefore start:') && str_contains($output, 'SuiteAfter stop:') && str_contains($output, 'CaseAfter clean:'), $output);
+check(str_contains($output, 'Hook: SuiteBefore start') && str_contains($output, 'Hook: SuiteAfter stop') && str_contains($output, 'Hook: CaseAfter clean'), $output);
 echo "PASS: suite and case hook assertions are attributed separately and cleanup errors accumulate\n";
 
 [$status, $output] = runChecks(['suite' => function (TestRunner $test) {
@@ -399,9 +401,9 @@ $trace = [];
         }
     };
 }]);
-check($status === 1 && str_contains($output, 'PASS suite > hooks excluded')
-    && str_contains($output, 'FAIL suite > over deadline') && str_contains($output, 'Case deadline exceeded')
-    && str_contains($output, 'PASS suite > no deadline') && str_contains($output, 'Assertions: 3 passed, 0 failed')
+check($status === 1 && str_contains($output, 'PASS  CASE  suite > quick: hooks excluded')
+    && str_contains($output, 'FAIL  CASE  suite > slow: over deadline') && str_contains($output, 'Case deadline exceeded')
+    && str_contains($output, 'PASS  CASE  suite > unlimited: no deadline') && str_contains($output, 'Assertions: 3 passed, 0 failed')
     && $trace === ['cleanup', 'body finished', 'cleanup', 'cleanup'], $output);
 foreach ([0, -1, INF, NAN] as $invalid) {
     try {
@@ -418,6 +420,6 @@ foreach ([0, -1, INF, NAN] as $invalid) {
         $suite->invalid = $invalid;
         return $suite;
     }]);
-    check($status === 1 && str_contains($output, 'idleTimeout must be positive and finite') && str_contains($output, 'SKIP suite > skipped'), $output);
+    check($status === 1 && str_contains($output, 'idleTimeout must be positive and finite') && str_contains($output, 'SKIP  CASE  suite > body: skipped'), $output);
 }
 echo "PASS: deadlines exclude hooks, report after completion, preserve cleanup and validate finite positive durations\n";

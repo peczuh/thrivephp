@@ -34,6 +34,7 @@
 		/** Select this window and restore its selected frame. */
 		public function activate(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->browser->activate($this, $this->frames);
 			return $this;
 		}
@@ -41,12 +42,14 @@
 		/** Close this window and return its browser, selecting a remaining window if any. */
 		public function close(): Browser
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->browser->closeWindow($this);
 		}
 
 		/** Navigate the top-level document using the driver's configured page-load strategy. */
 		public function navigate(string $url): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/url', ['url' => $url], topLevel: true);
 			$this->browser->rememberFrames($this, []);
 			return $this;
@@ -67,6 +70,7 @@
 		 */
 		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			Browser::matches($pattern, '');
 			$actual = null;
 			$passed = $this->browser->evaluate(function () use ($pattern, &$actual) {
@@ -74,13 +78,14 @@
 				return Browser::matches($pattern, $actual);
 			}, $wait, $timeout);
 			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' URL: expected a match for '
-				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.', $verify);
+				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.', $verify, ['expected' => $pattern, 'actual' => $actual]);
 			return $this;
 		}
 
 		/** Navigate one entry backward in this window's history. */
 		public function back(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/back', [], frames: []);
 			$this->browser->rememberFrames($this, []);
 			return $this;
@@ -89,6 +94,7 @@
 		/** Navigate one entry forward in this window's history. */
 		public function forward(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/forward', [], frames: []);
 			$this->browser->rememberFrames($this, []);
 			return $this;
@@ -97,6 +103,7 @@
 		/** Reload this window's page and return to its top-level document. */
 		public function refresh(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/refresh', [], topLevel: true);
 			$this->browser->rememberFrames($this, []);
 			return $this;
@@ -115,12 +122,14 @@
 		 */
 		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?Element
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return (new Lookup($this, $this->frames, $selector, $using))->find($visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return a snapshot in document order, including an empty set when nothing matches. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return (new Lookup($this, $this->frames, $selector, $using))->all(false);
 		}
 
@@ -133,6 +142,7 @@
 		/** Switch into a frame element or a zero-based frame index in the selected frame. */
 		public function switchFrame(Element|int $element): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$id = $element instanceof Element ? $element->reference($this, $this->frames) : $element;
 			$this->request('POST', '/frame', ['id' => $id]);
 			$this->browser->rememberFrames($this, [...$this->frames, $id]);
@@ -142,6 +152,7 @@
 		/** Move up one frame level; has no effect at the top level. */
 		public function parentFrame(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/frame/parent', []);
 			$frames = $this->frames;
 			array_pop($frames);
@@ -152,6 +163,7 @@
 		/** Return to the top-level document, including when a selected frame was removed. */
 		public function defaultFrame(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/frame', ['id' => null], topLevel: true);
 			$this->browser->rememberFrames($this, []);
 			return $this;
@@ -166,6 +178,7 @@
 		/** Resize the outer window; rect() reads the actual resulting dimensions. */
 		public function resize(int $width, int $height): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/window/rect', ['width' => $width, 'height' => $height], topLevel: true);
 			return $this;
 		}
@@ -173,24 +186,28 @@
 		/** Move the outer window to screen coordinates in CSS pixels. */
 		public function move(int $x, int $y): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/window/rect', ['x' => $x, 'y' => $y], topLevel: true);
 			return $this;
 		}
 
 		public function maximize(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/window/maximize', [], topLevel: true);
 			return $this;
 		}
 
 		public function minimize(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/window/minimize', [], topLevel: true);
 			return $this;
 		}
 
 		public function fullscreen(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/window/fullscreen', [], topLevel: true);
 			return $this;
 		}
@@ -210,6 +227,7 @@
 		/** Accept the current JavaScript alert, confirmation, or prompt. */
 		public function alertAccept(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/alert/accept', [], topLevel: true);
 			return $this;
 		}
@@ -217,6 +235,7 @@
 		/** Dismiss the current JavaScript dialog. */
 		public function alertDismiss(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/alert/dismiss', [], topLevel: true);
 			return $this;
 		}
@@ -230,6 +249,7 @@
 		/** Enter a prompt response without accepting the dialog. */
 		public function alertType(string $text): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/alert/text', ['text' => $text], topLevel: true);
 			return $this;
 		}
@@ -281,6 +301,7 @@
 			?string $sameSite = null,
 			?int $expiry = null,
 		): string|self {
+			if ($value !== null && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if ($value === null):
 				return $this->request('GET', '/cookie/' . rawurlencode($name))['value'];
 			endif;
@@ -295,6 +316,7 @@
 		/** Delete cookies matching this name in the active document's scope. */
 		public function cookieDelete(string $name): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('DELETE', '/cookie/' . rawurlencode($name));
 			return $this;
 		}
@@ -302,6 +324,7 @@
 		/** Delete all cookies for the active document, not every browser domain. */
 		public function cookieDeleteAll(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('DELETE', '/cookie');
 			return $this;
 		}
@@ -368,6 +391,7 @@
 		 */
 		public function script(string $script, bool $async = false, array $arguments = [], bool $inject = false): mixed
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if ($inject):
 				if ($async || $arguments !== []):
 					throw new \InvalidArgumentException('Script injection requires async: false and no arguments.');
@@ -430,6 +454,7 @@
 		 */
 		public function actions(array $sources): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/actions', ['actions' => array_values($this->encode($sources))]);
 			return $this;
 		}
@@ -437,6 +462,7 @@
 		/** Release held keys/buttons and clear the session's input-source state. */
 		public function releaseActions(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('DELETE', '/actions');
 			return $this;
 		}
@@ -444,6 +470,7 @@
 		/** Pause locally for seconds (including fractions), returning this window without selecting it. */
 		public function sleep(float $seconds): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->browser->sleep($seconds);
 			return $this;
 		}
@@ -456,6 +483,7 @@
 		 */
 		public function wait(callable $condition, ?float $timeout = null): mixed
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$frames = $this->frames;
 			return $this->browser->wait(function () use ($condition, $frames) {
 				$this->browser->activate($this, $frames);

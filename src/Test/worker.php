@@ -27,7 +27,7 @@ try {
     $channel = new Channel($stream);
     $channel->send(['type' => 'hello', 'token' => $argv[2], 'pid' => getmypid()]);
     $job = json_decode(base64_decode($argv[3], true), true, flags: JSON_THROW_ON_ERROR);
-    $test = new Test($job['root'], $job['checks']);
+    $test = new Test($job['root']);
     $code = $test->runWorker($job, $channel);
     $channel->close();
     exit($code);

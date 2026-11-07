@@ -35,6 +35,12 @@
 			return $this->id;
 		}
 
+		/** Author-facing selector; script-returned nodes may have no retained selector. */
+		public function description(): string
+		{
+			return $this->lookup?->description() ?? 'Element (no retained selector)';
+		}
+
 		public function window(): Window
 		{
 			return $this->window;
@@ -48,12 +54,14 @@
 		 */
 		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null): ?self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout);
 		}
 
 		/** Return matching descendants in document order, possibly an empty collection. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->all(false);
 		}
 
@@ -66,6 +74,7 @@
 		/** Pause locally for seconds (including fractions), preserving this element and its context. */
 		public function sleep(float $seconds): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->window->sleep($seconds);
 			return $this;
 		}
@@ -73,6 +82,7 @@
 		/** Click using native WebDriver interaction. */
 		public function click(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/click', []);
 			return $this;
 		}
@@ -80,6 +90,7 @@
 		/** Check a checkbox or radio with a native click only when not already selected. */
 		public function check(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if (strtolower($this->tag()) !== 'input' || !in_array($this->property('type'), ['checkbox', 'radio'], true)):
 				throw new \InvalidArgumentException('check() requires a checkbox or radio input.');
 			endif;
@@ -89,6 +100,7 @@
 		/** Uncheck a checkbox with a native click only when selected; radios are unsupported. */
 		public function uncheck(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if (strtolower($this->tag()) !== 'input' || $this->property('type') !== 'checkbox'):
 				throw new \InvalidArgumentException('uncheck() requires a checkbox input.');
 			endif;
@@ -103,6 +115,7 @@
 		 */
 		public function submit(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->script(<<<'JS'
 				const element = arguments[0];
 				const form = element instanceof HTMLFormElement ? element :
@@ -119,6 +132,7 @@
 		 */
 		public function inject(string $html, string $where = 'beforeend'): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->script('arguments[0].insertAdjacentHTML(arguments[1], arguments[2]);', [$where, $html]);
 			return $this;
 		}
@@ -150,6 +164,7 @@
 		/** Send text without clearing existing input. */
 		public function type(string $text): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/value', ['text' => $text]);
 			return $this;
 		}
@@ -157,6 +172,7 @@
 		/** Empty an editable input, textarea, or contenteditable element. */
 		public function clear(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->request('POST', '/clear', []);
 			return $this;
 		}
@@ -164,6 +180,7 @@
 		/** Clear then type a replacement value; an empty string only clears. Return this element. */
 		public function setValue(string $value): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->clear();
 			return $value === '' ? $this : $this->type($value);
 		}
@@ -171,6 +188,7 @@
 		/** Send Browser::ENTER or a sequence such as Browser::CONTROL . 'a' . Browser::RELEASE. */
 		public function key(string $key): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->type($key);
 		}
 
@@ -181,6 +199,7 @@
 		 */
 		public function select(string $value): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if (strtolower($this->tag()) !== 'select'):
 				throw new \InvalidArgumentException('select() requires a native HTML select element.');
 			endif;
@@ -205,6 +224,7 @@
 		/** Move the mouse to the in-view center without clicking. */
 		public function hover(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->pointer(0, 0);
 			return $this;
 		}
@@ -212,6 +232,7 @@
 		/** Perform two consecutive primary-button clicks at the in-view center. */
 		public function doubleClick(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->pointer(0, 2);
 			return $this;
 		}
@@ -219,6 +240,7 @@
 		/** Perform a secondary-button click at the in-view center. */
 		public function rightClick(): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->pointer(2, 1);
 			return $this;
 		}
@@ -229,6 +251,7 @@
 		 */
 		public function dragDrop(Element $target): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->drag(['origin' => $target->reference($this->window, $this->frames), 'x' => 0, 'y' => 0]);
 			return $this;
 		}
@@ -236,6 +259,7 @@
 		/** Drag from the in-view center by signed CSS-pixel offsets. */
 		public function dragBy(int $x, int $y): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$this->drag(['origin' => 'pointer', 'x' => $x, 'y' => $y]);
 			return $this;
 		}
@@ -253,6 +277,7 @@
 		 */
 		public function attribute(string $key, ?string $value = null): string|self|null
 		{
+			if (func_num_args() > 1 && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if (func_num_args() === 1):
 				return $this->request('GET', '/attribute/' . rawurlencode($key));
 			endif;
@@ -270,6 +295,7 @@
 		 */
 		public function property(string $key, mixed $value = null): mixed
 		{
+			if (func_num_args() > 1 && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if (func_num_args() === 1):
 				return $this->request('GET', '/property/' . rawurlencode($key));
 			endif;
@@ -323,6 +349,7 @@
 		 */
 		public function wait(bool $visible = false, bool $invert = false, bool $assert = false, ?float $timeout = null): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$browser = $this->window->browser();
 			$actual = 'not observed';
 			$passed = $browser->evaluate(function () use ($browser, $visible, $invert, &$actual) {
@@ -347,9 +374,9 @@
 				}
 			}, true, $timeout);
 			$expected = $invert ? ($visible ? 'hidden or stale' : 'stale') : ($visible ? 'visible' : 'present');
-			$message = 'Element ' . var_export($this->id, true) . ': expected ' . $expected . ', got ' . $actual . '.';
+			$message = $this->description() . ': expected ' . $expected . ', got ' . $actual . '.';
 			if ($assert):
-				$browser->reportAssertion($passed, $message);
+				$browser->reportAssertion($passed, $message, comparison: ['expected' => $expected, 'actual' => $actual]);
 			endif;
 			if (!$passed):
 				throw new \RuntimeException('WebDriver wait timed out. ' . $message);
@@ -365,36 +392,41 @@
 		 */
 		public function visible(bool $invert = false, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === !$invert,
-				'visibility: expected ' . ($invert ? 'false or stale' : 'true'), $wait, $timeout, $verify, $invert);
+				'visibility: expected ' . ($invert ? 'false or stale' : 'true'), $wait, $timeout, $verify, !$invert, $invert);
 		}
 
 		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */
 		public function valueEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->assertObservation(fn($element) => $element->property('value'), fn($actual) => $actual === $expected,
-				'value: expected ' . var_export($expected, true), $wait, $timeout, $verify);
+				'value: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected);
 		}
 
 		/** Assert strict equality with rendered text, waiting by default; return this element. */
 		public function textEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => $actual === $expected,
-				'text: expected ' . var_export($expected, true), $wait, $timeout, $verify);
+				'text: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected);
 		}
 
 		/** Assert a case-sensitive substring of rendered text, waiting by default; return this element. */
 		public function textContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => str_contains($actual, $expected),
-				'text: expected to contain ' . var_export($expected, true), $wait, $timeout, $verify);
+				'text: expected to contain ' . var_export($expected, true), $wait, $timeout, $verify, $expected);
 		}
 
 		/** Assert strict attribute equality, waiting by default; null expects absence. Return this element. */
 		public function attributeEquals(string $name, ?string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual === $expected,
-				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify);
+				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected);
 		}
 
 		/**
@@ -403,10 +435,11 @@
 		 */
 		public function attributeMatches(string $name, string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
 		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			// Validate before polling, even when no element can currently be found.
 			Browser::matches($pattern, '');
 			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => Browser::matches($pattern, $actual),
-				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout, $verify);
+				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout, $verify, $pattern);
 		}
 
 		/** Return enabled state according to WebDriver's form-control rules. */
@@ -462,12 +495,14 @@
 		}
 
 		/** Poll observations and report once; only successful retries replace this element's reference. */
-		private function assertObservation(callable $observe, callable $matches, string $expectation, bool $wait, ?float $timeout, bool $verify, bool $absencePasses = false): self
+		private function assertObservation(callable $observe, callable $matches, string $expectation, bool $wait, ?float $timeout, bool $verify, mixed $expected, bool $absencePasses = false): self
 		{
 			$browser = $this->window->browser();
 			$refresh = $wait && $this->lookup !== null;
 			$actual = 'no observation';
-			$passed = $browser->evaluate(function () use ($browser, $observe, $matches, $refresh, $absencePasses, &$actual) {
+			$value = null;
+			$passed = $browser->evaluate(function () use ($browser, $observe, $matches, $refresh, $absencePasses, &$actual, &$value) {
+				$value = null;
 				$browser->activate($this->window, $this->frames);
 				try {
 					$element = $refresh ? $this->lookup->element() : $this;
@@ -494,7 +529,8 @@
 					return $absencePasses && (bool)preg_match('/^WebDriver HTTP [45][0-9]{2} no such element: /', $actual);
 				}
 			}, $wait, $timeout);
-			$browser->reportAssertion($passed, 'Element ' . var_export($this->id, true) . ' ' . $expectation . ', got ' . $actual . '.', $verify);
+			$browser->reportAssertion($passed, $this->description() . ' ' . $expectation . ', got ' . $actual . '.', $verify,
+				['expected' => $expected, 'actual' => $value, 'observation' => $actual]);
 			return $this;
 		}
 
@@ -508,7 +544,9 @@
 		private function script(string $script, array $arguments = []): mixed
 		{
 			$this->window->browser()->activate($this->window, $this->frames);
-			return $this->window->script($script, arguments: [$this, ...$arguments]);
+			$operation = fn() => $this->window->script($script, arguments: [$this, ...$arguments]);
+			$test = Step::recorder();
+			return $test === null ? $operation() : $test->withoutSteps($operation);
 		}
 
 		/** Build hover or click actions at the in-view center. */

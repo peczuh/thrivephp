@@ -21,8 +21,8 @@ function runAttributes(string $mode, array $selectors = []): array
 
 foreach (['case-retry', 'case-error', 'case-before', 'case-after', 'case-deadline'] as $mode) {
     [$status, $output] = runAttributes('attribute-' . $mode);
-    check($status === 0 && str_contains($output, 'RETRY Attribute suite > first (attempt 2)')
-        && str_contains($output, 'PASS Attribute suite > first (attempt 2)')
+    check($status === 0 && str_contains($output, 'RETRY CASE  suite (attempt 1/2) > first (attempt 1/2)')
+        && str_contains($output, 'PASS  CASE  suite (attempt 1/2) > first (attempt 2/2)')
         && str_contains($output, 'Cases: 2 passed, 0 failed, 1 skipped')
         && str_contains($output, 'Assertions: 4 passed, 0 failed'), $output);
     $events = array_column($GLOBALS['attributeTrace'], 'event');
@@ -34,8 +34,8 @@ echo "PASS: case retries repeat case hooks, handle assertions/errors/deadlines, 
 
 foreach (['suite-retry', 'suite-before', 'suite-after', 'config', 'suite-deadline'] as $mode) {
     [$status, $output] = runAttributes('attribute-' . $mode);
-    check($status === 0 && str_contains($output, "RETRY Attribute suite (attempt 2)\n")
-        && str_contains($output, "PASS Attribute suite (attempt 2)\n")
+    check($status === 0 && str_contains($output, "RETRY SUITE suite: Attribute suite (attempt 1/2)\n")
+        && str_contains($output, 'PASS  SUITE suite: Attribute suite (attempt 2/2) [')
         && str_contains($output, 'Cases: 2 passed, 0 failed, 1 skipped')
         && str_contains($output, 'Assertions: 4 passed, 0 failed'), $output);
     $configuration = array_values(array_filter($GLOBALS['attributeTrace'], fn ($event) => $event['event'] === 'configure'));
@@ -48,8 +48,8 @@ foreach (['suite-retry', 'suite-before', 'suite-after', 'config', 'suite-deadlin
 echo "PASS: whole-suite retries reload fresh instances after configuration, setup, body, cleanup, and deadline failures\n";
 
 [$status, $output] = runAttributes('attribute-always-fail');
-check($status === 1 && substr_count($output, 'RETRY Attribute suite > first') === 2
-    && substr_count($output, "RETRY Attribute suite (attempt 2)\n") === 1
+check($status === 1 && preg_match_all('~^RETRY CASE  suite \\(attempt \\d+/2\\) > first \\(attempt 1/2\\)$~m', $output) === 2
+    && substr_count($output, "RETRY SUITE suite: Attribute suite (attempt 1/2)\n") === 1
     && str_contains($output, 'Cases: 1 passed, 1 failed, 1 skipped')
     && str_contains($output, 'Assertions: 3 passed, 1 failed'), $output);
 check(count(array_filter($GLOBALS['attributeTrace'], fn ($event) => $event['event'] === 'first')) === 4,
@@ -67,8 +67,8 @@ foreach (['case-retry', 'case-error', 'case-before', 'case-after', 'case-deadlin
     check(($counts['second'] ?? 0) === ($failed ? 0 : 1), json_encode($events));
     check($counts['prepare'] === ($failed ? 4 : ($mode === 'suite-retry' ? 4 : 3))
         && $counts['clean'] === $counts['prepare'] && $counts['cleanup'] === ($failed || $mode === 'suite-retry' ? 2 : 1), json_encode($events));
-    check(substr_count($output, 'SKIP Attribute suite > second (previous case failed)') === ($failed ? 2 : (int)($mode === 'suite-retry'))
-        && str_contains($output, 'SKIP Attribute suite > skipped (marked skip)'), $output);
+    check(preg_match_all('~^SKIP  CASE  suite \\(attempt \\d+/2\\) > second \\(previous case failed\\)~m', $output) === ($failed ? 2 : (int)($mode === 'suite-retry'))
+        && str_contains($output, 'SKIP  CASE  suite (attempt 1/2) > skipped (marked skip)'), $output);
 }
 [$status, $output] = runAttributes('attribute-stop-always-fail', ['::^(first|skipped)$']);
 check($status === 1 && str_contains($output, 'Cases: 0 passed, 1 failed, 1 skipped')
@@ -92,7 +92,7 @@ foreach ([
 foreach ([['##^Smoke$'], ['#!^suite$'], ['##^smoke$#!^smoke$']] as $selectors) {
     [$status, $output] = runAttributes('attribute-normal', $selectors);
     check($status === 0 && $GLOBALS['attributeTrace'] === []
-        && str_contains($output, 'Checks: 0 passed, 0 failed, 0 skipped')
+        && str_contains($output, 'Suites: 0 passed, 0 failed, 0 skipped')
         && !str_contains($output, 'Attribute suite'), $output);
 }
 echo "PASS: suite/case tag union and regex inclusion/exclusion filter before hooks\n";
@@ -100,7 +100,7 @@ echo "PASS: suite/case tag union and regex inclusion/exclusion filter before hoo
 foreach ([['attribute-skip', [], 1], ['attribute-normal', ['##^skip$'], 1]] as [$mode, $selectors, $skips]) {
     [$status, $output] = runAttributes($mode, $selectors);
     check($status === 0 && $GLOBALS['attributeTrace'] === []
-        && str_contains($output, 'Checks: 0 passed, 0 failed, 1 skipped')
+        && str_contains($output, 'Suites: 0 passed, 0 failed, 1 skipped')
         && str_contains($output, "Cases: 0 passed, 0 failed, $skips skipped")
         && !str_contains($output, 'RETRY') && !str_contains($output, 'No assertions'), $output);
 }
@@ -109,16 +109,16 @@ echo "PASS: explicit suite skips and all-skipped selections avoid configuration 
 $ran = false;
 $checks = ['check' => function () use (&$ran) { $ran = true; }];
 [$status, $output] = runChecks($checks, selectors: ['##smoke']);
-check($status === 0 && !$ran && str_contains($output, 'Checks: 0 passed, 0 failed, 0 skipped'), $output);
+check($status === 0 && !$ran && str_contains($output, 'Suites: 0 passed, 0 failed, 0 skipped'), $output);
 [$status, $output] = runChecks($checks, selectors: ['#!slow']);
-check($status === 0 && $ran && str_contains($output, 'PASS check (No assertions)'), $output);
-[$status, $output] = runChecks(['suite' => function ($test) {
+check($status === 0 && $ran && str_contains($output, 'PASS  SUITE check (No assertions)'), $output);
+[$status, $output, $record] = runChecks(['suite' => function ($test) {
     $test->verify(false, 'file loading failed');
     return static function () { throw new RuntimeException('Filtered callable ran.'); };
 }], selectors: ['##smoke']);
 check($status === 1 && str_contains($output, 'file loading failed')
-    && str_contains($output, 'Checks: 0 passed, 1 failed, 0 skipped')
-    && !str_contains($output, 'Filtered callable ran.'), $output);
+    && str_contains($output, 'Suites: 0 passed, 1 failed, 0 skipped')
+    && $record['suites'][0]['attempts'][0]['errors'] === [], $output);
 foreach ([[''], [1], [[]]] as $tags) {
     try {
         new Test('invalid', tags: $tags);

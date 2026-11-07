@@ -14,7 +14,7 @@ $suite = new class($test) extends Suite {
     protected function configure(SuiteConfig $config): void
     {
         if ($this->mode === 'config-error') throw new RuntimeException('configuration failed');
-        if (in_array($this->mode, ['timeout', 'progress', 'descendants'], true)) $config->idleTimeout = 0.6;
+        if (in_array($this->mode, ['timeout', 'step-timeout', 'progress', 'descendants'], true)) $config->idleTimeout = 0.6;
     }
 
     #[SuiteBefore]
@@ -39,6 +39,10 @@ $suite = new class($test) extends Suite {
     public function body(): void
     {
         switch ($this->mode) {
+            case 'live-failure':
+                $this->test->verify(false, 'reported before the case returns');
+                usleep(200000);
+                break;
             case 'actions':
                 $this->log('action');
                 return;
@@ -55,6 +59,12 @@ $suite = new class($test) extends Suite {
                 break;
             case 'timeout':
                 sleep(30);
+                break;
+            case 'step-timeout':
+                $this->test->recordStep('blocked operation', null, ['fixture' => true], function () {
+                    $this->test->verify(false, 'before timeout');
+                    sleep(30);
+                });
                 break;
             case 'progress':
                 for ($i = 0; $i < 8; $i++) {
