@@ -33,10 +33,6 @@ class ReportBrowser extends Browser
     public function window(?string $handle = null): Window { return $this->fixtureWindow; }
     public function activate(Window $window, ?array $frames): void {}
     public function timeouts(): array { return ['script' => 0]; }
-    public function evaluate(callable $condition, bool $wait, ?float $timeout): bool
-    {
-        return parent::evaluate($condition, $wait, $timeout ?? 1000);
-    }
     public function sessionRequest(string $method, string $path, ?array $body = null, float $extraTimeout = 0): mixed
     {
         $this->trace[] = [$method, $path, $body];
@@ -436,7 +432,7 @@ foreach ([false, true] as $exhausted) {
     $browser->exhausted = $exhausted;
     [$status, $console, $record] = runChecks(['suite' => fn (Runner $test) => function () use ($test, $browser, $exhausted) {
         $test->browserSession(['capabilities' => []], fn () => $browser->screenshot());
-        $browser->find('#button')->click(timeout: $exhausted ? 20 : 1000);
+        $browser->find('#button')->click(timeout: $exhausted ? 20 : 2000);
     }]);
     $steps = $record['suites'][0]['attempts'][0]['steps'];
     check($status === (int)$exhausted && array_column($steps, 'label') === ['find', 'click']

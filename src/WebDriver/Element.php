@@ -12,8 +12,8 @@
 	 * and report once to the active Test. Failed comparisons stop the case by default;
 	 * $verify records the failure and continues. Outside Test::run(), failures always throw.
 	 * Driver errors propagate in either mode. find() and wait() remain stopping prerequisites.
-	 * Assertion $timeout is positive, finite milliseconds, null for the browser default,
-	 * and ignored with $wait=false, which checks once. Polling is every 100 ms;
+		 * Assertion $timeout is positive, finite milliseconds, null for assertionTimeout,
+		 * and ignored with $wait=false, which checks once. Polling uses pollInterval;
 	 * commands retain their own timeouts.
 	 */
 	class Element
@@ -354,8 +354,8 @@
 		 * Wait for the original node's presence, or displayedness with $visible. $invert
 		 * requires staleness for presence, or hiddenness/staleness for visibility. Never
 		 * re-find replacements. Return this element on success; a stale reference stays unusable.
-		 * Poll every 100 ms. $timeout is positive, finite milliseconds; null uses the browser
-		 * constructor timeout. In-flight commands retain their own timeouts. $assert reports
+		 * Poll at pollInterval. $timeout is positive, finite milliseconds; null uses
+		 * waitTimeout. In-flight commands retain their own timeouts. $assert reports
 		 * one final result. Expiry always throws. Staleness immediately fails positive
 		 * conditions; context and unrelated driver errors always propagate.
 		 */
@@ -589,7 +589,7 @@
 					$actual = $error->getMessage();
 					return $absencePasses && (bool)preg_match('/^WebDriver HTTP [45][0-9]{2} no such element: /', $actual);
 				}
-			}, $wait, $timeout);
+			}, $wait, $timeout, assertion: true);
 			$browser->reportAssertion($passed, $this->description() . ' ' . $expectation . ', got ' . $actual . '.', $verify,
 				['expected' => $expected, 'actual' => $value, 'observation' => $actual]);
 			return $this;

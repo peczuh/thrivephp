@@ -64,6 +64,10 @@
 		private ?Window $currentWindow = null;
 		/** Selected frame path; null means a failed switch left the context uncertain. */
 		private ?array $currentFrames = [];
+		/** Polling budgets and interval in milliseconds, independent of command I/O timeouts. */
+		private float $waitTimeout = 5000;
+		private float $assertionTimeout = 5000;
+		private float $pollInterval = 500;
 
 		/**
 		 * Create a session immediately, connecting BiDi if requested. $endpoint is the
@@ -76,6 +80,8 @@
 		 * Comparison methods accept $verify to record a failed result and continue instead.
 		 * Outside Test::run(), failures throw RuntimeException. Assertions retry by default;
 		 * $wait=false checks once.
+		 * $waitTimeout, $assertionTimeout and $pollInterval are positive, finite milliseconds.
+		 * Per-call timeouts override the corresponding polling budget, not command I/O.
 		 */
 		public function __construct(
 			private string $endpoint,
@@ -83,8 +89,15 @@
 			bool $bidi = false,
 			private float $timeout = 10,
 			array $capabilities = [],
+			float $waitTimeout = 5000,
+			float $assertionTimeout = 5000,
+			float $pollInterval = 500,
 		) {
 			$this->deadline($timeout);
+			foreach (['waitTimeout' => $waitTimeout, 'assertionTimeout' => $assertionTimeout, 'pollInterval' => $pollInterval] as $name => $value):
+				if (!is_finite($value) || $value <= 0) throw new \InvalidArgumentException($name . ' must be positive and finite.');
+				$this->$name = $value;
+			endforeach;
 			$this->endpoint = self::baseUrl($endpoint);
 			$capabilities['browserName'] = $browser;
 			unset($capabilities['webSocketUrl']);
@@ -170,8 +183,8 @@
 		 * the first match to be displayed. $invert instead requires no matches, or no
 		 * displayed matches when $visible is true. Positive success returns an Element;
 		 * inverted success returns null. Unmet conditions throw, even with a recorder.
-		 * By default, repeat the search every 100 ms; $wait=false checks once. $timeout is
-		 * positive, finite milliseconds, defaulting to the constructor timeout; ignored
+		 * By default, repeat at pollInterval; $wait=false checks once. $timeout is
+		 * positive, finite milliseconds, defaulting to waitTimeout; ignored
 		 * without $wait. In-flight commands retain their own timeouts.
 		 * $assert reports one final result through the recorder.
 		 * Invalid selectors and unrelated driver errors propagate without assertion reports.
@@ -369,17 +382,17 @@
 		}
 
 		/**
-		 * Poll $condition($this) every 100 ms until it returns a truthy value, then
+		 * Poll $condition($this) at the configured interval until it returns a truthy value, then
 		 * return that value. Only missing/stale element errors are retried; all other
 		 * exceptions propagate. Re-find elements inside the callback to survive DOM changes.
-		 * $timeout is positive, finite milliseconds; null uses the constructor timeout.
+		 * $timeout is positive, finite milliseconds; null uses waitTimeout.
 		 * Checked between callbacks: synchronous work retains its own HTTP/BiDi timeouts.
 		 * Empty ElementSet objects are truthy: return first() or explicitly test count().
 		 */
 		public function wait(callable $condition, ?float $timeout = null): mixed
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$deadline = $this->deadline($timeout === null ? $this->timeout : $timeout / 1000);
+			$deadline = $this->deadline(($timeout ?? $this->waitTimeout) / 1000);
 			$lastError = null;
 			do {
 				try {
@@ -398,7 +411,7 @@
 				if ($remaining <= 0):
 					break;
 				endif;
-				usleep((int)(min(0.1, $remaining) * 1e6));
+				usleep((int)(min($this->pollInterval / 1000, $remaining) * 1e6));
 			} while (hrtime(true) / 1e9 < $deadline);
 			throw new \RuntimeException('WebDriver wait timed out.', 0, $lastError);
 		}
@@ -406,7 +419,7 @@
 		/**
 		 * Assert that the current window URL matches a delimited PHP regex.
 		 * Poll by default; $wait=false checks once.
-		 * $timeout is positive milliseconds or null for the browser default, ignored without waiting.
+		 * $timeout is positive milliseconds or null for assertionTimeout, ignored without waiting.
 		 * Return this browser. Invalid patterns throw. Results report to the active Test;
 		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
 		 */
@@ -442,13 +455,13 @@
 		}
 
 		/**
-		 * @internal Evaluate once or poll every 100 ms; return false on expiry. Errors propagate.
-		 * The timeout is positive, finite milliseconds, or null for the constructor default.
+		 * @internal Evaluate once or poll at pollInterval; return false on expiry. Errors propagate.
+		 * Timeout is positive, finite milliseconds; null uses waitTimeout or assertionTimeout.
 		 * Ignore timeout when not waiting. Each call gets its own deadline, checked between commands.
 		 */
-		public function evaluate(callable $condition, bool $wait, ?float $timeout): bool
+		public function evaluate(callable $condition, bool $wait, ?float $timeout, bool $assertion = false): bool
 		{
-			$deadline = $wait ? $this->deadline($timeout === null ? $this->timeout : $timeout / 1000) : null;
+			$deadline = $wait ? $this->deadline(($timeout ?? ($assertion ? $this->assertionTimeout : $this->waitTimeout)) / 1000) : null;
 			do {
 				if ($condition()):
 					return true;
@@ -456,7 +469,7 @@
 				if (!$wait || ($remaining = $deadline - hrtime(true) / 1e9) <= 0):
 					return false;
 				endif;
-				usleep((int)(min(0.1, $remaining) * 1e6));
+				usleep((int)(min($this->pollInterval / 1000, $remaining) * 1e6));
 			} while (hrtime(true) / 1e9 < $deadline);
 			return false;
 		}

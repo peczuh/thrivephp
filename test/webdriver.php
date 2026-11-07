@@ -24,10 +24,10 @@ class RecordingBrowser extends Browser
 {
 	private Closure $record;
 
-	public function __construct(string $endpoint, string $browser, callable $record, float $timeout = 10)
+	public function __construct(string $endpoint, string $browser, callable $record, float $timeout = 10, float $assertionTimeout = 5000)
 	{
 		$this->record = Closure::fromCallable($record);
-		parent::__construct($endpoint, $browser, timeout: $timeout);
+		parent::__construct($endpoint, $browser, timeout: $timeout, assertionTimeout: $assertionTimeout, pollInterval: 100);
 	}
 
 	public function reportAssertion(bool $condition, string $message, bool $verify = false, array $comparison = []): void
@@ -781,7 +781,7 @@ scenario('assertion retries handle missing matches and report timeout once with 
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new RecordingBrowser($url, 'firefox', timeout: 0.05, record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', assertionTimeout: 50, record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$element = $browser->find('#status')->textEquals('Saved', wait: true, timeout: 1000);
 	foreach ([20, null] as $timeout):
 		$start = microtime(true);
@@ -939,7 +939,7 @@ scenario('count timeouts preserve the snapshot and context errors propagate', fu
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
 	$results = [];
-	$browser = new RecordingBrowser($url, 'firefox', timeout: 0.05, record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
+	$browser = new RecordingBrowser($url, 'firefox', assertionTimeout: 50, record: function ($condition, $message) use (&$results) { $results[] = [$condition, $message]; });
 	$set = $browser->switchFrame(0)->findAll('.row');
 	foreach ([20, null] as $timeout):
 		$start = microtime(true);
@@ -996,7 +996,7 @@ scenario('URL assertion retries report once and preserve timeout/default and cal
 	$results = [];
 	$throw = false;
 	$expected = new RuntimeException('WebDriver HTTP 404 no such element: recorder failure');
-	$browser = new RecordingBrowser($url, 'firefox', timeout: 0.05, record: function ($condition, $message) use (&$results, &$throw, $expected) {
+	$browser = new RecordingBrowser($url, 'firefox', assertionTimeout: 50, record: function ($condition, $message) use (&$results, &$throw, $expected) {
 		$results[] = [$condition, $message];
 		if ($throw) throw $expected;
 	});
@@ -1665,7 +1665,7 @@ scenario('find waits by default and returns the first present or visible match',
 	endforeach;
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
-	$browser = new Browser($url, 'firefox');
+	$browser = new Browser($url, 'firefox', pollInterval: 100);
 	verify($browser->find('//input', 'xpath', timeout: 1000)->id() === 'hidden', 'Presence should not require displayedness.');
 	verify($browser->window()->find('.ready', visible: true, timeout: 1000)->id() === 'replacement', 'Visibility did not re-find after stale reference.');
 	$browser->quit();
@@ -1691,7 +1691,7 @@ scenario('selector negative waits track replacements and all matching elements',
 	endforeach;
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
-	$browser = new Browser($url, 'firefox');
+	$browser = new Browser($url, 'firefox', pollInterval: 100);
 	verify($browser->find('//aside', 'xpath', wait: true, invert: true, timeout: 1000) === null, 'Inverted find should return null.');
 	verify($browser->find('.spinner', visible: true, wait: true, invert: true, timeout: 1000) === null, 'Visible replacement was ignored.');
 	$window = $browser->window();
@@ -1854,7 +1854,7 @@ scenario('select waits for options and rechecks selection after an intercepted c
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	$element = new Element($browser->window(), 'select');
-	verify($element->select('choice', timeout: 1500) === $element, 'Select did not wait for the desired option.');
+	verify($element->select('choice', timeout: 2500) === $element, 'Select did not wait for the desired option.');
 	$browser->quit();
 });
 
@@ -1873,7 +1873,7 @@ foreach (['one-shot', 'selectorless', 'session', 'navigation', 'unknown', 'timeo
 			['error' => $error, 'message' => 'original failure'], 400, 0.06);
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($mode) {
-		$browser = new Browser($url, 'firefox', timeout: $mode === 'default-timeout' ? 0.15 : 10);
+		$browser = new Browser($url, 'firefox', waitTimeout: $mode === 'default-timeout' ? 150 : 5000, pollInterval: 100);
 		$element = $mode === 'one-shot' ? $browser->find('#node') : new Element($browser->window(), 'node');
 		try {
 			$element->click(wait: $mode !== 'one-shot', timeout: $mode === 'timeout' ? 30 : null);
@@ -1971,7 +1971,7 @@ foreach ([[false, false], [true, false], [false, true], [true, true]] as [$visib
 			['using' => 'css selector', 'value' => '[broken'], ['error' => 'invalid selector', 'message' => 'bad syntax'], 400);
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($visible, $invert) {
-		$browser = new Browser($url, 'firefox', timeout: 0.05);
+		$browser = new Browser($url, 'firefox', waitTimeout: 50);
 		foreach ([20, null] as $timeout):
 			$start = microtime(true);
 			expectError(fn() => $browser->find('#pending', visible: $visible, wait: true, invert: $invert, timeout: $timeout), 'wait timed out');
@@ -1998,7 +1998,7 @@ foreach (['name', 'displayed'] as $endpoint):
 		endforeach;
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($endpoint) {
-		$browser = new Browser($url, 'firefox', timeout: 0.05);
+		$browser = new Browser($url, 'firefox', waitTimeout: 50);
 		$element = $browser->find('#pending');
 		foreach ([20, null] as $timeout):
 			$start = microtime(true);
@@ -2109,7 +2109,7 @@ scenario('callable browser and window waits use milliseconds and the configured 
 	createSession($listener);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
-	$browser = new Browser($url, 'firefox', timeout: 0.05);
+	$browser = new Browser($url, 'firefox', waitTimeout: 50);
 	foreach ([$browser, $browser->window()] as $receiver):
 		foreach ([20, null] as $timeout):
 			$start = microtime(true);
@@ -2124,6 +2124,65 @@ scenario('callable browser and window waits use milliseconds and the configured 
 	endforeach;
 	$browser->quit();
 });
+
+scenario('wait and assertion budgets are independent of command I/O and honor per-call overrides', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#missing'], ['error' => 'no such element', 'message' => 'absent'], 404);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/displayed', null, false);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], ['error' => 'element click intercepted', 'message' => 'covered'], 400);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/text', null, 'actual');
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.missing'], []);
+	exchange($listener, 'GET', '/session/session%2F1/url', null, 'http://fixture/old');
+	exchange($listener, 'GET', '/session/session%2F1/element/node/text', null, 'actual');
+	exchange($listener, 'GET', '/session/session%2F1/title', null, 'slow command', 200, 0.12);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', timeout: 0.5, waitTimeout: 40, assertionTimeout: 80);
+	$element = new Element($browser->window(), 'node');
+	foreach ([
+		[fn() => $browser->find('#missing'), 40, 'wait timed out'],
+		[fn() => $element->wait(visible: true), 40, 'wait timed out'],
+		[fn() => $element->click(), 40, 'action timed out'],
+		[fn() => $element->textEquals('expected'), 80, 'assertion failed'],
+		[fn() => $browser->findAll('.missing')->countEquals(1), 80, 'assertion failed'],
+		[fn() => $browser->urlMatches('~/new$~'), 80, 'assertion failed'],
+		[fn() => $element->textEquals('expected', timeout: 20), 20, 'assertion failed'],
+	] as [$operation, $milliseconds, $error]):
+		$start = microtime(true);
+		expectError($operation, $error);
+		$elapsed = microtime(true) - $start;
+		verify($elapsed >= $milliseconds / 1000 && $elapsed < $milliseconds / 1000 + 0.3, 'Wrong polling budget.');
+	endforeach;
+	verify($browser->title() === 'slow command', 'Polling settings changed the HTTP timeout.');
+	$browser->quit();
+});
+
+foreach ([null, 20] as $interval):
+	scenario('callback and condition polling use the configured interval: ' . ($interval ?? 'default'), function ($listener) {
+		createSession($listener, discover: false);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($interval) {
+		$browser = $interval === null ? new Browser($url, 'firefox') : new Browser($url, 'firefox', pollInterval: $interval);
+		foreach ([false, true] as $evaluate):
+			$calls = 0;
+			$condition = function () use (&$calls) { return ++$calls === 2; };
+			$start = microtime(true);
+			$result = $evaluate ? $browser->evaluate($condition, true, null) : $browser->wait($condition);
+			$elapsed = microtime(true) - $start;
+			verify($result === true && $calls === 2 && $elapsed >= ($interval ?? 500) / 1000
+				&& $elapsed < ($interval ?? 500) / 1000 + 0.3, 'Polling interval or callback return changed.');
+		endforeach;
+		$browser->quit();
+	});
+endforeach;
+
+foreach (['waitTimeout', 'assertionTimeout', 'pollInterval'] as $option):
+	foreach ([0, -1, INF, NAN] as $invalid):
+		expectError(fn() => new Browser('http://127.0.0.1:1', 'firefox', ...[$option => $invalid]), $option . ' must be positive and finite');
+	endforeach;
+endforeach;
+echo "PASS: invalid polling configuration fails before session creation\n";
 
 scenario('window find wait restores selected window and frame', function ($listener) {
 	createSession($listener);

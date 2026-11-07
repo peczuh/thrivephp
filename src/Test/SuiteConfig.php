@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ThriveData\ThrivePHP\Test;
 
-/** Per-suite settings. Browser command timeout and worker inactivity timeout are seconds. */
+/** Per-suite settings. Command/inactivity timeouts are seconds; polling budgets and interval are milliseconds. */
 class SuiteConfig
 {
     public function __construct(
@@ -13,6 +13,9 @@ class SuiteConfig
         public ?float $idleTimeout = null,
         /** Skip later cases after a final case failure; SuiteBrowser supplies true before configure(). */
         public bool $skipRemainingOnFailure = false,
+        public float $waitTimeout = 5000,
+        public float $assertionTimeout = 5000,
+        public float $pollInterval = 500,
     ) {}
 
     /** Reject misspelled options on every supported PHP version. */

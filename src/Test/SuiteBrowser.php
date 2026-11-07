@@ -24,6 +24,9 @@ abstract class SuiteBrowser extends Suite
             headless: $this->test->headless(),
             timeout: $config->timeout,
             capabilities: $config->capabilities,
+            waitTimeout: $config->waitTimeout,
+            assertionTimeout: $config->assertionTimeout,
+            pollInterval: $config->pollInterval,
         );
         $this->test->browserSession($this->browser->session(), fn () => $this->browser->screenshot());
     }

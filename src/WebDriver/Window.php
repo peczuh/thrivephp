@@ -62,9 +62,9 @@
 		}
 
 		/**
-		 * Assert this window's top-level URL matches a delimited PHP regex. Poll every
-		 * 100 ms by default; $wait=false checks once. $timeout is positive milliseconds
-		 * or null for the browser default, ignored without waiting. Report once after success or expiry.
+		 * Assert this window's top-level URL matches a delimited PHP regex. Poll at the
+		 * configured interval; $wait=false checks once. $timeout is positive milliseconds
+		 * or null for assertionTimeout, ignored without waiting. Report once after success or expiry.
 		 * Return this window. Invalid patterns throw. Results report to the active Test;
 		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
 		 */
@@ -76,7 +76,7 @@
 			$passed = $this->browser->evaluate(function () use ($pattern, &$actual) {
 				$actual = $this->url();
 				return Browser::matches($pattern, $actual);
-			}, $wait, $timeout);
+			}, $wait, $timeout, assertion: true);
 			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' URL: expected a match for '
 				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.', $verify, ['expected' => $pattern, 'actual' => $actual]);
 			return $this;
@@ -114,9 +114,9 @@
 		 * $visible requires the first match to be displayed. $invert requires no matches,
 		 * or no displayed matches with $visible. Positive success returns an Element;
 		 * inverted success returns null. Unmet conditions throw, after reporting if $assert.
-		 * Repeat the search every 100 ms by default, including replacement nodes.
+		 * Repeat the search at pollInterval by default, including replacement nodes.
 		 * $wait=false checks once. $timeout is positive, finite milliseconds or null for
-		 * the browser default; ignored without waiting.
+		 * waitTimeout; ignored without waiting.
 		 * Commands retain their own timeouts. Driver/context errors propagate; only missing
 		 * matches and recoverable stale references are retried. The result retains its lookup.
 		 */
@@ -478,7 +478,7 @@
 		/**
 		 * Poll condition($this) with Browser::wait() semantics, reselecting the original
 		 * frame each time. $timeout is positive, finite milliseconds; null uses the browser
-		 * constructor timeout. Return first() or test count() when waiting for an ElementSet:
+		 * waitTimeout. Return first() or test count() when waiting for an ElementSet:
 		 * an empty collection object is still truthy in PHP.
 		 */
 		public function wait(callable $condition, ?float $timeout = null): mixed

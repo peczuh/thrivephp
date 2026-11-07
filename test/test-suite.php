@@ -360,6 +360,7 @@ echo "PASS: empty suites and loading failures produce failing reports without le
 
 $config = new SuiteConfig();
 check($config->idleTimeout === null && $config->timeout === 10.0 && $config->capabilities === []
+    && $config->waitTimeout === 5000.0 && $config->assertionTimeout === 5000.0 && $config->pollInterval === 500.0
     && $config->skipRemainingOnFailure === false, 'Incorrect defaults.');
 $config->idleTimeout = 1;
 check((new SuiteConfig())->idleTimeout === null, 'Configuration leaked between suites.');

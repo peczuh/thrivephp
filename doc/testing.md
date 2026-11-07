@@ -560,7 +560,10 @@ and calls `configure()` once per suite attempt before suite hooks. Defaults are:
 
 | Property | Default | Meaning |
 | --- | --- | --- |
-| `timeout` | `10` | Seconds, passed to `WebDriver::browser()`. |
+| `timeout` | `10` | Seconds for HTTP/BiDi commands, passed to `WebDriver::browser()`. |
+| `waitTimeout` | `5000` | Milliseconds for lookups, explicit waits, and action retries. |
+| `assertionTimeout` | `5000` | Milliseconds for comparison-assertion retries. |
+| `pollInterval` | `500` | Milliseconds between polling attempts. |
 | `capabilities` | `[]` | Browser capabilities passed to the session factory. |
 | `idleTimeout` | `null` | Seconds without worker progress; null disables it. |
 | `skipRemainingOnFailure` | `true` for `SuiteBrowser`, otherwise `false` | Skip later cases after a case exhausts its retries and fails. |
@@ -568,6 +571,14 @@ and calls `configure()` once per suite attempt before suite hooks. Defaults are:
 Declared properties enforce their PHP types. Assigning an unknown option throws
 `InvalidArgumentException`. Configuration changes do not
 affect other suites. No reference parameter is needed to change object properties.
+
+`waitTimeout`, `assertionTimeout`, and `pollInterval` must be positive and finite.
+They are also named arguments on `WebDriver::browser()` and direct `Browser`
+construction. A per-call `timeout:` overrides the applicable retry budget;
+`wait: false` checks once and ignores the timeout. `find(assert: true)` and
+`Element::wait(assert: true)` still use `waitTimeout`, because assertion recording
+does not change the operation's polling category. Each in-flight command retains
+its own I/O timeout; polling deadlines are checked between attempts.
 
 Browser assertions automatically report to the current case or suite phase and
 stop it on failure by default. Comparison methods accept `verify: true` to record
@@ -589,7 +600,7 @@ Lookup and comparison methods that expose `wait` default to `true`, retrying bef
 the final result is recorded once. Pass `wait: false` for a single check. `countEquals()`
 refreshes retained searches by default; explicit `ElementSet` snapshots without
 a retained search require `wait: false`.
-Explicit wait timeouts are milliseconds, distinct from the browser configuration's
+Explicit wait timeouts are milliseconds, distinct from the command timeout's
 seconds. Invalid patterns and driver errors still propagate; `find()` and
 `Element::wait()` remain stopping prerequisites. Direct `$this->test->verify(...)`
 is also available for boolean conditions.
@@ -603,8 +614,8 @@ when overriding other suite behavior.
 
 `click()`, `type()`, `key()`, `clear()`, the `value()` setter, `check()`,
 `uncheck()`, and `select()` retry by default. Pass `wait: false` for one attempt
-or `timeout: 5000` for a five-second retry budget. Null timeout uses the browser
-configuration. Polling is every 100 ms; in-flight commands retain their own
+or `timeout: 5000` for a five-second retry budget. Null timeout uses `waitTimeout`.
+Polling uses `pollInterval`; in-flight commands retain their own
 timeouts. Compound operations share one polling deadline.
 
 Actions try the captured node first. A stale node is re-found only when its

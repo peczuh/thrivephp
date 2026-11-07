@@ -50,10 +50,10 @@
 		}
 
 		/**
-		 * Assert the count and return this set. By default, repeat the retained search every
-		 * 100 ms and adopt membership on success. $wait=false checks the snapshot once;
+		 * Assert the count and return this set. By default, repeat the retained search at
+		 * pollInterval and adopt membership on success. $wait=false checks the snapshot once;
 		 * snapshots without a lookup require $wait=false.
-		 * $timeout is positive, finite milliseconds, null for the browser default, and
+		 * $timeout is positive, finite milliseconds, null for assertionTimeout, and
 		 * ignored without waiting. Report once after success or expiry. Driver errors propagate.
 		 * Report to the active Test, including empty explicit snapshots. $verify records
 		 * mismatches and continues. Outside Test::run(), failures always throw.
@@ -85,7 +85,7 @@
 					return false;
 				}
 			};
-			$passed = $this->browser === null ? $condition() : $this->browser->evaluate($condition, $wait, $timeout);
+			$passed = $this->browser === null ? $condition() : $this->browser->evaluate($condition, $wait, $timeout, assertion: true);
 			$message = 'Element count: expected ' . $expected . ', got ' . $actual . '.';
 			if ($this->browser !== null):
 				$this->browser->reportAssertion($passed, $message, $verify, ['expected' => $expected, 'actual' => ctype_digit($actual) ? (int)$actual : $actual]);

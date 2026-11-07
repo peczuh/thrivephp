@@ -145,6 +145,7 @@
 		 * should explicitly select Chrome, Chromium, or Firefox in the constructor.
 		 *
 		 * $timeout is positive seconds for Browser's command I/O, not service startup.
+		 * $waitTimeout, $assertionTimeout and $pollInterval configure polling in positive, finite milliseconds.
 		 * $bidi requests BiDi support. $capabilities accepts browser-specific options;
 		 * arguments/preferences are retained, but the detected binary cannot be replaced.
 		 * Failure during session creation stops the owned service: a lost response may
@@ -153,7 +154,8 @@
 		 * Comparison methods accept $verify to record a failed result and continue instead.
 		 * Outside Test::run(), failures throw. Assertions retry by default; $wait=false checks once.
 		 */
-		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = []): Browser
+		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = [],
+			float $waitTimeout = 5000, float $assertionTimeout = 5000, float $pollInterval = 500): Browser
 		{
 			if ($this->process === null || !$this->process->running()):
 				throw new \LogicException('WebDriver service is not running. Construct a new WebDriver to restart it.');
@@ -164,6 +166,9 @@
 			if (!is_finite($timeout) || $timeout <= 0):
 				throw new \InvalidArgumentException('Browser timeout must be positive and finite.');
 			endif;
+			foreach (['waitTimeout' => $waitTimeout, 'assertionTimeout' => $assertionTimeout, 'pollInterval' => $pollInterval] as $name => $value):
+				if (!is_finite($value) || $value <= 0) throw new \InvalidArgumentException($name . ' must be positive and finite.');
+			endforeach;
 			$name = $this->installation->name;
 			if (in_array($name, ['safari', 'safaripreview'], true)):
 				if ($headless):
@@ -193,7 +198,8 @@
 				default => $name,
 			};
 			try {
-				return $this->session = new Browser($this->endpoint, $protocolName, $bidi, $timeout, $capabilities);
+				return $this->session = new Browser($this->endpoint, $protocolName, $bidi, $timeout, $capabilities,
+					$waitTimeout, $assertionTimeout, $pollInterval);
 			} catch (\Throwable $error) {
 				try {
 					$this->stop();

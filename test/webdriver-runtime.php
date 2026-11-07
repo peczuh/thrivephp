@@ -368,6 +368,21 @@ try {
 		raises(fn() => $driver->browser(), 'not running', LogicException::class);
 	});
 
+	scenario('invalid polling settings leave the owned service available for a corrected session', function () {
+		FixtureDriver::$source = installation(['firefox']);
+		$driver = new FixtureDriver(browser: 'firefox');
+		try {
+			foreach (['waitTimeout', 'assertionTimeout', 'pollInterval'] as $option) {
+				foreach ([0, -1, INF, NAN] as $invalid) {
+					raises(fn() => $driver->browser(...[$option => $invalid]), $option . ' must be positive and finite', InvalidArgumentException::class);
+				}
+			}
+			check($driver->browser(waitTimeout: 30, assertionTimeout: 60, pollInterval: 10)->active(), 'Corrected settings could not create a session.');
+		} finally {
+			$driver->stop();
+		}
+	});
+
 	scenario('session factory reports to the active Test across sessions without retaining a recorder', function () {
 		FixtureDriver::$source = installation(['firefox']);
 		$driver = new FixtureDriver(browser: 'firefox');
@@ -408,6 +423,9 @@ try {
 					{
 						$this->configured++;
 						$config->timeout = 0.5;
+						$config->waitTimeout = 35;
+						$config->assertionTimeout = 65;
+						$config->pollInterval = 10;
 						$config->capabilities = ['acceptInsecureCerts' => false];
 					}
 
@@ -415,6 +433,16 @@ try {
 					public function login(): void
 					{
 						$this->original = $this->browser;
+						foreach ([false => 35, true => 65] as $assertion => $milliseconds) {
+							$started = microtime(true);
+							check(!$this->browser->evaluate(fn() => false, true, null, (bool)$assertion), 'Expected unmet condition.');
+							$elapsed = microtime(true) - $started;
+							check($elapsed >= $milliseconds / 1000 && $elapsed < 0.3, 'Suite polling budget was not forwarded.');
+						}
+						$calls = 0;
+						$started = microtime(true);
+						$this->browser->wait(function () use (&$calls) { return ++$calls === 2; });
+						check(microtime(true) - $started >= 0.01 && microtime(true) - $started < 0.3, 'Suite poll interval was not forwarded.');
 						$this->browser->urlMatches('~/fixture$~');
 						$this->trace[] = 'login';
 					}
