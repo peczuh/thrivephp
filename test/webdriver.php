@@ -274,6 +274,7 @@ foreach ([['check', 'checkbox', false], ['check', 'checkbox', true], ['check', '
 		exchange($listener, 'GET', '/session/session%2F1/element/node/property/type', null, $type);
 		exchange($listener, 'GET', '/session/session%2F1/element/node/selected', null, $selected);
 		if ($selected === ($method === 'uncheck')):
+			exchange($listener, 'GET', '/session/session%2F1/element/node/enabled', null, true);
 			exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], null);
 		endif;
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
@@ -294,6 +295,7 @@ scenario('check actions reject unsupported controls and propagate click errors',
 	exchange($listener, 'GET', '/session/session%2F1/element/node/name', null, 'input');
 	exchange($listener, 'GET', '/session/session%2F1/element/node/property/type', null, 'checkbox');
 	exchange($listener, 'GET', '/session/session%2F1/element/node/selected', null, false);
+	exchange($listener, 'GET', '/session/session%2F1/element/node/enabled', null, true);
 	exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], ['error' => 'element click intercepted', 'message' => 'covered'], 400);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 }, function ($url) {
@@ -489,6 +491,138 @@ scenario('wait verification propagates selector, session and stale-context error
 	$browser->quit();
 });
 
+/** Supply an observation to a comparison, preserving its actual WebDriver endpoint and body. */
+function comparisonExchange($listener, string $path, mixed $value, bool $document, string $id = 'original', int $status = 200): void
+{
+	$path = '/session/session%2F1' . ($document ? '' : '/element/' . $id) . $path;
+	exchange($listener, str_ends_with($path, '/elements') ? 'POST' : 'GET', $path,
+		str_ends_with($path, '/elements') ? ['using' => 'css selector', 'value' => '*'] : null, $value, $status);
+}
+
+foreach (require __DIR__ . '/fixtures/webdriver-assertions.php' as $method => [$arguments, $path, $good, $bad]):
+	$document = in_array($path, ['/url', '/title'], true);
+	foreach ($document ? ['browser', 'window'] : ['element'] as $scope):
+		scenario("$scope $method obeys the complete comparison contract", function ($listener) use ($path, $good, $bad, $document) {
+			createSession($listener);
+			if (!$document) exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'original']);
+			comparisonExchange($listener, $path, $good, $document);
+			comparisonExchange($listener, $path, $bad, $document);
+			foreach ([[$bad, $good], [$good, $bad], [$bad], [$good]] as $values):
+				foreach ($values as $index => $value):
+					$id = $index === 0 ? 'pending' : 'ready';
+					if (!$document) exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => $id]);
+					comparisonExchange($listener, $path, $value, $document, $id);
+				endforeach;
+			endforeach;
+			foreach ([$bad, $bad, $bad] as $value) comparisonExchange($listener, $path, $value, $document, 'ready');
+			comparisonExchange($listener, $path, ['error' => 'unknown error', 'message' => 'driver failure'], $document, 'ready', 500);
+			exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		}, function ($url) use ($method, $arguments, $scope, $document) {
+			$browser = new Browser($url, 'firefox', waitTimeout: 1, assertionTimeout: 300, pollInterval: 10);
+			$target = match ($scope) { 'browser' => $browser, 'window' => $browser->window(), default => $browser->find('#node', wait: false) };
+			try {
+				[$status, $output, $record] = runChecks(['check' => function () use ($target, $method, $arguments, $document) {
+					foreach ([false, true] as $invert):
+						verify($target->$method(...[...$arguments, 'wait' => false, 'timeout' => 0, 'invert' => $invert]) === $target, 'One-shot comparison lost receiver.');
+					endforeach;
+					foreach ([false, true] as $invert):
+						verify($target->$method(...[...$arguments, 'invert' => $invert, 'verify' => true]) === $target, 'Waiting verification lost receiver.');
+						if (!$document) verify($target->id() === 'ready', 'Successful comparison did not adopt replacement.');
+					endforeach;
+					foreach ([false, true] as $invert):
+						verify($target->$method(...[...$arguments, 'timeout' => 1, 'verify' => true, 'invert' => $invert]) === $target, 'Expired verification lost receiver.');
+						if (!$document) verify($target->id() === 'ready', 'Failed comparison adopted replacement.');
+					endforeach;
+					expectError(fn() => $target->$method(...[...$arguments, 'wait' => false]), 'expected');
+				}]);
+				verify($status === 1 && str_contains($output, 'Assertions: 4 passed, 3 failed'), $output);
+				$steps = $record['suites'][0]['attempts'][0]['steps'];
+				verify(count($steps) === 7 && array_column($steps, 'label') === array_fill(0, 7, $method)
+					&& array_column($steps, 'error') === array_fill(0, 7, null)
+					&& array_map(fn($step) => count($step['assertions']), $steps) === array_fill(0, 7, 1), 'Comparison counted nested steps or duplicate errors.');
+				foreach ([false, true] as $verify) expectError(fn() => $target->$method(...[...$arguments, 'wait' => false, 'verify' => $verify]), 'assertion failed');
+				foreach ([0, -1, INF, NAN] as $timeout) expectError(fn() => $target->$method(...[...$arguments, 'timeout' => $timeout, 'verify' => true]), 'positive and finite');
+				[$status, $output, $record] = runChecks(['check' => fn() => $target->$method(...[...$arguments, 'wait' => false, 'verify' => true])]);
+				verify($status === 1 && $record['totals']['assertionsFailed'] === 0
+					&& $record['suites'][0]['attempts'][0]['steps'][0]['error']['message'] === 'WebDriver HTTP 500 unknown error: driver failure',
+					'Driver exception became a verification mismatch.');
+			} finally {
+				$browser->quit();
+			}
+		});
+	endforeach;
+endforeach;
+
+foreach (['browser', 'window'] as $scope):
+	scenario("$scope callback wait propagates stale frame restoration immediately", function ($listener) {
+		createSession($listener);
+		exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => [Element::REFERENCE => 'frame']], ['error' => 'stale element reference', 'message' => 'frame gone'], 404);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($scope) {
+		$browser = new Browser($url, 'firefox', waitTimeout: 300, pollInterval: 10);
+		$window = $browser->window();
+		$frames = [[Element::REFERENCE => 'frame']];
+		if ($scope === 'window') $window->rememberFrames($frames);
+		$element = new Element($window, 'node', $frames);
+		try {
+			expectError(fn() => ($scope === 'window' ? $window : $browser)->wait(fn() => $element->text()), 'context restoration failed');
+		} finally {
+			$browser->quit();
+		}
+	});
+endforeach;
+
+scenario('comparison arguments fail before polling even during inverted verification', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$element = new Element($browser->window(), 'node');
+	try {
+		foreach ([
+			[$element, 'textMatches', ['[']], [$element, 'attributeMatches', ['name', '[']],
+			[$element, 'propertyMatches', ['name', '[']], [$browser, 'urlMatches', ['[']],
+			[$browser, 'titleMatches', ['[']], [$browser->window(), 'urlMatches', ['[']],
+			[$browser->window(), 'titleMatches', ['[']],
+		] as [$target, $method, $arguments]):
+			expectError(fn() => $target->$method(...[...$arguments, 'wait' => false, 'invert' => true, 'verify' => true]), 'Could not evaluate assertion pattern');
+		endforeach;
+		foreach (['', '  ', [], ['two words'], [null]] as $classes):
+			expectError(fn() => $element->hasClass($classes, invert: true, verify: true), 'class');
+		endforeach;
+	} finally {
+		$browser->quit();
+	}
+});
+
+scenario('negative comparisons require a live matching node and count inversion preserves snapshot semantics', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], [Element::REFERENCE => 'original']);
+	exchange($listener, 'POST', '/session/session%2F1/element', ['using' => 'css selector', 'value' => '#node'], ['error' => 'no such element', 'message' => 'absent'], 404);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.row'], [[Element::REFERENCE => 'original']]);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.row'], []);
+	exchange($listener, 'POST', '/session/session%2F1/elements', ['using' => 'css selector', 'value' => '.row'], [[Element::REFERENCE => 'replacement']]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', pollInterval: 10);
+	try {
+		[$status, $output] = runChecks(['check' => function () use ($browser) {
+			$element = $browser->find('#node');
+			$element->textEquals('other', invert: true, verify: true, timeout: 1);
+			verify($element->id() === 'original', 'Absent node replaced the captured reference.');
+			$set = $browser->findAll('.row');
+			verify($set->countEquals(1, invert: true) === $set && $set->count() === 0, 'Inverted count did not adopt successful membership.');
+			$set->countEquals(1, invert: true, verify: true, timeout: 1);
+			verify($set->count() === 0, 'Failed inverted count adopted membership.');
+			(new ElementSet())->countEquals(1, invert: true, wait: false);
+			(new ElementSet())->countEquals(0, invert: true, wait: false, verify: true);
+		}]);
+		verify($status === 1 && str_contains($output, 'Assertions: 2 passed, 3 failed'), $output);
+	} finally {
+		$browser->quit();
+	}
+});
+
 $assertionCases = [
 	['visible', [], '/displayed', true, true, 'expected true, got true'],
 	['visible', [], '/displayed', false, false, 'expected true, got false'],
@@ -506,6 +640,12 @@ $assertionCases = [
 	['attributeMatches', ['data/name', '/^item-[0-9]+$/'], '/attribute/data%2Fname', 'item-42', true, "expected a match for '/^item-[0-9]+$/', got 'item-42'"],
 	['attributeMatches', ['data/name', '/^item-[0-9]+$/'], '/attribute/data%2Fname', 'other', false, "expected a match for '/^item-[0-9]+$/', got 'other'"],
 	['attributeMatches', ['missing', '/^$/'], '/attribute/missing', null, false, "expected a match for '/^$/', got NULL"],
+	['propertyContains', ['status', 'Saved'], '/property/status', 'Saved draft', true, "expected to contain 'Saved'"],
+	['propertyContains', ['status', ''], '/property/status', null, false, "expected to contain ''"],
+	['propertyContains', ['items', ['0']], '/property/items', [0], false, 'property'],
+	['hasClass', ['one two'], '/attribute/class', "one\ntwo", true, "expected 'one two'"],
+	['hasClass', ['one'], '/attribute/class', 'someone', false, "expected 'one'"],
+	['valueContains', [''], '/property/value', null, false, "expected to contain ''"],
 ];
 
 scenario('element verification records every comparison and leaves subsequent assertions stopping', function ($listener) use ($assertionCases) {
@@ -1919,6 +2059,46 @@ scenario('value retries typing without clearing the same node again', function (
 	$browser->quit();
 });
 
+foreach (['check', 'uncheck'] as $method):
+	foreach (['one-shot', 'expiry', 'eventual'] as $mode):
+		scenario("$method disabled controls: $mode", function ($listener) use ($method, $mode) {
+			createSession($listener);
+			foreach ($mode === 'eventual' ? [false, true] : [false] as $enabled):
+				exchange($listener, 'GET', '/session/session%2F1/element/node/name', null, 'input');
+				exchange($listener, 'GET', '/session/session%2F1/element/node/property/type', null, 'checkbox');
+				exchange($listener, 'GET', '/session/session%2F1/element/node/selected', null, $method === 'uncheck');
+				exchange($listener, 'GET', '/session/session%2F1/element/node/enabled', null, $enabled);
+				if ($enabled) exchange($listener, 'POST', '/session/session%2F1/element/node/click', [], null);
+			endforeach;
+			exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		}, function ($url) use ($method, $mode) {
+			$browser = new Browser($url, 'firefox', pollInterval: 10);
+			$element = new Element($browser->window(), 'node');
+			try {
+				if ($mode === 'eventual') verify($element->$method(timeout: 300) === $element, 'State change lost receiver.');
+				else expectError(fn() => $element->$method(wait: $mode !== 'one-shot', timeout: 1), 'disabled');
+			} finally {
+				$browser->quit();
+			}
+		});
+	endforeach;
+endforeach;
+
+scenario('value retries invalid state only while clearing and preserves typing failures', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/clear', [], ['error' => 'invalid element state', 'message' => 'disabled'], 400);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/clear', [], null);
+	exchange($listener, 'POST', '/session/session%2F1/element/node/value', ['text' => 'new'], ['error' => 'invalid element state', 'message' => 'typing rejected'], 400);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', pollInterval: 10);
+	try {
+		expectError(fn() => (new Element($browser->window(), 'node'))->value('new', timeout: 300), 'invalid element state: typing rejected');
+	} finally {
+		$browser->quit();
+	}
+});
+
 foreach (['check' => true, 'uncheck' => false] as $method => $selected):
 	scenario("$method rechecks selection after replacement rather than toggling it", function ($listener) use ($selected) {
 		createSession($listener);
@@ -1929,7 +2109,10 @@ foreach (['check' => true, 'uncheck' => false] as $method => $selected):
 			exchange($listener, 'GET', "/session/session%2F1/element/$id/name", null, 'input');
 			exchange($listener, 'GET', "/session/session%2F1/element/$id/property/type", null, 'checkbox');
 			exchange($listener, 'GET', "/session/session%2F1/element/$id/selected", null, $id === 'new' ? $selected : !$selected);
-			if ($id === 'old') exchange($listener, 'POST', '/session/session%2F1/element/old/click', [], ['error' => 'stale element reference', 'message' => 'replaced'], 404);
+			if ($id === 'old'):
+				exchange($listener, 'GET', '/session/session%2F1/element/old/enabled', null, true);
+				exchange($listener, 'POST', '/session/session%2F1/element/old/click', [], ['error' => 'stale element reference', 'message' => 'replaced'], 404);
+			endif;
 		endforeach;
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	}, function ($url) use ($method) {

@@ -386,7 +386,8 @@
 		/**
 		 * Poll $condition($this) at the configured interval until it returns a truthy value, then
 		 * return that value. Only missing/stale element errors are retried; all other
-		 * exceptions propagate. Re-find elements inside the callback to survive DOM changes.
+		 * exceptions and context-restoration failures propagate. Re-find elements inside
+		 * the callback to survive DOM changes.
 		 * $timeout is positive, finite milliseconds; null uses waitTimeout.
 		 * Checked between callbacks: synchronous work retains its own HTTP/BiDi timeouts.
 		 * Empty ElementSet objects are truthy: return first() or explicitly test count().
@@ -424,11 +425,52 @@
 		 * $timeout is positive milliseconds or null for assertionTimeout, ignored without waiting.
 		 * Return this browser. Invalid patterns throw. Results report to the active Test;
 		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
+		 * $invert negates the match. All URL/title comparisons share these polling and reporting rules.
 		 */
-		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->urlMatches($pattern, $wait, $timeout, $verify);
+			$this->window()->urlMatches($pattern, $wait, $timeout, $verify, $invert);
+			return $this;
+		}
+
+		/** Assert exact current URL equality; use urlMatches() polling, verification, and millisecond timeout semantics. */
+		public function urlEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->window()->urlEquals($expected, $wait, $timeout, $verify, $invert);
+			return $this;
+		}
+
+		/** Assert a case-sensitive URL substring, polling by default; return this browser. */
+		public function urlContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->window()->urlContains($expected, $wait, $timeout, $verify, $invert);
+			return $this;
+		}
+
+		/** Assert the current top-level title; use urlMatches() polling, verification, and millisecond timeout semantics. */
+		public function titleEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->window()->titleEquals($expected, $wait, $timeout, $verify, $invert);
+			return $this;
+		}
+
+		/** Assert a case-sensitive title substring, polling by default; return this browser. */
+		public function titleContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->window()->titleContains($expected, $wait, $timeout, $verify, $invert);
+			return $this;
+		}
+
+		/** Assert a title matches a delimited PHP regex; invalid patterns throw before polling. */
+		public function titleMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->window()->titleMatches($pattern, $wait, $timeout, $verify, $invert);
 			return $this;
 		}
 
@@ -889,6 +931,10 @@
 				$window->rememberFrames($frames);
 			} catch (\Throwable $error) {
 				$this->invalidateContext();
+				// Callback waits must not retry stale/missing frame references as element conditions.
+				if ($error instanceof \RuntimeException):
+					throw new \RuntimeException('WebDriver context restoration failed: ' . $error->getMessage(), 0, $error);
+				endif;
 				throw $error;
 			}
 		}

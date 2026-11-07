@@ -57,22 +57,23 @@
 		 * ignored without waiting. Report once after success or expiry. Driver errors propagate.
 		 * Report to the active Test, including empty explicit snapshots. $verify records
 		 * mismatches and continues. Outside Test::run(), failures always throw.
+		 * $invert expects a count different from $expected, with the same snapshot adoption rules.
 		 */
-		public function countEquals(int $expected, bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		public function countEquals(int $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			if ($wait && $this->lookup === null):
 				throw new \LogicException('Cannot wait for an ElementSet count without a retained search.');
 			endif;
 			$actual = (string)$this->count();
-			$condition = function () use ($expected, $wait, &$actual) {
+			$condition = function () use ($expected, $wait, $invert, &$actual) {
 				if ($wait):
 					$this->lookup->activate();
 				endif;
 				try {
 					$set = $wait ? $this->lookup->all() : $this;
 					$actual = (string)$set->count();
-					if ($set->count() !== $expected):
+					if (($set->count() === $expected) === $invert):
 						return false;
 					endif;
 					$this->elements = $set->elements;
@@ -86,14 +87,15 @@
 				}
 			};
 			$passed = $this->browser === null ? $condition() : $this->browser->evaluate($condition, $wait, $timeout, assertion: true);
-			$message = 'Element count: expected ' . $expected . ', got ' . $actual . '.';
+			$message = 'Element count: expected ' . ($invert ? 'not ' : '') . $expected . ', got ' . $actual . '.';
+			$comparison = ['expected' => $expected, 'actual' => ctype_digit($actual) ? (int)$actual : $actual] + ($invert ? ['invert' => true] : []);
 			if ($this->browser !== null):
-				$this->browser->reportAssertion($passed, $message, $verify, ['expected' => $expected, 'actual' => ctype_digit($actual) ? (int)$actual : $actual]);
+				$this->browser->reportAssertion($passed, $message, $verify, $comparison);
 			elseif (class_exists(\ThriveData\ThrivePHP\Test::class) && ($test = \ThriveData\ThrivePHP\Test::active()) !== null):
 				if ($verify):
-					$test->verify($passed, $message, ['expected' => $expected, 'actual' => (int)$actual]);
+					$test->verify($passed, $message, $comparison);
 				else:
-					$test->assert($passed, $message, ['expected' => $expected, 'actual' => (int)$actual]);
+					$test->assert($passed, $message, $comparison);
 				endif;
 			elseif (!$passed):
 				throw new \RuntimeException('WebDriver assertion failed: ' . $message);

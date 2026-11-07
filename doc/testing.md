@@ -138,7 +138,8 @@ $this->browser->find('#name')->value('Jane');
 The recorder suppresses nested operations across browser objects, including calls
 inside wait callbacks. Each outer operation preserves its return value and errors.
 Standalone WebDriver usage records nothing. Actions do not increment assertions;
-`find(assert: true)` and comparison methods retain their assertion counting.
+`find()`/element waits with `assert: true` or `verify: true`, and comparison methods,
+record one final assertion.
 
 | Setting | Default | Allowed values |
 | --- | --- | --- |
@@ -591,11 +592,21 @@ $this->browser->find('#greeting')
 $this->browser->findAll('.row')->countEquals(3, verify: true);
 ```
 
-This option is available on `visible()`, `valueEquals()`,
-`textEquals()`, `textContains()`, `attributeEquals()`, `attributeMatches()`,
-`countEquals()`, and browser/window `urlMatches()`. It applies only to that call.
+This option is available on every comparison method. It applies only to that call.
 A failed verification still fails the case or suite phase overall. Without an
 active `Test`, failed comparisons throw even with `verify: true`.
+
+Element comparisons include `visible`, `valueEquals`, `valueContains`, `textEquals`,
+`textContains`, `textMatches`, `attributeEquals`, `attributeContains`,
+`attributeMatches`, `propertyEquals`, `propertyContains`, `propertyMatches`,
+`cssEquals`, `enabledEquals`, `selectedEquals`, `hasAttribute`, `hasClass`, and
+`hasDescendants`. Collections provide `countEquals`. Browsers and windows provide
+`urlEquals`, `urlContains`, `urlMatches`, `titleEquals`, `titleContains`, and
+`titleMatches`. All accept `invert: true` for negation. Immediate `enabled()` and
+`selected()` queries do not assert or wait.
+
+The [complete browser contract](webdriver-contract.md) lists every public operation,
+its wait/retry and failure behavior, identity rules, and Nightwatch assertion mapping.
 
 Lookup and comparison methods that expose `wait` default to `true`, retrying before
 the final result is recorded once. Pass `wait: false` for a single check. `countEquals()`
@@ -652,9 +663,11 @@ Native clicks retry interception and non-interactability; text entry retries
 non-interactability, and clearing also retries invalid element state. These
 WebDriver errors precede input dispatch. Connection failures, lost responses,
 navigation timeouts, and unrelated errors propagate without repeating input.
-`value()` clears each replacement before typing and does not re-clear the same
+`value()` retries invalid element state only during clearing, not during typing.
+It clears each replacement before typing and does not re-clear the same
 node after a rejected typing attempt. Checkbox and select operations re-check
-selection before every click. `select()` also waits for disabled controls/options
+selection before every click. `check()` and `uncheck()` wait for enabled state when
+a change is needed. `select()` also waits for disabled controls/options
 and missing options. Expiry throws with the last failure as its previous exception.
 
 Internal retries remain one reported step, with screenshots only for the final

@@ -67,18 +67,68 @@
 		 * or null for assertionTimeout, ignored without waiting. Report once after success or expiry.
 		 * Return this window. Invalid patterns throw. Results report to the active Test;
 		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
+		 * $invert negates the match. All URL/title comparisons share these polling and reporting rules.
 		 */
-		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			Browser::matches($pattern, '');
+			return $this->assertDocument('url', fn($actual) => Browser::matches($pattern, $actual),
+				'a match for ' . var_export($pattern, true), $pattern, $wait, $timeout, $verify, $invert);
+		}
+
+		/** Assert exact top-level URL equality, polling with assertionTimeout; $invert negates, $verify continues on mismatch. */
+		public function urlEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->assertDocument('url', fn($actual) => $actual === $expected,
+				var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+		}
+
+		/** Assert a case-sensitive top-level URL substring, with urlEquals() polling and reporting semantics. */
+		public function urlContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->assertDocument('url', fn($actual) => str_contains($actual, $expected),
+				'to contain ' . var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+		}
+
+		/** Assert the top-level document title, polling with assertionTimeout; $invert negates, $verify continues on mismatch. */
+		public function titleEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->assertDocument('title', fn($actual) => $actual === $expected,
+				var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+		}
+
+		/** Assert a case-sensitive title substring, with titleEquals() polling and reporting semantics. */
+		public function titleContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->assertDocument('title', fn($actual) => str_contains($actual, $expected),
+				'to contain ' . var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+		}
+
+		/** Assert a title matches a delimited PHP regex; invalid patterns throw before polling. */
+		public function titleMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			Browser::matches($pattern, '');
+			return $this->assertDocument('title', fn($actual) => Browser::matches($pattern, $actual),
+				'a match for ' . var_export($pattern, true), $pattern, $wait, $timeout, $verify, $invert);
+		}
+
+		/** Poll top-level observations once per attempt and report only the final comparison. */
+		private function assertDocument(string $property, callable $matches, string $expectation, string $expected, bool $wait, ?float $timeout, bool $verify, bool $invert): self
+		{
 			$actual = null;
-			$passed = $this->browser->evaluate(function () use ($pattern, &$actual) {
-				$actual = $this->url();
-				return Browser::matches($pattern, $actual);
+			$passed = $this->browser->evaluate(function () use ($property, $matches, $invert, &$actual) {
+				$actual = $this->$property();
+				return (bool)$matches($actual) !== $invert;
 			}, $wait, $timeout, assertion: true);
-			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' URL: expected a match for '
-				. var_export($pattern, true) . ', got ' . var_export($actual, true) . '.', $verify, ['expected' => $pattern, 'actual' => $actual]);
+			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' ' . ($property === 'url' ? 'URL' : 'title')
+				. ': expected ' . ($invert ? 'not ' : '') . $expectation . ', got ' . var_export($actual, true) . '.', $verify,
+				['expected' => $expected, 'actual' => $actual] + ($invert ? ['invert' => true] : []));
 			return $this;
 		}
 
@@ -505,6 +555,9 @@
 				// A lost response cannot tell us whether the remote context already changed.
 				if ($method === 'POST' && in_array($path, ['/frame', '/frame/parent', '/url', '/back', '/forward', '/refresh'], true)):
 					$this->browser->invalidateContext();
+					if ($error instanceof \RuntimeException):
+						throw new \RuntimeException('WebDriver context change failed: ' . $error->getMessage(), 0, $error);
+					endif;
 				endif;
 				throw $error;
 			}

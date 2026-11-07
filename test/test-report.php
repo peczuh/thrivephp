@@ -491,3 +491,47 @@ foreach (['find', 'wait'] as $operation) {
     }
 }
 echo "PASS: wait verification polls before one result, captures before continuation and retains author source\n";
+
+foreach (require __DIR__ . '/fixtures/webdriver-assertions.php' as $method => [$arguments, $path, $good, $bad]) {
+    $document = in_array($path, ['/url', '/title'], true);
+    foreach ($document ? ['browser', 'window'] : ['element'] as $scope) {
+        $browser = new class extends ReportBrowser {
+            public array $observations = [];
+            public string $observationPath;
+            public int $polls = 0;
+            public function sessionRequest(string $method, string $path, ?array $body = null, float $extraTimeout = 0): mixed
+            {
+                if ($path === $this->observationPath) {
+                    $this->trace[] = [$method, $path, $body];
+                    $this->polls++;
+                    return array_shift($this->observations);
+                }
+                return parent::sessionRequest($method, $path, $body, $extraTimeout);
+            }
+        };
+        $browser->observationPath = ($document ? '' : '/element/input') . $path;
+        $browser->observations = [$bad, $good, $good];
+        $target = match ($scope) { 'browser' => $browser, 'window' => $browser->window(), default => new Element($browser->window(), 'input') };
+        [$status, $console, $record] = runChecks(['suite' => fn (Runner $test) => function () use ($test, $browser, $target, $method, $arguments) {
+            $test->browserSession(['capabilities' => []], fn () => $browser->screenshot());
+            check($target->$method(...[...$arguments, 'timeout' => 1100]) === $target, 'Passing assertion lost receiver.');
+            check($target->$method(...[...$arguments, 'timeout' => 1, 'invert' => true, 'verify' => true]) === $target, 'Verification lost receiver.');
+            $browser->trace[] = ['continued', null];
+        }]);
+        $steps = $record['suites'][0]['attempts'][0]['steps'];
+        check($status === 1 && $browser->polls === 3 && count($steps) === 2
+            && array_column($steps, 'label') === [$method, $method]
+            && array_column($steps, 'error') === [null, null]
+            && $record['totals']['assertionsPassed'] === 1 && $record['totals']['assertionsFailed'] === 1,
+            "$scope $method recorded intermediate results or nested steps.");
+        check(($method === 'visible' ? $steps[1]['assertions'][0]['expected'] === false : $steps[1]['assertions'][0]['invert'] === true)
+            && $steps[1]['assertions'][0]['location'] === $steps[1]['location']
+            && $steps[1]['location']['file'] === 'test/test-report.php'
+            && count($steps[0]['screenshots']) === 0 && count($steps[1]['screenshots']) === 1
+            && count(array_filter($browser->trace, fn ($entry) => $entry[1] === '/screenshot')) === 1
+            && $browser->trace[count($browser->trace) - 2][1] === '/screenshot'
+            && substr_count($console, 'AssertionFailure:') === 1,
+            "$scope $method lost negation, source attribution, or capture-before-continuation.");
+    }
+}
+echo "PASS: every comparison shares polling, negation, verification, source attribution and final-only captures\n";
