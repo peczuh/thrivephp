@@ -1,7 +1,7 @@
 <?php
 	namespace ThriveData\ThrivePHP\WebDriver;
 
-	/** Session-wide metadata/body collection and network interception. Obtain through Browser::network(). */
+	/** Network cache policy, metadata/body collection and interception. Obtain through Browser::network(). */
 	final class Network
 	{
 		private const EVENTS = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
@@ -30,6 +30,24 @@
 
 		/** @internal Retain the originating session ID even after Browser releases its session. */
 		public function __construct(private BiDi $connection, private string $sessionId) {}
+
+		/**
+		 * Set default or bypass cache behavior. Null contexts applies session-wide and clears
+		 * all per-context overrides; otherwise supply a nonempty list of top-level context IDs.
+		 * The browser validates IDs. Default restores normal caching, not cache eviction.
+		 * Native errors propagate; no local policy snapshot or automatic restoration is kept.
+		 * Returns this controller. Handler reentry is forbidden.
+		 */
+		public function setCacheBehavior(string $behavior, ?array $contexts = null): self
+		{
+			$this->connection->assertCallable();
+			if (!in_array($behavior, ['default', 'bypass'], true)) throw new \InvalidArgumentException('Expected default or bypass cache behavior.');
+			if ($contexts === []) throw new \InvalidArgumentException('Expected a nonempty list of browsing context IDs or null.');
+			$params = ['cacheBehavior' => $behavior];
+			if ($contexts !== null) $params['contexts'] = array_values($contexts);
+			$this->connection->command('network.setCacheBehavior', $params);
+			return $this;
+		}
 
 		/** Start metadata capture across the session. Repeated starts are harmless; restarting appends. */
 		public function startCapture(): self

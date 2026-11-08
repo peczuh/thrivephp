@@ -1563,6 +1563,40 @@ $networkEvents = [
 ];
 $networkMethods = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
 
+scenario('cache policy forwards session and context scope without local state', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'network.setCacheBehavior', ['cacheBehavior' => 'bypass']);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => (object)[]]);
+	bidiRequest($ws, 2, 'network.setCacheBehavior', ['cacheBehavior' => 'default', 'contexts' => ['window/1', 'window/2', 'window/1']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => (object)[]]);
+	bidiRequest($ws, 3, 'network.setCacheBehavior', ['cacheBehavior' => 'bypass', 'contexts' => [12]]);
+	bidiReply($ws, ['type' => 'error', 'id' => 3, 'error' => 'invalid argument', 'message' => 'context must be a string']);
+	bidiRequest($ws, 4, 'network.setCacheBehavior', ['cacheBehavior' => 'bypass', 'contexts' => ['unknown']]);
+	bidiReply($ws, ['type' => 'error', 'id' => 4, 'error' => 'no such frame', 'message' => 'unknown context']);
+	bidiRequest($ws, 5, 'network.setCacheBehavior', ['cacheBehavior' => 'default']);
+	bidiReply($ws, ['type' => 'error', 'id' => 5, 'error' => 'unsupported operation', 'message' => 'cache policy rejected']);
+	bidiRequest($ws, 6, 'network.setCacheBehavior', ['cacheBehavior' => 'default']);
+	bidiReply($ws, ['type' => 'success', 'id' => 6, 'result' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	foreach (['', 'invalid', 'BYPASS'] as $behavior) expectError(fn () => $network->setCacheBehavior($behavior), 'Expected default or bypass');
+	expectError(fn () => $network->setCacheBehavior('bypass', []), 'Expected a nonempty list');
+	verify($network->setCacheBehavior('bypass') === $network, 'Session cache policy was not fluent.');
+	verify($network->setCacheBehavior('default', [2 => 'window/1', 5 => 'window/2', 8 => 'window/1']) === $network, 'Scoped cache policy was not fluent.');
+	expectError(fn () => $network->setCacheBehavior('bypass', [12]), 'invalid argument: context must be a string');
+	expectError(fn () => $network->setCacheBehavior('bypass', ['unknown']), 'no such frame: unknown context');
+	expectError(fn () => $network->setCacheBehavior('default', contexts: null), 'unsupported operation: cache policy rejected');
+	verify($network->setCacheBehavior('default') === $network, 'Rejected cache policy prevented an explicit retry.');
+	verify($browser->bidi()->active() && $network->requests() === [] && $network->captureError() === null
+		&& $network->interceptionError() === null, 'Cache policy corrupted transport or enabled capture/passive diagnostics.');
+	$browser->quit();
+	expectError(fn () => $network->setCacheBehavior('default'), 'No active WebDriver BiDi connection');
+});
+
 scenario('response body ownership, decoding, explicit removal retry and session cleanup', function ($listener) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);
@@ -1810,7 +1844,8 @@ scenario('pending body reads dispatch response decisions and guard reentry: ' . 
 	$network->intercept(function () use ($network, &$calls) {
 		foreach ([fn () => $network->startBodyCollection(0), fn () => $network->startBodyCollection(128), fn () => $network->startBodyCollection(128, []),
 			fn () => $network->requestBody('pending'), fn () => $network->responseBody('pending'), fn () => $network->stopBodyCollection(),
-			fn () => $network->disownBody('pending'), fn () => $network->disownBody('pending', 'request'), fn () => $network->disownBody('pending', 'invalid')] as $call):
+			fn () => $network->disownBody('pending'), fn () => $network->disownBody('pending', 'request'), fn () => $network->disownBody('pending', 'invalid'),
+			fn () => $network->setCacheBehavior('bypass'), fn () => $network->setCacheBehavior('invalid'), fn () => $network->setCacheBehavior('default', [])] as $call):
 			expectError($call, 'not allowed inside a BiDi event handler');
 		endforeach;
 		$calls++;

@@ -121,6 +121,71 @@ capture and console/JSON/HTML reporting. Explicit capture started under an activ
 test also reports events, with each event attributed to the attempt, phase, hook,
 and step where it was observed. See [network reporting](testing.md#browser-network-observation).
 
+## Network cache behavior
+
+Use `Network::setCacheBehavior(string $behavior, ?array $contexts = null): self`
+to set the browser's cache policy through
+[`network.setCacheBehavior`](https://www.w3.org/TR/webdriver-bidi/#command-network-setCacheBehavior):
+
+```php
+$browser = $driver->browser(bidi: true);
+$network = $browser->network();
+$network->setCacheBehavior('bypass');
+
+// Restore normal caching for this tab while the session default remains bypass.
+$network->setCacheBehavior('default', contexts: [$browser->window()->handle()]);
+
+// Restore the session default and clear every per-context override.
+$network->setCacheBehavior('default');
+```
+
+The method accepts only `default` or `bypass` and returns the network controller.
+With `contexts: null`, it omits the protocol's `contexts` field, changes the session
+default, and clears all context overrides. This also determines the policy for
+new top-level contexts. A nonempty list applies to the specified top-level
+contexts and their descendants. PHP array keys are discarded; the browser
+validates each ID and rejects unknown or child-frame contexts. An empty list is
+rejected locally, rather than interpreted as session-wide scope.
+
+`default` restores the browser's usual caching rules, including response cache
+headers. It is not a cache-clearing operation or a promise to preserve previously
+cached entries across a policy change. This API does not clear service-worker
+CacheStorage or guarantee that every request reaches an origin server.
+
+Cache policy requires an explicit BiDi session. It does not enable network capture,
+body collection, or interception, and creates no implicit test step. Calls from
+event handlers are forbidden. Native errors propagate synchronously without
+becoming passive capture/interception errors. The controller keeps no local
+policy snapshot; callers restore their intended policy explicitly.
+
+### Native cache findings
+
+`php -d short_open_tag=1 test/webdriver-cache-browser.php [chrome|firefox]` checks
+actual requests against a loopback server. Each pair fetches the same cacheable
+URL twice in sequence, and an uncached counter endpoint records server hits.
+Distinct URLs separate contexts and phases. A failed baseline cache-reuse check
+fails the fixture; it does not count as proof that bypass works.
+
+Chrome/ChromeDriver 156.0.8078.80 and Firefox 147.0.1/GeckoDriver 0.37.1 on macOS
+both passed:
+
+- Default-policy pairs made one server request; bypass pairs made two.
+- A new tab inherited the session-wide bypass policy.
+- Scoped default under global bypass and scoped bypass under global default
+  changed only the selected tab's observed policy.
+- Session-wide calls cleared overrides in both directions. Restored default
+  policy reused a freshly warmed URL; the test does not require old cache entries
+  to survive bypass.
+- Unknown contexts returned `no such frame`; child-frame and non-string context
+  IDs returned `invalid argument`. Subsequent caching and BiDi commands still
+  worked. Raw probes also rejected empty context lists and invalid behavior values.
+
+The fixture uses ordinary page fetches without request cache overrides or network
+interception. Descendant cache behavior and service-worker interactions are not
+part of these native checks. Protocol fixtures separately verify exact parameter
+forwarding, omitted session-wide scope, list reindexing, validation, handler
+reentry, fluent returns, and native-error propagation.
+
 ## Request interception and mocking
 
 ```php

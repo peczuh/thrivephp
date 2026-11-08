@@ -303,6 +303,13 @@ and byte-identity findings.
 Use [standalone release](webdriver-bidi.md#releasing-collected-bodies) to discard
 an owned item without retrieving bytes; repeated releases can report native errors.
 
+Cache policy is explicit through `$browser->network()->setCacheBehavior('bypass')`
+or `'default'`, with an optional nonempty list of top-level context IDs. A
+session-wide call clears per-context overrides. This method creates no implicit
+step or passive diagnostic; uncaught errors follow ordinary test execution
+reporting. See [network cache behavior](webdriver-bidi.md#network-cache-behavior)
+for scope, restoration semantics, and native checks.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document
