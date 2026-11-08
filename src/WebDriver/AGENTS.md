@@ -11,7 +11,7 @@ Apply this guide when working in `src/WebDriver/` or changing callers and tests
 that depend on this module. Preserve the contracts below unless the requested
 task explicitly changes them.
 
-The module targets PHP 8.0 or later, uses the namespace
+The module targets PHP 8.5 or later, uses the namespace
 `ThriveData\ThrivePHP\WebDriver`, and follows the repository's existing PSR-4
 autoloading. Use `<?php`, tabs, and the surrounding PHP syntax conventions.
 
