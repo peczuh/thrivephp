@@ -140,7 +140,8 @@ $network->stopInterception();
 ```
 
 `intercept(callable $handler, array $urlPatterns = [], string $phase = 'beforeRequestSent')`
-returns the remote intercept ID. Only `beforeRequestSent` is supported. Patterns
+returns the remote intercept ID. The default phase is `beforeRequestSent`;
+`authRequired` supports the authentication decisions below. Patterns
 are BiDi URL-pattern objects, not PHP regular expressions or shell globs; an empty
 list matches all requests. The browser supplies matching intercept IDs. Among
 active managed rules, the first registered matching rule handles the pause,
@@ -204,6 +205,76 @@ are not reset by stopping or adding another rule. Transport failures still throw
 from the detecting operation. Deadline exhaustion during stop invalidates BiDi
 rather than leaving ambiguous pending replies; HTTP session cleanup remains
 available. Failed cleanup cannot guarantee that every remote pause was released.
+
+## Authentication challenges
+
+Register an `authRequired` rule to answer HTTP authentication challenges. This
+example supplies credentials once per request and cancels a repeated challenge:
+
+```php
+$answered = [];
+$id = $network->intercept(
+    function (array $event) use (&$answered, $username, $password): NetworkDecision {
+        $request = $event['request']['request'];
+        if (isset($answered[$request])) return NetworkDecision::cancelAuth();
+        $answered[$request] = true;
+        return NetworkDecision::provideCredentials($username, $password);
+    },
+    urlPatterns: [['type' => 'string', 'pattern' => 'https://app.example.test/protected']],
+    phase: 'authRequired',
+);
+```
+
+Use `bidi: true` for a directly created session, or `$config->bidi = true` in a
+browser suite. Authentication does not enable metadata capture. Each phase
+subscribes lazily; request-only interception does not subscribe to auth events.
+Both phases share first-matching-rule precedence, removal, the stop deadline,
+and retained error reporting. Response-phase interception is not supported.
+
+Authentication handlers return one of:
+
+- `provideCredentials(string $username, string $password)` sends password
+  credentials through `network.continueWithAuth`. Empty strings and `'0'` are
+  preserved. The browser handles the authentication scheme.
+- `defaultAuth()` resumes the browser's normal authentication handling. It may
+  open a prompt, reject the request, or leave a navigation pending.
+- `cancelAuth()` cancels the challenge. An intentional cancellation is not a
+  controller error.
+
+The handler receives raw event parameters. When supplied by the browser,
+`response.authChallenges` lists `{scheme, realm}` entries; it is not an attempt
+counter. Repeated challenges can reuse both the request ID and redirect count.
+The controller calls the handler for each owned pause and does not retry
+credentials automatically. Handlers choose whether to supply new credentials or
+cancel, as in the bounded example above. Internal occurrence tokens protect a
+newer challenge from an older command reply, including replies from the request
+phase.
+
+Using a request decision during authentication, or an authentication decision
+during the request phase, records a contract failure. Authentication handler
+exceptions, invalid returns, and rejected recoverable decisions attempt at most
+one cancellation for the still-current pause. `network.failRequest` is not valid
+at this phase. Rejected cancellations and `no such request` do not trigger another
+recovery. The original and recovery failures retain `phase: 'authRequired'` and
+use the existing attempt reporting, including with capture disabled and across
+retries.
+
+Removing an authentication rule stops its handler. Late owned authentication
+pauses use **browser-default handling**, not cancellation. A rejected default
+decision can attempt one cancellation and retains the rejection as an error.
+Successful `stopInterception()` removes active rules and settles known decisions;
+it does not promise that requests, authentication prompts, or navigations have
+completed. Passive responders remain until session cleanup.
+
+Credential decision parameters are not added to report fields or error metadata,
+and settlement callbacks do not retain those parameters. This is not a redaction
+guarantee for browser error text or user-thrown messages. Existing opt-in raw
+capture can include authentication headers. The four-event capture list remains
+unchanged; authentication challenge metadata is available to the handler and raw
+event queue.
+
+Native verification covers HTTP Basic on the versions below. Digest and proxy
+authentication are not certified by these tests.
 
 ## Transport and dispatch
 
@@ -324,6 +395,12 @@ reuse after stop, and suite errors with capture disabled. Use the same PHP optio
 Protocol fixtures additionally cover registration races, overlapping rules,
 retired ownership, out-of-order settlement,
 recovery errors, shared cleanup deadlines, and reporting across retries.
+`test/webdriver-auth-browser.php [chrome|firefox]`, with the same PHP option,
+checks Basic credentials, cancellation, wrong credentials followed by correction
+or cancellation, browser-default acknowledgement, request/auth rule coexistence,
+capture independence, handler-error recovery, stop, and cleanup. Fresh sessions
+prevent cached credentials from hiding challenges. Reuse is checked after
+credential and cancellation paths, not after browser-default handling.
 
 Observed during implementation:
 
@@ -355,6 +432,17 @@ Observed during implementation:
   later HTTP commands timed out. The native failure test uses `fetch()` and checks
   both promise rejection and `network.fetchError`, then verifies continued session
   use. This does not establish failed-navigation support for that driver version.
+- Chrome 156 and Firefox 147 both satisfied HTTP Basic with supplied credentials
+  and reissued challenges after wrong credentials with the same request ID and
+  redirect count. Both accepted correction or cancellation on the second challenge.
+  Chrome omitted `response.authChallenges`; Firefox supplied the scheme and realm.
+- Both browsers acknowledged `continueWithAuth(action: 'default')`. In navigation
+  probes, Chrome reported `net::ERR_INVALID_AUTH_CREDENTIALS`; Firefox left even a
+  `wait: 'none'` navigation command pending until the command timeout invalidated
+  BiDi. Fetch-based probes separated the authentication acknowledgement from
+  navigation, and both completed rule removal and session cleanup. The native
+  authentication test checks that separation rather than claiming default auth
+  completes a navigation or permits every subsequent browser operation.
 - Safari Technology Preview 27.0 / driver 21626.1.6.19.1 exposed an experimental
   WebSocket with `safari:experimentalWebSocketUrl`, but its subscription response
   lacked the required subscription ID. Managed capture rejects that response;

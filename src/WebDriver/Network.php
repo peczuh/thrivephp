@@ -11,8 +11,9 @@
 		/** Request ID and redirect count identify each hop; insertion order is first-observed order. */
 		private array $hops = [];
 		private ?\Throwable $failure = null;
-		private ?string $interceptSubscription = null;
-		private ?int $interceptListener = null;
+		/** Each phase subscribes lazily and keeps a passive responder until session cleanup. */
+		private array $interceptSubscriptions = [];
+		private array $interceptListeners = [];
 		/** Remote ID => handler, or null while retiring. Removed IDs remain owned for late paused events. */
 		private array $rules = [];
 		private array $retired = [];
@@ -102,12 +103,12 @@
 			$this->connection->assertCallable();
 			$this->captureError();
 			$this->interceptionError();
-			if (($this->subscription !== null || $this->interceptSubscription !== null) && $this->connection->active()):
+			if (($this->subscription !== null || $this->interceptSubscriptions !== []) && $this->connection->active()):
 				try {
 					$this->connection->drain();
 				} catch (\Throwable $error) {
 					if ($this->subscription !== null) $this->failure = $error;
-					if ($this->interceptSubscription !== null) $this->recordInterceptionFailure($error);
+					if ($this->interceptSubscriptions !== []) $this->recordInterceptionFailure($error);
 					throw $error;
 				}
 			endif;
@@ -125,22 +126,22 @@
 		/**
 		 * Install an ordered managed rule. The handler receives blocked event params and must
 		 * return NetworkDecision; browser reentry is forbidden. URL patterns use BiDi syntax,
-		 * not globs. Only beforeRequestSent is supported. First matching managed rule wins;
+		 * not globs. Supports beforeRequestSent and authRequired. First matching managed rule wins;
 		 * manual controllers must not also decide managed-owned requests. Capture is independent.
 		 */
 		public function intercept(callable $handler, array $urlPatterns = [], string $phase = 'beforeRequestSent'): string
 		{
 			$this->connection->assertCallable();
-			if ($phase !== 'beforeRequestSent') throw new \InvalidArgumentException('Only beforeRequestSent interception is supported.');
-			if ($this->interceptSubscription === null):
-				$this->interceptListener = $this->connection->listen('network.beforeRequestSent', $this->onRequest(...));
+			if (!in_array($phase, ['beforeRequestSent', 'authRequired'], true)) throw new \InvalidArgumentException('Only beforeRequestSent and authRequired interception are supported.');
+			if (!isset($this->interceptSubscriptions[$phase])):
+				$this->interceptListeners[$phase] = $this->connection->listen('network.' . $phase, fn ($params) => $this->onRequest($params, $phase));
 				try {
-					$result = $this->connection->command('session.subscribe', ['events' => ['network.beforeRequestSent']]);
+					$result = $this->connection->command('session.subscribe', ['events' => ['network.' . $phase]]);
 					if (!is_string($result['subscription'] ?? null) || $result['subscription'] === '') throw new \RuntimeException('WebDriver BiDi did not return a subscription ID.');
-					$this->interceptSubscription = $result['subscription'];
+					$this->interceptSubscriptions[$phase] = $result['subscription'];
 				} catch (\Throwable $error) {
-					$this->connection->unlisten($this->interceptListener);
-					$this->interceptListener = null;
+					$this->connection->unlisten($this->interceptListeners[$phase]);
+					unset($this->interceptListeners[$phase]);
 					throw $error;
 				}
 			endif;
@@ -160,11 +161,11 @@
 				$events = $this->provisional;
 				$this->provisional = [];
 			}
-			foreach ($events as $event) $this->connection->decide($this->onRequest(...), $event);
+			foreach ($events as $event) $this->connection->decide(fn ($params) => $this->onRequest($params, $event['phase']), $event['params']);
 			return $id;
 		}
 
-		/** Remove a managed rule. Late paused requests remain owned and pass through without invoking its handler. */
+		/** Remove a managed rule. Late owned pauses continue unchanged or use browser-default auth, without its handler. */
 		public function removeIntercept(string $id): self
 		{
 			$this->connection->assertCallable();
@@ -207,7 +208,7 @@
 					if (!$this->connection->active()) break;
 				}
 			endforeach;
-			if ($this->interceptSubscription !== null && $this->connection->active()):
+			if ($this->interceptSubscriptions !== [] && $this->connection->active()):
 				try {
 					do {
 						$this->connection->drain($deadline);
@@ -225,14 +226,14 @@
 		/** Inspect retained handler, resolution and cleanup failures without I/O. Capture failures are separate. */
 		public function interceptionError(): ?NetworkError
 		{
-			if ($this->interceptSubscription !== null && !$this->connection->active() && $this->transportFailure === null) {
+			if ($this->interceptSubscriptions !== [] && !$this->connection->active() && $this->transportFailure === null) {
 				$this->recordInterceptionFailure($this->connection->failure() ?? new \RuntimeException('Network interception lost its BiDi connection.'));
 			}
 			return $this->interceptionFailure;
 		}
 
 		/** Return one decision for an owned pause; unknown IDs are held only during an add command. */
-		private function onRequest(array $event): ?array
+		private function onRequest(array $event, string $phase): ?array
 		{
 			if (!($event['isBlocked'] ?? false)) return null;
 			$ids = $event['intercepts'] ?? [];
@@ -245,19 +246,21 @@
 			endforeach;
 			$owned = $owned || array_any($ids, fn ($id) => isset($this->retired[$id]));
 			if (!$owned):
-				if ($this->installing) $this->provisional[] = $event;
+				if ($this->installing) $this->provisional[] = ['phase' => $phase, 'params' => $event];
 				return null;
 			endif;
 			$token = ++$this->nextPause;
 			$request = $event['request']['request'];
-			$this->paused[$token] = ['requestId' => $request, 'redirectCount' => $event['redirectCount'], 'phase' => 'beforeRequestSent', 'inflight' => true];
+			$this->paused[$token] = ['requestId' => $request, 'redirectCount' => $event['redirectCount'], 'phase' => $phase, 'inflight' => true];
 			$this->current[$request] = $token;
 			try {
-				$decision = $handler === null ? NetworkDecision::continueRequest() : $handler($event);
+				$decision = $handler === null
+					? ($phase === 'authRequired' ? NetworkDecision::defaultAuth() : NetworkDecision::continueRequest()) : $handler($event);
 				if (!$decision instanceof NetworkDecision) throw new \UnexpectedValueException('Network intercept handlers must return NetworkDecision.');
+				if ($decision->phase() !== $phase) throw new \UnexpectedValueException('Network decision is not valid for ' . $phase . '.');
 			} catch (\Throwable $error) {
 				$this->recordInterceptionFailure($error, $this->paused[$token]);
-				$decision = NetworkDecision::fail();
+				$decision = $phase === 'authRequired' ? NetworkDecision::cancelAuth() : NetworkDecision::fail();
 			}
 			return $this->resolve($token, $decision);
 		}
@@ -266,15 +269,19 @@
 		{
 			$pause = $this->paused[$token];
 			$command = $decision->command($pause['requestId']);
-			$command['settle'] = function (array $reply) use ($token, $pause, $command): ?array {
+			// Terminal failures cannot recover again; settlers need no credential-bearing command parameters.
+			$recoverable = $command['method'] !== 'network.failRequest'
+				&& !($command['method'] === 'network.continueWithAuth' && $command['params']['action'] === 'cancel');
+			$command['settle'] = function (array $reply) use ($token, $pause, $recoverable): ?array {
 				if ($reply['type'] === 'success'):
 					unset($this->paused[$token]);
 					if (($this->current[$pause['requestId']] ?? null) === $token) unset($this->current[$pause['requestId']]);
 					return null;
 				endif;
 				$this->recordInterceptionFailure(new \RuntimeException('WebDriver BiDi ' . $reply['error'] . ': ' . $reply['message']), $pause);
-				if ($command['method'] !== 'network.failRequest' && $reply['error'] !== 'no such request'
-					&& ($this->current[$pause['requestId']] ?? null) === $token) return $this->resolve($token, NetworkDecision::fail());
+				if ($recoverable && $reply['error'] !== 'no such request' && ($this->current[$pause['requestId']] ?? null) === $token) {
+					return $this->resolve($token, $pause['phase'] === 'authRequired' ? NetworkDecision::cancelAuth() : NetworkDecision::fail());
+				}
 				$this->paused[$token]['inflight'] = false;
 				return null;
 			};
@@ -295,9 +302,8 @@
 		public function disconnect(): void
 		{
 			$this->detach();
-			if ($this->interceptListener !== null) $this->connection->unlisten($this->interceptListener);
-			$this->interceptListener = null;
-			$this->interceptSubscription = null;
+			foreach ($this->interceptListeners as $listener) $this->connection->unlisten($listener);
+			$this->interceptListeners = $this->interceptSubscriptions = [];
 			$this->rules = $this->retired = $this->paused = $this->current = $this->provisional = [];
 		}
 

@@ -1921,11 +1921,127 @@ scenario('managed interception buffers installation events, orders rules and ret
 	$network->stopInterception()->stopInterception();
 	$browser->command('fixture.afterStop');
 	verify($calls === ['a', 'a', 'b'] && $network->requests() === [] && $network->interceptionError() === null, 'Stop lost passive ownership or enabled metadata capture.');
-	expectError(fn () => $network->intercept(fn () => NetworkDecision::fail(), phase: 'authRequired'), 'Only beforeRequestSent');
+	expectError(fn () => $network->intercept(fn () => NetworkDecision::fail(), phase: 'responseStarted'), 'Only beforeRequestSent and authRequired');
 	$browser->quit();
 });
 
-foreach (['throw', 'null', 'reentry', 'rejected', 'recovery-rejected', 'no-such-request'] as $mode):
+scenario('authentication owns lazy subscriptions, early events, ordered rules and retired defaults', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'requests']]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['beforeRequestSent'], 'urlPatterns' => []]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'r']]);
+	bidiRequest($ws, 3, 'session.subscribe', ['events' => ['network.authRequired']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => ['subscription' => 'auth']]);
+	bidiRequest($ws, 4, 'network.addIntercept', ['phases' => ['authRequired'], 'urlPatterns' => []]);
+	bidiReply($ws, networkEvent('authRequired', 'early', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['intercept' => 'a']]);
+	bidiRequest($ws, 5, 'network.continueWithAuth', ['request' => 'early', 'action' => 'provideCredentials',
+		'credentials' => ['type' => 'password', 'username' => '', 'password' => '0']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => (object)[]]);
+	bidiRequest($ws, 6, 'network.addIntercept', ['phases' => ['authRequired'], 'urlPatterns' => []]);
+	bidiReply($ws, ['type' => 'success', 'id' => 6, 'result' => ['intercept' => 'b']]);
+	bidiRequest($ws, 7, 'fixture.overlap');
+	bidiReply($ws, networkEvent('authRequired', 'foreign', extra: ['isBlocked' => true, 'intercepts' => ['foreign']]));
+	bidiReply($ws, networkEvent('authRequired', 'unblocked', extra: ['isBlocked' => false, 'intercepts' => ['a']]));
+	bidiReply($ws, networkEvent('authRequired', 'overlap', extra: ['isBlocked' => true, 'intercepts' => ['b', 'a']]));
+	bidiRequest($ws, 8, 'network.continueWithAuth', ['request' => 'overlap', 'action' => 'provideCredentials',
+		'credentials' => ['type' => 'password', 'username' => '', 'password' => '0']]);
+	foreach ([8, 7] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	bidiRequest($ws, 9, 'network.removeIntercept', ['intercept' => 'a']);
+	bidiReply($ws, ['type' => 'success', 'id' => 9, 'result' => (object)[]]);
+	bidiRequest($ws, 10, 'fixture.removed');
+	bidiReply($ws, networkEvent('authRequired', 'retired', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+	bidiReply($ws, networkEvent('authRequired', 'active', extra: ['isBlocked' => true, 'intercepts' => ['a', 'b']]));
+	bidiRequest($ws, 11, 'network.continueWithAuth', ['request' => 'retired', 'action' => 'default']);
+	bidiRequest($ws, 12, 'network.continueWithAuth', ['request' => 'active', 'action' => 'cancel']);
+	foreach ([12, 11, 10] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	foreach ([13 => 'r', 14 => 'b'] as $id => $rule):
+		bidiRequest($ws, $id, 'network.removeIntercept', ['intercept' => $rule]);
+		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	endforeach;
+	bidiRequest($ws, 15, 'fixture.stopped');
+	bidiReply($ws, networkEvent('beforeRequestSent', 'late-request', extra: ['isBlocked' => true, 'intercepts' => ['r']]));
+	bidiReply($ws, networkEvent('authRequired', 'late-auth', extra: ['isBlocked' => true, 'intercepts' => ['b']]));
+	bidiRequest($ws, 16, 'network.continueRequest', ['request' => 'late-request']);
+	bidiRequest($ws, 17, 'network.continueWithAuth', ['request' => 'late-auth', 'action' => 'default']);
+	bidiReply($ws, ['type' => 'success', 'id' => 16, 'result' => (object)[]]);
+	bidiReply($ws, ['type' => 'error', 'id' => 17, 'error' => 'unknown error', 'message' => 'default rejected']);
+	bidiRequest($ws, 18, 'network.continueWithAuth', ['request' => 'late-auth', 'action' => 'cancel']);
+	foreach ([18, 15] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	$calls = [];
+	$network->intercept(fn () => throw new RuntimeException('Retired request handler ran.'));
+	$a = $network->intercept(function () use (&$calls) { $calls[] = 'a'; return NetworkDecision::provideCredentials('', '0'); }, phase: 'authRequired');
+	$network->intercept(function () use (&$calls) { $calls[] = 'b'; return NetworkDecision::cancelAuth(); }, phase: 'authRequired');
+	$browser->command('fixture.overlap');
+	verify($calls === ['a', 'a'] && $browser->event()['method'] === 'network.authRequired', 'Auth precedence, foreign ownership or raw event isolation failed.');
+	$network->removeIntercept($a)->removeIntercept($a);
+	$browser->command('fixture.removed');
+	$network->stopInterception()->stopInterception();
+	$browser->command('fixture.stopped');
+	expectError(fn () => $network->stopInterception(), 'default rejected');
+	$failures = $network->interceptionError()->failures();
+	verify($calls === ['a', 'a', 'b'] && count($failures) === 1 && $failures[0]['phase'] === 'authRequired'
+		&& $network->requests() === [] && $browser->bidi()->active(), 'Retired auth did not default/recover independently of capture.');
+	$browser->quit();
+});
+
+foreach (['throw', 'null', 'reentry', 'wrong-phase', 'credentials-rejected', 'default-rejected', 'cancel-rejected', 'no-such-request', 'recovery-rejected'] as $mode):
+	scenario('authentication failure uses bounded cancel recovery: ' . $mode, function ($listener) use ($mode) {
+		createSession($listener, bidi: true);
+		$ws = upgrade($listener);
+		bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.authRequired']]);
+		bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'auth']]);
+		bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['authRequired'], 'urlPatterns' => []]);
+		// Replay must enforce the same no-reentry and phase checks as live dispatch.
+		bidiReply($ws, networkEvent('authRequired', 'early', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+		bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'a']]);
+		$handlerError = in_array($mode, ['throw', 'null', 'reentry', 'wrong-phase', 'recovery-rejected'], true);
+		$action = $handlerError || $mode === 'cancel-rejected' ? 'cancel' : ($mode === 'default-rejected' ? 'default' : 'provideCredentials');
+		$params = ['request' => 'early', 'action' => $action];
+		if ($action === 'provideCredentials') $params['credentials'] = ['type' => 'password', 'username' => 'user', 'password' => 'credential-value'];
+		bidiRequest($ws, 3, 'network.continueWithAuth', $params);
+		bidiRequest($ws, 4, 'fixture.resolve');
+		bidiReply($ws, $handlerError && $mode !== 'recovery-rejected' ? ['type' => 'success', 'id' => 3, 'result' => (object)[]]
+			: ['type' => 'error', 'id' => 3, 'error' => $mode === 'no-such-request' ? 'no such request' : 'unknown error', 'message' => 'auth decision rejected']);
+		$next = 5;
+		if (in_array($mode, ['credentials-rejected', 'default-rejected'], true)):
+			bidiRequest($ws, $next, 'network.continueWithAuth', ['request' => 'early', 'action' => 'cancel']);
+			bidiReply($ws, ['type' => 'success', 'id' => $next++, 'result' => (object)[]]);
+		endif;
+		bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => (object)[]]);
+		bidiRequest($ws, $next, 'network.removeIntercept', ['intercept' => 'a']);
+		bidiReply($ws, ['type' => 'success', 'id' => $next, 'result' => (object)[]]);
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		fclose($ws);
+	}, function ($url) use ($mode) {
+		$browser = new Browser($url, 'firefox', bidi: true);
+		$network = $browser->network();
+		$original = new RuntimeException('auth handler failed');
+		$network->intercept(fn () => match ($mode) {
+			'throw', 'recovery-rejected' => throw $original, 'null' => null,
+			'reentry' => $browser->command('must.not.send'), 'wrong-phase' => NetworkDecision::respond(),
+			'cancel-rejected' => NetworkDecision::cancelAuth(), 'default-rejected' => NetworkDecision::defaultAuth(),
+			default => NetworkDecision::provideCredentials('user', 'credential-value'),
+		}, phase: 'authRequired');
+		$browser->command('fixture.resolve');
+		expectError(fn () => $network->stopInterception(), 'Network interception failed');
+		$error = $network->interceptionError();
+		verify(count($error->failures()) === ($mode === 'recovery-rejected' ? 2 : 1)
+			&& array_all($error->failures(), fn ($failure) => $failure['phase'] === 'authRequired')
+			&& !str_contains($error->getMessage(), 'credential-value') && $browser->bidi()->active(), 'Auth recovery lost diagnostics, leaked decision parameters or invalidated transport.');
+		if (in_array($mode, ['throw', 'recovery-rejected'], true)) verify($error->getPrevious() === $original, 'Recovery replaced the original auth error.');
+		$browser->quit();
+	});
+endforeach;
+
+foreach (['throw', 'null', 'reentry', 'wrong-phase', 'rejected', 'recovery-rejected', 'no-such-request'] as $mode):
 	scenario('managed decision failure remains local: ' . $mode, function ($listener) use ($networkMethods, $mode) {
 		createSession($listener, bidi: true);
 		$ws = upgrade($listener);
@@ -1939,7 +2055,7 @@ foreach (['throw', 'null', 'reentry', 'rejected', 'recovery-rejected', 'no-such-
 		bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['intercept' => 'a']]);
 		bidiRequest($ws, 5, 'fixture.trigger');
 		bidiReply($ws, networkEvent('beforeRequestSent', 'owned', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
-		$handlerError = in_array($mode, ['throw', 'null', 'reentry'], true);
+		$handlerError = in_array($mode, ['throw', 'null', 'reentry', 'wrong-phase'], true);
 		bidiRequest($ws, 6, $handlerError ? 'network.failRequest' : 'network.continueRequest', ['request' => 'owned']);
 		bidiReply($ws, $handlerError ? ['type' => 'success', 'id' => 6, 'result' => (object)[]]
 			: ['type' => 'error', 'id' => 6, 'error' => $mode === 'no-such-request' ? 'no such request' : 'invalid argument', 'message' => 'decision rejected']);
@@ -1961,7 +2077,8 @@ foreach (['throw', 'null', 'reentry', 'rejected', 'recovery-rejected', 'no-such-
 		$network = $browser->network()->startCapture();
 		$original = new RuntimeException('handler failed');
 		$network->intercept(fn () => match ($mode) {
-			'throw' => throw $original, 'null' => null, 'reentry' => $browser->command('must.not.send'), default => NetworkDecision::continueRequest(),
+			'throw' => throw $original, 'null' => null, 'reentry' => $browser->command('must.not.send'),
+			'wrong-phase' => NetworkDecision::provideCredentials('user', 'password'), default => NetworkDecision::continueRequest(),
 		});
 		$browser->command('fixture.trigger');
 		$error = $network->interceptionError();
@@ -1976,16 +2093,18 @@ foreach (['throw', 'null', 'reentry', 'rejected', 'recovery-rejected', 'no-such-
 	});
 endforeach;
 
-scenario('interception reports later recovery errors without enabling capture or duplicating stop errors', function ($listener) {
+foreach (['beforeRequestSent', 'authRequired'] as $phase):
+scenario('interception reports later recovery errors without enabling capture or duplicating stop errors: ' . $phase, function ($listener) use ($phase) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);
-	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.' . $phase]]);
 	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'intercepts']]);
-	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['beforeRequestSent'], 'urlPatterns' => []]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
 	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'a']]);
 	bidiRequest($ws, 3, 'fixture.first');
-	bidiReply($ws, networkEvent('beforeRequestSent', 'reported', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
-	bidiRequest($ws, 4, 'network.failRequest', ['request' => 'reported']);
+	bidiReply($ws, networkEvent($phase, 'reported', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+	bidiRequest($ws, 4, $phase === 'authRequired' ? 'network.continueWithAuth' : 'network.failRequest',
+		['request' => 'reported'] + ($phase === 'authRequired' ? ['action' => 'cancel'] : []));
 	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
 	bidiRequest($ws, 5, 'fixture.second');
 	bidiReply($ws, ['type' => 'error', 'id' => 4, 'error' => 'unknown error', 'message' => 'late recovery failure']);
@@ -1994,10 +2113,10 @@ scenario('interception reports later recovery errors without enabling capture or
 	bidiReply($ws, ['type' => 'success', 'id' => 6, 'result' => (object)[]]);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	fclose($ws);
-}, function ($url) {
+}, function ($url) use ($phase) {
 	$browser = new Browser($url, 'firefox', bidi: true);
-	[$status, , $record] = runChecks(['check' => function () use ($browser) {
-		$browser->network()->intercept(fn () => throw new RuntimeException('original reported failure'));
+	[$status, , $record] = runChecks(['check' => function () use ($browser, $phase) {
+		$browser->network()->intercept(fn () => throw new RuntimeException('original reported failure'), phase: $phase);
 		$browser->command('fixture.first');
 		$browser->command('fixture.second');
 		$browser->network()->stopInterception();
@@ -2007,30 +2126,113 @@ scenario('interception reports later recovery errors without enabling capture or
 	verify(str_contains($attempt['errors'][0]['message'], 'original reported failure') && str_contains($attempt['errors'][1]['message'], 'late recovery failure'), 'Recovery replaced original error.');
 	$browser->quit();
 });
+endforeach;
 
-scenario('interception stop bounds unsettled replies and preserves HTTP cleanup', function ($listener) {
+foreach (['beforeRequestSent', 'authRequired'] as $phase):
+scenario('interception stop bounds unsettled replies and preserves HTTP cleanup: ' . $phase, function ($listener) use ($phase) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);
-	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.' . $phase]]);
 	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'intercepts']]);
-	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['beforeRequestSent'], 'urlPatterns' => []]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
 	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'a']]);
 	bidiRequest($ws, 3, 'fixture.pending');
-	bidiReply($ws, networkEvent('beforeRequestSent', 'pending', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
-	bidiRequest($ws, 4, 'network.continueRequest', ['request' => 'pending']);
+	bidiReply($ws, networkEvent($phase, 'pending', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+	bidiRequest($ws, 4, $phase === 'authRequired' ? 'network.continueWithAuth' : 'network.continueRequest',
+		['request' => 'pending'] + ($phase === 'authRequired' ? ['action' => 'default'] : []));
 	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
 	bidiRequest($ws, 5, 'network.removeIntercept', ['intercept' => 'a']);
 	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => (object)[]]);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	fclose($ws);
-}, function ($url) {
+}, function ($url) use ($phase) {
 	$browser = new Browser($url, 'firefox', bidi: true, timeout: 0.15);
 	$network = $browser->network();
-	$network->intercept(fn () => NetworkDecision::continueRequest());
+	$network->intercept(fn () => $phase === 'authRequired' ? NetworkDecision::defaultAuth() : NetworkDecision::continueRequest(), phase: $phase);
 	$browser->command('fixture.pending');
 	$started = hrtime(true);
 	expectError(fn () => $network->stopInterception(), 'timed out');
 	verify((hrtime(true) - $started) / 1e9 < 0.6 && !$browser->bidi()->active(), 'Stop exceeded its budget or retained ambiguous pending replies.');
+	$browser->quit();
+});
+endforeach;
+
+foreach (['success', 'error'] as $oldReply):
+	scenario('cross-phase and repeated authentication pauses survive older replies: ' . $oldReply, function ($listener) use ($oldReply) {
+		createSession($listener, bidi: true);
+		$ws = upgrade($listener);
+		foreach ([1 => 'beforeRequestSent', 3 => 'authRequired'] as $id => $phase):
+			bidiRequest($ws, $id, 'session.subscribe', ['events' => ['network.' . $phase]]);
+			bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => ['subscription' => $phase]]);
+			bidiRequest($ws, $id + 1, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
+			bidiReply($ws, ['type' => 'success', 'id' => $id + 1, 'result' => ['intercept' => $phase]]);
+		endforeach;
+		bidiRequest($ws, 5, 'fixture.challenges');
+		bidiReply($ws, networkEvent('beforeRequestSent', 'same', extra: ['isBlocked' => true, 'intercepts' => ['beforeRequestSent']]));
+		bidiRequest($ws, 6, 'network.continueRequest', ['request' => 'same']);
+		foreach ([7, 8] as $id):
+			bidiReply($ws, networkEvent('authRequired', 'same', extra: ['isBlocked' => true, 'intercepts' => ['authRequired']]));
+			bidiRequest($ws, $id, 'network.continueWithAuth', ['request' => 'same', 'action' => 'provideCredentials',
+				'credentials' => ['type' => 'password', 'username' => 'user', 'password' => 'secret']]);
+		endforeach;
+		foreach ([6, 7] as $id) bidiReply($ws, $oldReply === 'success' ? ['type' => 'success', 'id' => $id, 'result' => (object)[]]
+			: ['type' => 'error', 'id' => $id, 'error' => 'unknown error', 'message' => 'older decision rejected']);
+		bidiReply($ws, ['type' => 'error', 'id' => 8, 'error' => 'unknown error', 'message' => 'current decision rejected']);
+		bidiRequest($ws, 9, 'network.continueWithAuth', ['request' => 'same', 'action' => 'cancel']);
+		foreach ([9, 5] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+		foreach ([10 => 'beforeRequestSent', 11 => 'authRequired'] as $id => $phase):
+			bidiRequest($ws, $id, 'network.removeIntercept', ['intercept' => $phase]);
+			bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+		endforeach;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		fclose($ws);
+	}, function ($url) use ($oldReply) {
+		$browser = new Browser($url, 'firefox', bidi: true);
+		$network = $browser->network();
+		$network->intercept(fn () => NetworkDecision::continueRequest());
+		$network->intercept(fn () => NetworkDecision::provideCredentials('user', 'secret'), phase: 'authRequired');
+		$browser->command('fixture.challenges');
+		expectError(fn () => $network->stopInterception(), 'current decision rejected');
+		verify(array_column($network->interceptionError()->failures(), 'phase') === ($oldReply === 'error'
+			? ['beforeRequestSent', 'authRequired', 'authRequired'] : ['authRequired']) && $browser->bidi()->active(), 'Older replies cleared/recovered the current authentication occurrence.');
+		$browser->quit();
+	});
+endforeach;
+
+scenario('authentication subscription failure preserves request interception and permits retry', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'requests']]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['beforeRequestSent'], 'urlPatterns' => []]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'r']]);
+	bidiRequest($ws, 3, 'session.subscribe', ['events' => ['network.authRequired']]);
+	bidiReply($ws, networkEvent('beforeRequestSent', 'existing', extra: ['isBlocked' => true, 'intercepts' => ['r']]));
+	bidiRequest($ws, 4, 'network.continueRequest', ['request' => 'existing']);
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => (object)[]]);
+	bidiReply($ws, ['type' => 'error', 'id' => 3, 'error' => 'unknown error', 'message' => 'subscription rejected']);
+	bidiRequest($ws, 5, 'session.subscribe', ['events' => ['network.authRequired']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => ['subscription' => 'auth']]);
+	bidiRequest($ws, 6, 'network.addIntercept', ['phases' => ['authRequired'], 'urlPatterns' => []]);
+	bidiReply($ws, networkEvent('authRequired', 'retried', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+	bidiReply($ws, ['type' => 'success', 'id' => 6, 'result' => ['intercept' => 'a']]);
+	bidiRequest($ws, 7, 'network.continueWithAuth', ['request' => 'retried', 'action' => 'cancel']);
+	bidiReply($ws, ['type' => 'success', 'id' => 7, 'result' => (object)[]]);
+	foreach ([8 => 'r', 9 => 'a'] as $id => $rule):
+		bidiRequest($ws, $id, 'network.removeIntercept', ['intercept' => $rule]);
+		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	endforeach;
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	$calls = 0;
+	$network->intercept(function () use (&$calls) { ++$calls; return NetworkDecision::continueRequest(); });
+	expectError(fn () => $network->intercept(fn () => NetworkDecision::cancelAuth(), phase: 'authRequired'), 'subscription rejected');
+	$network->intercept(function () use (&$calls) { ++$calls; return NetworkDecision::cancelAuth(); }, phase: 'authRequired');
+	$network->stopInterception();
+	verify($calls === 2 && $network->interceptionError() === null, 'Failed auth subscription detached request handling or duplicated its own listener.');
 	$browser->quit();
 });
 
@@ -2162,33 +2364,35 @@ foreach (['errors', 'deadline'] as $mode):
 	});
 endforeach;
 
-scenario('interception reports repeated exception objects and retains each failure across retries', function ($listener) {
+foreach (['beforeRequestSent', 'authRequired'] as $phase):
+scenario('interception reports repeated exception objects and retains each failure across retries: ' . $phase, function ($listener) use ($phase) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);
-	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.' . $phase]]);
 	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'intercepts']]);
-	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['beforeRequestSent'], 'urlPatterns' => []]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
 	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'a']]);
 	bidiRequest($ws, 3, 'fixture.failures');
 	foreach ([4, 5, 6] as $id):
-		bidiReply($ws, networkEvent('beforeRequestSent', 'request-' . $id, extra: ['isBlocked' => true, 'intercepts' => ['a']]));
-		bidiRequest($ws, $id, 'network.failRequest', ['request' => 'request-' . $id]);
+		bidiReply($ws, networkEvent($phase, 'request-' . $id, extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+		bidiRequest($ws, $id, $phase === 'authRequired' ? 'network.continueWithAuth' : 'network.failRequest',
+			['request' => 'request-' . $id] + ($phase === 'authRequired' ? ['action' => 'cancel'] : []));
 		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
 	endforeach;
 	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
 	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 	fclose($ws);
-}, function ($url) {
+}, function ($url) use ($phase) {
 	$browser = new Browser($url, 'firefox', bidi: true);
-	[$status, , $record] = runChecks(['suite' => function ($test) use ($browser) {
-		return new class($test, $browser) extends Suite {
+	[$status, , $record] = runChecks(['suite' => function ($test) use ($browser, $phase) {
+		return new class($test, $browser, $phase) extends Suite {
 			private int $attempt = 0;
-			public function __construct($test, private Browser $browser) { parent::__construct($test); }
+			public function __construct($test, private Browser $browser, private string $phase) { parent::__construct($test); }
 			#[SuiteBefore]
 			public function setup(): void {
 				$shared = new RuntimeException('shared handler failure');
 				$this->browser->network()->intercept(fn ($event) => throw ($event['request']['request'] === 'request-5'
-					? new RuntimeException('middle handler failure') : $shared));
+					? new RuntimeException('middle handler failure') : $shared), phase: $this->phase);
 			}
 			#[TestCase('Retained interception failures', retry: 1)]
 			public function body(): void { if (++$this->attempt === 1) $this->browser->command('fixture.failures'); }
@@ -2203,6 +2407,7 @@ scenario('interception reports repeated exception objects and retains each failu
 		=== ['shared handler failure', 'middle handler failure', 'shared handler failure'] && $attempt['browserNetwork'] === [], 'A cursor skipped failures or mixed retries.');
 	verify(count($suite['errors']) === 3, 'Case suppression leaked into suite teardown.');
 });
+endforeach;
 
 scenario('BiDi handlers cannot reenter classic browser operations', function ($listener) {
 	createSession($listener, bidi: true);

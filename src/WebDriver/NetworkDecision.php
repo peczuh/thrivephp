@@ -1,7 +1,7 @@
 <?php
 	namespace ThriveData\ThrivePHP\WebDriver;
 
-	/** A request-phase decision value. Returning it never performs nested browser I/O. */
+	/** A request or authentication decision value. Returning it never performs nested browser I/O. */
 	final class NetworkDecision
 	{
 		private function __construct(private string $method, private array $params = []) {}
@@ -27,6 +27,22 @@
 
 		/** Fail the intercepted request with a browser network error. */
 		public static function fail(): self { return new self('network.failRequest'); }
+
+		/** Answer an authRequired challenge with password credentials; the browser determines the authentication scheme. */
+		public static function provideCredentials(string $username, string $password): self
+		{
+			return new self('network.continueWithAuth', ['action' => 'provideCredentials',
+				'credentials' => ['type' => 'password', 'username' => $username, 'password' => $password]]);
+		}
+
+		/** Resume browser-default authentication, which may open a prompt or leave a navigation pending. */
+		public static function defaultAuth(): self { return new self('network.continueWithAuth', ['action' => 'default']); }
+
+		/** Cancel an authRequired challenge without providing credentials. */
+		public static function cancelAuth(): self { return new self('network.continueWithAuth', ['action' => 'cancel']); }
+
+		/** @internal The only interception phase in which this managed decision is accepted. */
+		public function phase(): string { return $this->method === 'network.continueWithAuth' ? 'authRequired' : 'beforeRequestSent'; }
 
 		/** @internal Bind a value to the owned request; callers cannot substitute another request ID. */
 		public function command(string $request): array

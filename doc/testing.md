@@ -274,6 +274,14 @@ that attempt; stopping interception does not erase them. The aggregate thrown by
 Intentional `NetworkDecision::fail()` decisions remain successful controller
 operations unless the browser rejects the decision itself.
 
+Authentication rules use `phase: 'authRequired'` and return `provideCredentials()`,
+`defaultAuth()`, or `cancelAuth()` decisions. They use the same checkpoint and retry
+reporting; intentional cancellation is not a controller failure. Auth handler or
+decision failures recover with cancellation rather than `failRequest`. Removing
+a rule leaves late owned authentication pauses to browser-default handling.
+See [authentication challenges](webdriver-bidi.md#authentication-challenges) for
+bounded challenge handling and the tested browser limitations.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document
