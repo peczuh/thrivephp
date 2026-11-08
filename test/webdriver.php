@@ -1362,6 +1362,84 @@ foreach (['timeout', 'mismatched ID', 'malformed envelope'] as $mode):
 	});
 endforeach;
 
+scenario('BiDi decision response unblocks classic HTTP before headers arrive', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	[$http, $head] = acceptRequest($listener);
+	verify(str_starts_with($head, 'POST /session/session%2F1/url HTTP/'), 'Expected pending navigation.');
+	bidiReply($ws, ['type' => 'event', 'method' => 'network.beforeRequestSent', 'params' => ['request' => ['request' => 'r1'], 'isBlocked' => true]]);
+	bidiRequest($ws, 1, 'network.continueRequest', ['request' => 'r1']);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => (object)[]]);
+	fwrite($http, "HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\n{\"value\":null}");
+	fclose($http);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->bidi()->listen('network.beforeRequestSent', fn ($event) => ['method' => 'network.continueRequest', 'params' => ['request' => $event['request']['request']]]);
+	$browser->sessionRequest('POST', '/url', ['url' => 'http://example.test/']);
+	verify($browser->event()['method'] === 'network.beforeRequestSent', 'Internal observer stole the low-level event.');
+	$browser->quit();
+});
+
+scenario('BiDi routes out-of-order decision replies while another command waits', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'browsingContext.navigate', ['context' => 'c1', 'url' => 'http://example.test/']);
+	bidiReply($ws, ['type' => 'event', 'method' => 'network.beforeRequestSent', 'params' => ['request' => ['request' => 'r1']]]);
+	bidiRequest($ws, 2, 'network.continueRequest', ['request' => 'r1']);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => (object)[]]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['url' => 'http://example.test/']]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->bidi()->listen('network.beforeRequestSent', fn ($event) => ['method' => 'network.continueRequest', 'params' => ['request' => $event['request']['request']]]);
+	verify($browser->command('browsingContext.navigate', ['context' => 'c1', 'url' => 'http://example.test/'])['url'] === 'http://example.test/', 'Decision response replaced the navigation response.');
+	$browser->quit();
+});
+
+foreach (['close', 'eof', 'remaining-window', 'truncated'] as $ending):
+	scenario('BiDi closure during window deletion: ' . $ending, function ($listener) use ($ending) {
+		createSession($listener, bidi: true);
+		$ws = upgrade($listener);
+		exchange($listener, 'GET', '/session/session%2F1/window', null, 'window/1');
+		[$http] = acceptRequest($listener);
+		if ($ending === 'close') fwrite($ws, "\x88\x00");
+		if ($ending === 'truncated') fwrite($ws, "\x81\x05x");
+		fclose($ws);
+		usleep(20000);
+		$json = json_encode(['value' => $ending === 'remaining-window' ? ['window/2'] : []]);
+		fwrite($http, "HTTP/1.1 200 OK\r\nContent-Length: " . strlen($json) . "\r\n\r\n" . $json);
+		fclose($http);
+		if (in_array($ending, ['remaining-window', 'truncated'], true)) exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	}, function ($url) use ($ending) {
+		$browser = new Browser($url, 'firefox', bidi: true);
+		$connection = $browser->bidi();
+		if (in_array($ending, ['remaining-window', 'truncated'], true)) {
+			expectError(fn () => $browser->window()->close(), 'connection ended unexpectedly');
+		} else {
+			$browser->window()->close();
+			verify(!$browser->active() && !$connection->active(), 'Last-window deletion retained the session or dispatcher.');
+		}
+		$browser->quit();
+	});
+endforeach;
+
+scenario('BiDi handlers cannot reenter classic browser operations', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'browsingContext.getTree');
+	bidiReply($ws, ['type' => 'event', 'method' => 'test.event', 'params' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->bidi()->listen('test.event', fn () => $browser->sessionRequest('GET', '/title'));
+	expectError(fn () => $browser->command('browsingContext.getTree'), 'not allowed inside a BiDi event handler');
+	$browser->quit();
+});
+
 scenario('fluent browser, window, and descendant element chains', function ($listener) {
 	createSession($listener);
 	exchange($listener, 'POST', '/session/session%2F1/window/rect', ['width' => 1440, 'height' => 900], ['width' => 1440, 'height' => 900]);

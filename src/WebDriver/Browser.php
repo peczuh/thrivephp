@@ -54,11 +54,7 @@
 		/** Remote session identifier; null before creation or after successful deletion. */
 		private ?string $sessionId = null;
 		private array $capabilities = [];
-		private ?WebSocket $socket = null;
-		/** BiDi events received while waiting for a command response, in arrival order. */
-		private array $events = [];
-		/** BiDi command IDs distinguish responses from unsolicited browser events. */
-		private int $nextId = 0;
+		private ?BiDi $connection = null;
 		/** Window objects are shared so frame selection and closure stay consistent. */
 		private array $windows = [];
 		private ?Window $currentWindow = null;
@@ -74,7 +70,7 @@
 		 * driver's HTTP(S) base URL, optionally including a path such as /wd/hub.
 		 * $capabilities supplies browser options, e.g. goog:chromeOptions for headless
 		 * Chrome; $browser and $bidi determine browserName and webSocketUrl themselves.
-		 * $timeout is positive seconds: an HTTP stream I/O timeout and a BiDi command/
+		 * $timeout is positive seconds: a total HTTP transfer budget and a BiDi command/
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
 		 * Assertions report automatically to the active Test and stop on failure by default.
 		 * Comparison methods accept $verify to record a failed result and continue instead.
@@ -103,6 +99,7 @@
 			unset($capabilities['webSocketUrl']);
 			if ($bidi):
 				$capabilities['webSocketUrl'] = true;
+				if ($browser === 'Safari Technology Preview') $capabilities['safari:experimentalWebSocketUrl'] = true;
 			endif;
 			$result = $this->request('POST', '/session', ['capabilities' => ['alwaysMatch' => $capabilities]]);
 			if (!is_array($result) || !is_string($result['sessionId'] ?? null) || $result['sessionId'] === ''):
@@ -116,7 +113,7 @@
 					if (!is_string($url) || $url === ''):
 						throw new \RuntimeException('WebDriver did not provide the requested BiDi WebSocket URL.');
 					endif;
-					$this->socket = new WebSocket($url, timeout: $timeout);
+					$this->connection = new BiDi(new WebSocket($url, timeout: $timeout), $timeout);
 				endif;
 			} catch (\Throwable $error) {
 				try {
@@ -803,39 +800,23 @@
 
 		/**
 		 * Run one BiDi command and return its result object as an associative array.
-		 * Only one command is outstanding at a time; intervening events are queued.
+		 * Intervening events are dispatched and queued; internal response commands may
+		 * complete while this command is waiting, with replies routed by command ID.
 		 * Driver errors throw without dropping BiDi. Transport/protocol failures and
 		 * receive timeouts discard BiDi; HTTP remains available for commands and quit().
 		 */
 		public function command(string $method, array $params = []): array
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			if ($this->socket === null):
-				throw new \LogicException('No active WebDriver BiDi connection.');
-			endif;
-			$id = ++$this->nextId;
-			// Empty parameters must be a JSON object, not an array.
-			$json = json_encode(['id' => $id, 'method' => $method, 'params' => (object)$params], JSON_THROW_ON_ERROR);
-			$deadline = $this->deadline($this->timeout);
-			try {
-				$this->socket->send($json);
-				do {
-					$message = $this->receiveMessage($deadline);
-					if ($message['type'] === 'event'):
-						$this->events[] = $message;
-					endif;
-				} while ($message['type'] === 'event');
-				if (($message['id'] ?? null) !== $id):
-					throw new \RuntimeException('WebDriver BiDi response has an unexpected command ID.');
-				endif;
-			} catch (\Throwable $error) {
-				$this->socket = null;
-				throw $error;
-			}
-			if ($message['type'] === 'error'):
-				throw new \RuntimeException('WebDriver BiDi ' . $message['error'] . ': ' . $message['message']);
-			endif;
-			return $message['result'];
+			return $this->bidi()->command($method, $params);
+		}
+
+		/** @internal Shared dispatcher for BiDi feature implementations; not a separate session. */
+		public function bidi(): BiDi
+		{
+			if ($this->connection === null) throw new \LogicException('No active WebDriver BiDi connection.');
+			$this->connection->assertCallable();
+			return $this->connection;
 		}
 
 		/**
@@ -846,16 +827,8 @@
 		public function event(?float $timeout = null): array
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$deadline = $this->deadline($timeout ?? $this->timeout);
-			if ($this->events):
-				return array_shift($this->events);
-			endif;
-			$message = $this->receiveMessage($deadline);
-			if ($message['type'] !== 'event'):
-				$this->socket = null;
-				throw new \RuntimeException('Expected a WebDriver BiDi event, received an unsolicited response.');
-			endif;
-			return $message;
+			$this->deadline($timeout ?? $this->timeout);
+			return $this->bidi()->event($timeout ?? $this->timeout);
 		}
 
 		/**
@@ -873,8 +846,8 @@
 				$this->request('DELETE', $this->sessionPath());
 				$this->invalidateSession();
 			} finally {
-				$this->socket = null;
-				$this->events = [];
+				$this->connection?->disconnect();
+				$this->connection = null;
 			}
 			return $this;
 		}
@@ -895,8 +868,8 @@
 		public function invalidateSession(): void
 		{
 			$this->sessionId = null;
-			$this->socket = null;
-			$this->events = [];
+			$this->connection?->disconnect();
+			$this->connection = null;
 			$this->currentWindow = null;
 			$this->currentFrames = [];
 			$this->windows = [];
@@ -1011,94 +984,30 @@
 			return rtrim($endpoint, '/');
 		}
 
-		/** Decode one BiDi envelope under the caller's shared monotonic deadline. */
-		private function receiveMessage(float $deadline): array
-		{
-			if ($this->socket === null):
-				throw new \LogicException('No active WebDriver BiDi connection.');
-			endif;
-			try {
-				$remaining = $deadline - hrtime(true) / 1e9;
-				if ($remaining <= 0):
-					throw new \RuntimeException('WebDriver BiDi operation timed out.');
-				endif;
-				$text = $this->socket->receive($remaining);
-				if ($text === null):
-					throw new \RuntimeException('WebDriver BiDi connection closed by the peer.');
-				endif;
-				$message = json_decode($text, true, 512, JSON_THROW_ON_ERROR);
-				$type = $message['type'] ?? null;
-				if (!is_array($message)
-					|| !in_array($type, ['event', 'success', 'error'], true)
-					|| ($type === 'event' && (!is_string($message['method'] ?? null) || !is_array($message['params'] ?? null)))
-					|| ($type === 'success' && !is_array($message['result'] ?? null))
-					|| ($type === 'error' && (!is_string($message['error'] ?? null) || !is_string($message['message'] ?? null)))):
-					throw new \RuntimeException('Invalid WebDriver BiDi message.');
-				endif;
-				return $message;
-			} catch (\Throwable $error) {
-				$this->socket = null;
-				throw $error;
-			}
-		}
-
 		/** Send classic WebDriver JSON; scripts may override the ordinary I/O timeout in seconds. */
 		private function request(string $method, string $path, ?array $body = null, ?float $timeout = null): mixed
 		{
-			return self::http($this->endpoint, $method, $path, $body, $timeout ?? $this->timeout);
+			$this->connection?->assertCallable();
+			$deleting = $method === 'DELETE' && $path === '/session/' . rawurlencode($this->sessionId ?? '');
+			$closingWindow = $method === 'DELETE' && str_ends_with($path, '/window');
+			$value = HttpRequest::run($this->endpoint, $method, $path, $body, $timeout ?? $this->timeout,
+				!$deleting && $this->connection?->active() ? function () use ($closingWindow): void {
+					if (!$this->connection->active()) return;
+					try {
+						$this->connection->tick();
+					} catch (\Throwable $error) {
+						if ($closingWindow && $this->connection->peerClosed()) return;
+						throw $error;
+					}
+				} : null);
+			if ($closingWindow && $value !== [] && $this->connection?->peerClosed()) throw $this->connection->failure();
+			return $value;
 		}
 
 		/** Shared HTTP transport for session commands and status(), which requires no session. */
 		private static function http(string $endpoint, string $method, string $path, ?array $body, float $timeout): mixed
 		{
-			$context = stream_context_create(['http' => [
-				'method' => $method,
-				'header' => "Content-Type: application/json\r\nAccept: application/json\r\nConnection: close\r\n",
-				'content' => $body === null ? '' : json_encode((object)$body, JSON_THROW_ON_ERROR),
-				'ignore_errors' => true,
-				'follow_location' => 0,
-				'timeout' => $timeout,
-			]]);
-			$stream = @fopen($endpoint . $path, 'rb', false, $context);
-			if ($stream === false):
-				throw new \RuntimeException("WebDriver HTTP $method $path failed to connect or receive headers.");
-			endif;
-			try {
-				$metadata = stream_get_meta_data($stream);
-				$status = 0;
-				$length = null;
-				foreach ($metadata['wrapper_data'] as $header):
-					if (preg_match('/^HTTP\/\S+ (\d{3})/', $header, $match)):
-						$status = (int)$match[1];
-						$length = null;
-					elseif (preg_match('/^Content-Length:\s*(\d+)\s*$/i', $header, $match)):
-						$length = (int)$match[1];
-					endif;
-				endforeach;
-
-				// ChromeDriver may leave the socket open after sending the complete response.
-				// Stop at Content-Length; otherwise let PHP handle chunked or EOF-delimited bodies.
-				$response = stream_get_contents($stream, $length ?? -1);
-				$metadata = stream_get_meta_data($stream);
-			} finally {
-				fclose($stream);
-			}
-			if ($response === false || $metadata['timed_out'] || ($length !== null && strlen($response) !== $length)):
-				throw new \RuntimeException("WebDriver HTTP $method $path failed, timed out, or returned an incomplete body.");
-			endif;
-			try {
-				$result = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
-			} catch (\JsonException $error) {
-				throw new \RuntimeException("WebDriver HTTP $status returned invalid JSON.", 0, $error);
-			}
-			if (!is_array($result) || !array_key_exists('value', $result)):
-				throw new \RuntimeException("WebDriver HTTP $status response is missing value.");
-			endif;
-			$value = $result['value'];
-			if ($status < 200 || $status >= 300):
-				throw new \RuntimeException("WebDriver HTTP $status " . ($value['error'] ?? 'request failed') . ': ' . ($value['message'] ?? 'No error message.'));
-			endif;
-			return $value;
+			return HttpRequest::run($endpoint, $method, $path, $body, $timeout);
 		}
 
 		/** Absolute seconds on the monotonic clock; incoming events cannot extend a wait. */

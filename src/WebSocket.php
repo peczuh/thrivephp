@@ -27,6 +27,12 @@
 		/** Byte limit for a complete text message, including all its fragments. */
 		private const MAX_MESSAGE = 16777216;
 		private $socket = null;
+		private string $incoming = '';
+		private string $outgoing = '';
+		private string $text = '';
+		private bool $started = false;
+		private bool $needsRead = true;
+		private bool $ended = false;
 
 		/**
 		 * Connect and complete the HTTP upgrade immediately, verifying TLS for wss://.
@@ -127,6 +133,94 @@
 			return $this->message($this->deadline($timeout ?? $this->timeout));
 		}
 
+		/** Queue a UTF-8 message for incremental writes by pump(); does not wait for delivery. */
+		public function enqueue(string $text): void
+		{
+			if (strlen($text) > self::MAX_MESSAGE || preg_match('//u', $text) !== 1):
+				throw new \InvalidArgumentException('WebSocket messages must be UTF-8 text of at most 16 MiB.');
+			endif;
+			$this->queueFrame(1, $text);
+		}
+
+		/** @internal Stream used for readiness waits; callers must not read or write it directly. */
+		public function stream(): mixed { return $this->socket; }
+		/** @internal Whether incremental writes still need socket readiness. */
+		public function writing(): bool { return $this->outgoing !== ''; }
+
+		/** Advance available I/O once without waiting. Partial frames and writes survive calls. */
+		public function pump(bool $read = true): void
+		{
+			if (!is_resource($this->socket)) $this->fail('WebSocket is closed.');
+			if ($this->outgoing !== ''):
+				$written = @fwrite($this->socket, substr($this->outgoing, 0, 65536));
+				if ($written === false) $this->fail('WebSocket write failed.');
+				$this->outgoing = substr($this->outgoing, $written);
+			endif;
+			if ($read && $this->needsRead):
+				$chunk = @fread($this->socket, 65536);
+				if ($chunk === false) $this->fail('WebSocket read failed.');
+				$this->incoming .= $chunk;
+				$this->needsRead = false;
+			endif;
+		}
+
+		/** @internal Parsed messages may remain in userspace even when the stream is not readable. */
+		public function buffered(): bool { return !$this->needsRead && $this->incoming !== ''; }
+		/** @internal EOF between complete messages; still an error without a WebSocket close frame. */
+		public function ended(): bool { return $this->ended; }
+
+		/**
+		 * Consume one buffered text message: false means incomplete/idle, null means normal
+		 * peer closure. Call pump() to advance I/O. Empty text is a valid complete message.
+		 */
+		public function poll(bool $closing = false): string|false|null
+		{
+			while (($frame = $this->readFrame(self::MAX_MESSAGE - strlen($this->text))) !== null):
+				[$final, $opcode, $payload] = $frame;
+				if ($opcode === 8):
+					$code = strlen($payload) >= 2 ? unpack('n', substr($payload, 0, 2))[1] : null;
+					if (strlen($payload) === 1 || ($code !== null
+						&& !(in_array($code, [1000, 1001, 1002, 1003, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014], true)
+							|| ($code >= 3000 && $code <= 4999))) || preg_match('//u', substr($payload, 2)) !== 1):
+						$this->fail('Invalid WebSocket close frame.');
+					endif;
+					if (!$closing):
+						$this->queueFrame(8, $payload);
+						// Best effort close acknowledgement; polling must never block on the peer.
+						@fwrite($this->socket, $this->outgoing);
+					endif;
+					$this->disconnect();
+					if ($code !== null && $code !== 1000 && $code !== 1001):
+						throw new \RuntimeException("WebSocket peer closed with code $code: " . substr($payload, 2));
+					endif;
+					return null;
+				endif;
+				if ($opcode === 9):
+					$this->queueFrame(10, $payload);
+					continue;
+				endif;
+				if ($opcode === 10) continue;
+				if (($opcode === 1 && $this->started) || ($opcode === 0 && !$this->started)):
+					$this->fail('Invalid WebSocket fragmentation sequence.');
+				endif;
+				$this->started = true;
+				$this->text .= $payload;
+				if ($final):
+					if (preg_match('//u', $this->text) !== 1) $this->fail('WebSocket message is not valid UTF-8.');
+					$text = $this->text;
+					$this->text = '';
+					$this->started = false;
+					return $text;
+				endif;
+			endwhile;
+			if (!is_resource($this->socket) || feof($this->socket)):
+				$this->ended = is_resource($this->socket) && $this->incoming === '' && !$this->started;
+				$this->fail('WebSocket connection ended unexpectedly.');
+			endif;
+			$this->needsRead = true;
+			return false;
+		}
+
 		/**
 		 * Perform the close handshake within the configured timeout. Safe to repeat.
 		 * Failures throw, but the socket is released even if the peer never replies.
@@ -159,51 +253,11 @@
 		 */
 		private function message(float $deadline, bool $closing = false): ?string
 		{
-			$text = '';
-			// An empty first fragment still starts a message, so text length is insufficient.
-			$started = false;
 			while (true):
-				[$final, $opcode, $payload] = $this->readFrame($deadline, self::MAX_MESSAGE - strlen($text));
-				if ($opcode === 8):
-					// Close payloads are empty, or contain a two-byte code and UTF-8 reason.
-					$code = strlen($payload) >= 2 ? unpack('n', substr($payload, 0, 2))[1] : null;
-					// Accept defined wire codes and application/private codes, not reserved sentinels.
-					if (strlen($payload) === 1 || ($code !== null
-						&& !(in_array($code, [1000, 1001, 1002, 1003, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014], true)
-							|| ($code >= 3000 && $code <= 4999)))
-						|| preg_match('//u', substr($payload, 2)) !== 1):
-						$this->fail('Invalid WebSocket close frame.');
-					endif;
-					if (!$closing):
-						$this->writeFrame(8, $payload, $deadline);
-					endif;
-					$this->disconnect();
-					if ($code !== null && $code !== 1000 && $code !== 1001):
-						throw new \RuntimeException("WebSocket peer closed with code $code: " . substr($payload, 2));
-					endif;
-					return null;
-				endif;
-
-				// Ping (9) requires pong (10) with the same payload, even between fragments.
-				if ($opcode === 9):
-					$this->writeFrame(10, $payload, $deadline);
-					continue;
-				endif;
-				if ($opcode === 10):
-					continue;
-				endif;
-				if (($opcode === 1 && $started) || ($opcode === 0 && !$started)):
-					$this->fail('Invalid WebSocket fragmentation sequence.');
-				endif;
-				$started = true;
-				$text .= $payload;
-				if ($final):
-					// A UTF-8 character can span fragments; validate only the assembled message.
-					if (preg_match('//u', $text) !== 1):
-						$this->fail('WebSocket message is not valid UTF-8.');
-					endif;
-					return $text;
-				endif;
+				$this->pump();
+				$result = $this->poll($closing);
+				if ($result !== false) return $result;
+				$this->wait($deadline, $this->writing());
 			endwhile;
 		}
 
@@ -211,9 +265,11 @@
 		 * Read one server frame as [final, opcode, payload]. $remaining is the unused
 		 * byte allowance for the current text message; control frames do not consume it.
 		 */
-		private function readFrame(float $deadline, int $remaining): array
+		private function readFrame(int $remaining): ?array
 		{
-			$header = $this->read(2, $deadline);
+			if (strlen($this->incoming) < 2) return null;
+			$header = substr($this->incoming, 0, 2);
+			$offset = 2;
 			$first = ord($header[0]);
 			$second = ord($header[1]);
 			// Byte 1 contains FIN, reserved bits, and opcode; byte 2 contains MASK and length.
@@ -229,12 +285,16 @@
 
 			// Length markers 126/127 introduce 16/64-bit network-order lengths.
 			if ($length === 126):
-				$length = unpack('n', $this->read(2, $deadline))[1];
+				if (strlen($this->incoming) < 4) return null;
+				$length = unpack('n', substr($this->incoming, 2, 2))[1];
+				$offset = 4;
 				if ($length < 126):
 					$this->fail('Non-minimal WebSocket frame length.');
 				endif;
 			elseif ($length === 127):
-				$words = unpack('Nhigh/Nlow', $this->read(8, $deadline));
+				if (strlen($this->incoming) < 10) return null;
+				$words = unpack('Nhigh/Nlow', substr($this->incoming, 2, 8));
+				$offset = 10;
 				// Any nonzero high word exceeds our message limit; require minimal encoding.
 				if ($words['high'] !== 0 || $words['low'] < 65536):
 					$this->fail('Invalid or excessive WebSocket frame length.');
@@ -244,12 +304,24 @@
 			if ($opcode < 8 && $length > $remaining):
 				$this->fail('WebSocket message exceeds 16 MiB.');
 			endif;
-			return [$final, $opcode, $this->read($length, $deadline)];
+			if (strlen($this->incoming) < $offset + $length) return null;
+			$payload = substr($this->incoming, $offset, $length);
+			$this->incoming = substr($this->incoming, $offset + $length);
+			return [$final, $opcode, $payload];
 		}
 
 		/** Write one final, client-masked text or control frame before the deadline. */
 		private function writeFrame(int $opcode, string $payload, float $deadline): void
 		{
+			$this->queueFrame($opcode, $payload);
+			$this->write($this->outgoing, $deadline);
+			$this->outgoing = '';
+		}
+
+		/** Encode frames in enqueue order so control frames cannot split partial writes. */
+		private function queueFrame(int $opcode, string $payload): void
+		{
+			if (!is_resource($this->socket)) $this->fail('WebSocket is closed.');
 			$length = strlen($payload);
 			$header = chr(0x80 | $opcode);
 			$header .= $length < 126 ? chr(0x80 | $length)
@@ -257,7 +329,7 @@
 			// Every client frame needs a fresh four-byte XOR mask, even over TLS.
 			$mask = random_bytes(4);
 			$payload ^= substr(str_repeat($mask, (int)ceil($length / 4)), 0, $length);
-			$this->write($header . $mask . $payload, $deadline);
+			$this->outgoing .= $header . $mask . $payload;
 		}
 
 		/** Read exactly $length bytes, allowing partial reads under one absolute deadline. */
@@ -326,5 +398,8 @@
 				fclose($this->socket);
 			endif;
 			$this->socket = null;
+			$this->incoming = $this->outgoing = $this->text = '';
+			$this->started = false;
+			$this->needsRead = true;
 		}
 	}

@@ -132,6 +132,37 @@ scenario('masking, all length encodings, coalesced and fragmented messages', fun
 	failure(fn() => $socket->send('closed'), 'closed');
 });
 
+scenario('incremental polling retains partial headers, fragments, UTF-8 and queued write order', function ($stream) {
+	upgrade($stream);
+	$wire = frame("A\xe2", 1, false) . frame('ping', 9) . frame("\x82\xacB", 0);
+	foreach (str_split($wire) as $byte) {
+		fwrite($stream, $byte);
+		usleep(1000);
+	}
+	clientFrame($stream, 1, 'first');
+	clientFrame($stream, 1, 'second');
+	clientFrame($stream, 1, str_repeat('x', 1024 * 1024));
+	clientFrame($stream, 10, 'ping');
+	fwrite($stream, frame('', 8));
+	clientFrame($stream, 8, '');
+}, function ($url) {
+	$socket = new WebSocket($url);
+	check($socket->poll() === false, 'Idle poll should not close the connection.');
+	$socket->enqueue('first');
+	$socket->enqueue('second');
+	$socket->enqueue(str_repeat('x', 1024 * 1024));
+	$deadline = microtime(true) + 2;
+	$messages = [];
+	do {
+		$socket->pump();
+		$result = $socket->poll();
+		if (is_string($result)) $messages[] = $result;
+		if ($result === null) break;
+		usleep(1000);
+	} while (microtime(true) < $deadline);
+	check($result === null && $messages === ['A€B'], 'Incremental poll lost message assembly or peer close.');
+});
+
 scenario('peer-initiated close', function ($stream) {
 	upgrade($stream, frame(pack('n', 1000) . 'bye', 8));
 	clientFrame($stream, 8, pack('n', 1000) . 'bye');

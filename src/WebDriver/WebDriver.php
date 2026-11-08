@@ -253,7 +253,8 @@
 			return match ($this->installation->name) {
 				// Chrome's --allowed-ips switch enables remote binding even for a loopback allowlist.
 				'chrome', 'chromium' => [$binary, '--port=' . $port],
-				'firefox' => [$binary, '--host', '127.0.0.1', '--port', (string)$port],
+				// Firefox otherwise shares BiDi port 9222 across parallel owned services.
+				'firefox' => [$binary, '--host', '127.0.0.1', '--port', (string)$port, '--websocket-port', '0'],
 				'safari', 'safaripreview' => [$binary, '--port', (string)$port],
 			};
 		}
