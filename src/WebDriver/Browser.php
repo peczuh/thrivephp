@@ -55,6 +55,12 @@
 		private ?string $sessionId = null;
 		private array $capabilities = [];
 		private ?BiDi $connection = null;
+		/** Collector ownership is separate from caller-created low-level subscriptions. */
+		private ?string $logSubscription = null;
+		private ?int $logListener = null;
+		/** Protocol entries outlive the connection and are never consumed by logs(). */
+		private array $logs = [];
+		private ?\Throwable $logFailure = null;
 		/** Window objects are shared so frame selection and closure stay consistent. */
 		private array $windows = [];
 		private ?Window $currentWindow = null;
@@ -819,6 +825,90 @@
 			return $this->connection;
 		}
 
+		/** Start session-wide console/exception capture. Requires bidi: true; repeated starts are harmless. */
+		public function startLogCapture(): self
+		{
+			$connection = $this->bidi();
+			if (!$connection->active()) throw new \LogicException('No active WebDriver BiDi connection.');
+			if ($this->logSubscription !== null) return $this;
+			$connection->drain();
+			$this->logListener = $connection->listen('log.entryAdded', function (array $entry): void {
+				$this->logs[] = $entry;
+				\ThriveData\ThrivePHP\Test::active()?->browserLog($this->session(), $entry);
+			});
+			try {
+				$result = $connection->command('session.subscribe', ['events' => ['log.entryAdded']]);
+				if (!is_string($result['subscription'] ?? null) || $result['subscription'] === '') throw new \RuntimeException('WebDriver BiDi did not return a subscription ID.');
+				$this->logSubscription = $result['subscription'];
+				$this->logFailure = null;
+				\ThriveData\ThrivePHP\Test::active()?->watchBrowserLogs($this);
+			} catch (\Throwable $error) {
+				$connection->unlisten($this->logListener);
+				$this->logListener = null;
+				throw $error;
+			}
+			return $this;
+		}
+
+		/** Stop this collector's subscription, retaining entries. Restarting appends to the history. */
+		public function stopLogCapture(): self
+		{
+			$this->connection?->assertCallable();
+			if ($this->logSubscription === null) return $this;
+			try {
+				$this->bidi()->command('session.unsubscribe', ['subscriptions' => [$this->logSubscription]]);
+				$this->connection->drain();
+			} catch (\Throwable $error) {
+				$this->logFailure = $error;
+				throw $error;
+			} finally {
+				$this->detachLogs();
+			}
+			return $this;
+		}
+
+		/**
+		 * Collect available events and return retained protocol entries, optionally filtered by
+		 * console/javascript type. Reading never clears entries; captured data survives quit().
+		 */
+		public function logs(?string $type = null): array
+		{
+			if ($type !== null && !in_array($type, ['console', 'javascript'], true)) throw new \InvalidArgumentException('Expected console or javascript log type.');
+			$this->collectLogs();
+			return $type === null ? $this->logs : array_values(array_filter($this->logs, fn ($entry) => ($entry['type'] ?? null) === $type));
+		}
+
+		/** @internal Collection checkpoints do not create steps or consume the low-level event queue. */
+		public function collectLogs(): void
+		{
+			$this->connection?->assertCallable();
+			$this->logCaptureError();
+			if ($this->logSubscription !== null && $this->connection?->active()):
+				try {
+					$this->connection->drain();
+				} catch (\Throwable $error) {
+					$this->logFailure = $error;
+					throw $error;
+				}
+			endif;
+		}
+
+		/** Capture failure is separate from browser messages; entries remain readable after failure. */
+		public function logCaptureError(): ?\Throwable
+		{
+			if ($this->logSubscription !== null && $this->connection !== null && !$this->connection->active()):
+				$this->logFailure ??= $this->connection->failure() ?? new \RuntimeException('Browser log collection lost its BiDi connection.');
+			endif;
+			return $this->logFailure;
+		}
+
+		private function detachLogs(): void
+		{
+			if ($this->logListener !== null) $this->connection?->unlisten($this->logListener);
+			$this->logListener = null;
+			$this->logSubscription = null;
+		}
+
 		/**
 		 * Return the next BiDi event envelope (type, method, params), queued or newly
 		 * received. Subscribe first using subscribe(). $timeout overrides seconds
@@ -843,9 +933,14 @@
 				return $this;
 			endif;
 			try {
-				$this->request('DELETE', $this->sessionPath());
-				$this->invalidateSession();
+				try {
+					$this->collectLogs();
+				} finally {
+					$this->request('DELETE', $this->sessionPath());
+					$this->invalidateSession();
+				}
 			} finally {
+				$this->detachLogs();
 				$this->connection?->disconnect();
 				$this->connection = null;
 			}
@@ -868,6 +963,7 @@
 		public function invalidateSession(): void
 		{
 			$this->sessionId = null;
+			$this->detachLogs();
 			$this->connection?->disconnect();
 			$this->connection = null;
 			$this->currentWindow = null;
@@ -942,6 +1038,7 @@
 		public function closeWindow(Window $window): self
 		{
 			$this->activate($window, null);
+			$this->collectLogs();
 			$handles = $this->sessionRequest('DELETE', '/window');
 			$window->markClosed();
 			$this->currentWindow = null;
@@ -997,6 +1094,7 @@
 						$this->connection->tick();
 					} catch (\Throwable $error) {
 						if ($closingWindow && $this->connection->peerClosed()) return;
+						if ($this->logSubscription !== null) $this->logFailure = $error;
 						throw $error;
 					}
 				} : null);

@@ -16,6 +16,8 @@ class SuiteConfig
         public float $waitTimeout = 5000,
         public float $assertionTimeout = 5000,
         public float $pollInterval = 500,
+        /** Require BiDi log capture before browser suite setup; unavailable support fails setup. */
+        public bool $browserLogs = false,
     ) {}
 
     /** Reject misspelled options on every supported PHP version. */

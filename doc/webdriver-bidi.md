@@ -1,10 +1,59 @@
 # WebDriver BiDi and HTTP coordination
 
 Classic WebDriver remains the browser API's baseline. Optional BiDi supplies
-events and commands over a session-owned WebSocket. The dispatcher supports the planned
-logging, network, browsing-context, and script features.
+events and commands over a session-owned WebSocket. The dispatcher is shared by
+logging and the planned network, browsing-context, and script features.
 `Browser::bidi()` exposes the internal dispatcher for feature implementations;
 its listener/decision API is internal, not the public network interception API.
+
+## Console and exception capture
+
+```php
+$browser = $driver->browser(bidi: true);
+$browser->startLogCapture();
+$browser->navigate('https://example.test');
+$entries = $browser->logs();
+$exceptions = $browser->logs(type: 'javascript');
+$browser->stopLogCapture();
+$browser->quit();
+$retained = $browser->logs();
+```
+
+Capture subscribes to `log.entryAdded` across the session. Starting twice does
+not duplicate subscriptions. Stopping cancels only the collector's subscription;
+restarting appends to the retained history. Reading never clears entries.
+`logs()` optionally filters by `console` or `javascript`. A `console.error()` is
+a console entry, not an unhandled JavaScript exception.
+
+Entries preserve the protocol fields, including type, level, text, timestamp,
+source, and any supplied method, arguments, or stack trace. Structured arguments
+are BiDi remote values, not live PHP objects. Missing optional fields are normal.
+Data is retained after stop, session deletion, or connection failure.
+`logCaptureError()` exposes a collection failure separately from browser entries.
+The operation detecting a transport failure throws; subsequent retrieval can
+still read retained entries. No guarantee covers events generated after final
+collection or during remote session shutdown.
+
+These capture methods do not create test steps or assertions. To enable automatic
+capture before a browser suite's child setup hooks:
+
+```php
+protected function configure(SuiteConfig $config): void
+{
+    $config->browserLogs = true;
+}
+```
+
+Explicitly requested but unavailable capture fails setup. Browser-generated
+messages are diagnostic and do not change outcomes. Collection failures are
+reported as execution errors. Tests can assert against `logs('javascript')` when
+they want exceptions to fail a test.
+
+Console, JSON, and HTML use the same recorded entries. Attempt records contain
+`browserLogs`, whose elements contain the protocol `entry`, `sessionId`,
+`observedAt`, `phase`, `hook`, and nullable `stepId`. The containing suite/case
+attempt supplies retry attribution. “Observed during” does not claim the active
+operation caused an asynchronous event. Failed attempts retain their logs.
 
 ## Transport and dispatch
 
@@ -17,8 +66,8 @@ operation timeouts close the connection; an idle poll does not.
 `BiDi` owns command IDs, pending responses, internal listeners, and the low-level
 event queue. Replies can arrive out of order. Internal observers do not consume
 `Browser::event()` entries. Each received event is observed once, even when a
-caller later retrieves it from the raw queue. The raw event queue consumes
-memory until its owner consumes or releases it; no entries are
+caller later retrieves it from the raw queue. Both retained logs and the raw
+event queue consume memory until their owner releases them; no entries are
 silently dropped to enforce a retention cap.
 
 The dispatcher processes bounded event batches so traffic does not prevent HTTP
@@ -94,7 +143,7 @@ already exist:
 
 No FFI, custom extension, background process, or raw-descriptor workaround is
 required by the implementation. If PHP provides a suitable shared wait API,
-the coordinator can replace bounded polling without changing feature APIs.
+the coordinator can replace bounded polling without changing capture APIs.
 
 Sources:
 - [PHP 8.5 cURL multi binding](https://github.com/php/php-src/blob/PHP-8.5/ext/curl/multi.c)
@@ -107,15 +156,20 @@ Sources:
 
 Use `php -d short_open_tag=1 test/webdriver-bidi-browser.php chrome` or `firefox`
 for native response-required dispatch and session-lifecycle checks.
-`test/webdriver.php` independently exercises HTTP/BiDi coordination, out-of-order
-replies, and reentry rejection.
+`test/webdriver-logs-browser.php [chrome|firefox|safaripreview|safari]` checks native
+console and exception capture. Protocol fixtures in
+`test/webdriver.php` independently exercise HTTP/BiDi coordination, out-of-order
+replies, subscription ownership, reentry rejection, and report attribution.
+`test/test-browser-logs.php [chrome|firefox] [1|2]` checks real suite hooks, case
+retries, and serial/parallel reports.
 
 Observed during implementation:
 
-- Firefox 147.0.1 / GeckoDriver 0.37.1 completed interception while a classic HTTP navigation remained pending.
+- Firefox 147.0.1 / GeckoDriver 0.37.1 delivered logs and exceptions and completed
+  interception while a classic HTTP navigation remained pending.
   Owned GeckoDriver services request an OS-allocated BiDi port instead of sharing
   the default 9222, which caused parallel sessions to connect to the wrong browser.
-- Chrome 156.0.8078.80 mixed classic navigation
+- Chrome 156.0.8078.80 delivered logs and exceptions. Mixed classic navigation
   and BiDi interception hung, consistent with
   [Selenium issue 17373](https://github.com/SeleniumHQ/selenium/issues/17373).
   Its native interception test therefore explicitly uses BiDi navigation.
@@ -125,8 +179,9 @@ Observed during implementation:
   remain; truncated messages and connection loss with remaining windows still fail.
 - Safari Technology Preview 27.0 / driver 21626.1.6.19.1 exposed an experimental
   WebSocket with `safari:experimentalWebSocketUrl`, but its subscription response
-  lacked the required subscription ID. A working socket alone does not establish
-  support for every BiDi module.
+  lacked the required subscription ID. Managed capture rejects that response;
+  it cannot claim independent subscription ownership. A working socket alone
+  does not establish log-capture support.
 - Release Safari 26.6.2 did not return the requested BiDi WebSocket URL.
 
 These observations apply to those versions, not all future versions or every

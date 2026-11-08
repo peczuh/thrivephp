@@ -27,6 +27,15 @@ final class Report
         if ($event['type'] === 'suite_started' && !isset($this->announced[$attempt['id']])) {
             $this->announced[$attempt['id']] = true;
             $this->line('RUN', 'SUITE', $context . (isset($event['worker']) ? ' (worker ' . $event['worker'] . ')' : ''));
+        } elseif ($event['type'] === 'browser_log') {
+            $log = $event['log'];
+            $entry = $log['entry'];
+            $this->line(strtoupper($entry['level'] ?? 'info'), 'BROWSER', $context . ' [' . ($entry['type'] ?? 'unknown') . '] '
+                . ($entry['text'] ?? self::json($entry['args'] ?? [])));
+            echo '    Observed during: ' . $log['phase'] . ($log['hook'] !== null ? ' / ' . $log['hook'] : '') . PHP_EOL;
+            foreach (['source', 'args', 'stackTrace'] as $field) {
+                if (isset($entry[$field])) echo '    ' . $field . ': ' . self::json($entry[$field]) . PHP_EOL;
+            }
         } elseif ($event['type'] === 'step_finished') {
             $this->step($context, $event['step']);
         } elseif ($event['type'] === 'error') {

@@ -107,6 +107,7 @@ Element assertions and actions preserve their element receiver.
 | Browser `windows`, `window`, `open`, `switch`, `close`; window `close` | Window discovery/selection/lifecycle, no polling. `open` returns a window; window `close` returns the browser |
 | Browser `timeouts`, `pageLoadTimeout`, `implicitTimeout`, `scriptTimeout` | Read/set remote timeout settings; setters use seconds and do not change local polling budgets |
 | Browser `subscribe`, `unsubscribe`, `command`, `event` | BiDi subscription/request/event operations with transport deadlines, not assertion polling |
+| Browser `startLogCapture`, `stopLogCapture`, `logs`, `logCaptureError` | Session-wide BiDi console/exception diagnostics; non-destructive retrieval and retained entries after cleanup. See [BiDi transport and capture](webdriver-bidi.md) |
 | Browser `__construct`, `status`, `quit`, `active`, `session`; window `__construct`, `browser`, `handle` | Session construction/status/cleanup or identity access; no assertion semantics |
 
 ### Elements, collections, and shadow roots

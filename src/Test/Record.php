@@ -47,7 +47,7 @@ final class Record
     private static function attempt(string $id, int $index, string $time): array
     {
         return ['id' => $id, 'index' => $index, 'status' => 'RUN', 'startedAt' => $time,
-            'endedAt' => null, 'duration' => 0, 'steps' => [], 'errors' => [], 'screenshots' => [],
+            'endedAt' => null, 'duration' => 0, 'steps' => [], 'errors' => [], 'screenshots' => [], 'browserLogs' => [],
             'assertionsPassed' => 0, 'assertionsFailed' => 0];
     }
 
@@ -96,6 +96,9 @@ final class Record
             $this->clocks[$name][$node['id']] ??= $event['clock'] ?? hrtime(true) / 1e9;
         }
         switch ($type) {
+            case 'browser_log':
+                $node['browserLogs'][] = $event['log'];
+                break;
             case 'session':
                 $attempt['session'] = $event['session'];
                 $capabilities = $event['session']['capabilities'];

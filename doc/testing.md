@@ -211,6 +211,20 @@ Reporting regression checks are `php test/test-report.php`,
 exercise intentional failures and retries, and print a retained artifact directory
 after checking the final counts and PNG files.
 
+### Browser console and exceptions
+
+Set `$config->browserLogs = true` in a browser suite's `configure()` method to
+request BiDi capture before setup. Entries appear in console output and the
+JSON/HTML attempt histories. They are diagnostic; they do not fail assertions.
+Unavailable requested capture fails setup, and collection failures are reported.
+
+Use `$browser->logs()` to read retained entries, or
+`$browser->logs(type: 'javascript')` for unhandled JavaScript errors.
+Manual sessions use `bidi: true` and `startLogCapture()` / `stopLogCapture()`.
+See [BiDi capture, browser support, and transport limitations](webdriver-bidi.md)
+for lifecycle details, event attribution, cURL scheduling, and upstream PHP API
+improvements that would benefit this implementation.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document

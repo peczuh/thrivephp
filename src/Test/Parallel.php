@@ -320,6 +320,14 @@ final class Parallel
                     throw new \RuntimeException('Invalid browser session.');
                 }
                 break;
+            case 'browser_log':
+                $log = $message['log'] ?? null;
+                if (!is_array($log) || !is_array($log['entry'] ?? null) || !is_string($log['entry']['type'] ?? null)
+                    || !is_string($log['observedAt'] ?? null) || !is_string($log['phase'] ?? null)
+                    || !is_string($log['sessionId'] ?? null)) {
+                    throw new \RuntimeException('Invalid browser log entry.');
+                }
+                break;
             case 'screenshot':
                 if (!is_array($message['screenshot'] ?? null)
                     || (!is_string($message['screenshot']['path'] ?? null) && !is_string($message['screenshot']['diagnostic'] ?? null))) {

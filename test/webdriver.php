@@ -1426,6 +1426,116 @@ foreach (['close', 'eof', 'remaining-window', 'truncated'] as $ending):
 	});
 endforeach;
 
+scenario('console capture owns its subscription, records once and survives stop, restart and quit', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'raw']]);
+	bidiRequest($ws, 2, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'level' => 'error', 'text' => 'console-error', 'timestamp' => 100]]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['subscription' => 'capture']]);
+	[$http] = acceptRequest($listener);
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'javascript', 'level' => 'error', 'text' => 'exception', 'timestamp' => 101]]);
+	usleep(20000);
+	fwrite($http, "HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\n{\"value\":null}");
+	fclose($http);
+	bidiRequest($ws, 3, 'session.unsubscribe', ['subscriptions' => ['capture']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'text' => 'raw-only']]);
+	bidiRequest($ws, 4, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['subscription' => 'capture2']]);
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'text' => 'restarted']]);
+	bidiRequest($ws, 5, 'browsingContext.getTree');
+	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => ['contexts' => []]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->subscribe(['log.entryAdded']);
+	[$status, $output, $record] = runChecks(['check' => function ($test) use ($browser) {
+		$browser->startLogCapture()->startLogCapture();
+		$test->recordStep('navigate', 'browser', [], fn () => $browser->sessionRequest('POST', '/url', ['url' => 'http://example.test/']));
+		verify(count($browser->logs('javascript')) === 1 && count($browser->logs('console')) === 1, 'Console errors were confused with exceptions.');
+		$browser->stopLogCapture();
+	}]);
+	verify($status === 0 && $record['totals']['assertionsFailed'] === 0, 'Browser logs failed a diagnostic-only test.');
+	$logs = $record['suites'][0]['attempts'][0]['browserLogs'];
+	verify(count(array_filter($logs, fn ($log) => $log['entry']['text'] === 'exception')) === 1 && $logs[1]['stepId'] !== null, 'Logs duplicated or lost their observed-during action.');
+	verify(str_contains($output, 'console-error') && str_contains($output, 'exception'), 'Console output omitted browser entries.');
+	verify($browser->event()['params']['text'] === 'console-error' && $browser->event()['params']['text'] === 'exception', 'Capture consumed raw events.');
+	verify($browser->event()['params']['text'] === 'raw-only', 'Stopping capture cancelled another subscription.');
+	$browser->startLogCapture();
+	$browser->command('browsingContext.getTree');
+	$before = $browser->logs();
+	$connection = $browser->bidi();
+	$browser->quit();
+	verify(!$connection->active(), 'A retained dispatcher kept the deleted session connection alive.');
+	verify($browser->logs() === $before && end($before)['text'] === 'restarted', 'Restart or cleanup lost retained entries.');
+});
+
+scenario('capture failure retains entries, reports once, and still permits HTTP cleanup', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'capture']]);
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'text' => 'retained']]);
+	[$http] = acceptRequest($listener);
+	bidiReply($ws, ['type' => 'broken']);
+	usleep(20000);
+	fclose($http);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	[$status, $output, $record] = runChecks(['check' => function () use ($browser) {
+		$browser->startLogCapture();
+		expectError(fn () => $browser->sessionRequest('GET', '/title'), 'Invalid WebDriver BiDi');
+		verify($browser->logCaptureError() !== null && $browser->logs()[0]['text'] === 'retained', 'Collection failure hid retained data or its error.');
+		$browser->quit();
+	}]);
+	verify($status === 1 && count($record['suites'][0]['attempts'][0]['errors']) === 1, 'Swallowed transport error did not produce one collection diagnostic.');
+	verify($browser->logs()[0]['text'] === 'retained', 'Failed capture data depended on session lifetime.');
+});
+
+scenario('capture drains a burst larger than one dispatcher batch', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'capture']]);
+	bidiRequest($ws, 2, 'browsingContext.getTree');
+	for ($i = 0; $i < 512; $i++) bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'text' => (string)$i]]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['contexts' => []]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->startLogCapture();
+	$browser->command('browsingContext.getTree');
+	verify(array_column($browser->logs(), 'text') === array_map(strval(...), range(0, 511)), 'Burst entries were lost or reordered.');
+	$browser->quit();
+});
+
+scenario('normal BiDi close during last-window deletion preserves capture', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'capture']]);
+	exchange($listener, 'GET', '/session/session%2F1/window', null, 'window/1');
+	[$http] = acceptRequest($listener);
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'text' => 'last-window']]);
+	fwrite($ws, "\x88\x00");
+	usleep(20000);
+	fwrite($http, "HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\n{\"value\":[]}");
+	fclose($http);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->startLogCapture();
+	$browser->window()->close();
+	verify(!$browser->active() && $browser->logCaptureError() === null && $browser->logs()[0]['text'] === 'last-window', 'Normal last-window closure lost logs or became a capture failure.');
+	$browser->quit();
+});
+
 scenario('BiDi handlers cannot reenter classic browser operations', function ($listener) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);

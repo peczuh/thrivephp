@@ -25,6 +25,9 @@ class Test
     /** Getter implementations and screenshot callbacks must not open script/action steps. */
     private bool $suppressSteps = false;
     private ?\Closure $screenshotSource = null;
+    /** Capturing sessions in the current suite attempt, including manually owned browsers. */
+    private array $logBrowsers = [];
+    private array $logErrors = [];
     private ?array $failureCapture = null;
     private array $capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
     private bool $bootstrapped = false;
@@ -160,6 +163,7 @@ class Test
         if (!$this->canRecordStep()) {
             return $operation();
         }
+        $this->collectBrowserLogs();
         $started = hrtime(true);
         $this->failureCapture = null;
         $this->step = ['id' => $this->attemptId() . '/s' . ++$this->ordinal, 'label' => $label,
@@ -179,6 +183,7 @@ class Test
             throw $error;
         } finally {
             try {
+                $this->collectBrowserLogs();
                 if ($this->step['status'] === 'RUN') {
                     $this->step['status'] = 'PASS';
                 }
@@ -209,6 +214,35 @@ class Test
     {
         $this->screenshotSource = \Closure::fromCallable($source);
         $this->event(['type' => 'session', 'session' => $session]);
+    }
+
+    /** @internal Register lifecycle checkpoints without taking ownership of the browser session. */
+    public function watchBrowserLogs(WebDriver\Browser $browser): void
+    {
+        $this->logBrowsers[spl_object_id($browser)] = $browser;
+    }
+
+    /** Record observation context, not a claim that the active action caused the browser entry. */
+    public function browserLog(array $session, array $entry): void
+    {
+        $this->event(['type' => 'browser_log', 'log' => ['entry' => $entry,
+            'sessionId' => $session['sessionId'], 'observedAt' => Test\Record::now(),
+            'phase' => $this->phase, 'hook' => $this->hook, 'stepId' => $this->step['id'] ?? null]]);
+    }
+
+    /** Collection failures fail the attempt once; browser-generated errors remain diagnostic. */
+    private function collectBrowserLogs(): void
+    {
+        foreach ($this->logBrowsers as $id => $browser) {
+            if (isset($this->logErrors[$id])) continue;
+            try {
+                $browser->collectLogs();
+                if ($browser->logCaptureError() !== null) throw $browser->logCaptureError();
+            } catch (\Throwable $error) {
+                $this->logErrors[$id] = true;
+                $this->executionError($error, 'Browser log collection');
+            }
+        }
     }
 
     private function attemptId(): string
@@ -722,6 +756,7 @@ class Test
                 $this->hook = null;
                 $this->ordinal = 0;
                 $this->screenshotSource = null;
+                $this->logBrowsers = $this->logErrors = [];
                 $this->failureCapture = null;
                 $attemptStarted = hrtime(true);
                 $this->event(['type' => 'suite_started', 'file' => $this->diagnostic->path($path)]);
@@ -765,6 +800,7 @@ class Test
                 } catch (\Throwable $error) {
                     $this->executionError($error);
                 }
+                $this->collectBrowserLogs();
                 $failed = $casesFailed > 0 || $this->failures;
                 $this->event(['type' => 'suite_attempt_finished', 'status' => $failed ? 'FAIL' : ($skipped ? 'SKIP' : ($filtered ? 'FILTERED' : 'PASS')),
                     'duration' => (hrtime(true) - $attemptStarted) / 1e9, 'maxAttempts' => $retry + 1]);
@@ -777,6 +813,7 @@ class Test
             } while (true);
         } finally {
             $this->screenshotSource = null;
+            $this->logBrowsers = $this->logErrors = [];
             $this->failureCapture = null;
             self::$active = $previous;
             restore_error_handler();
@@ -897,6 +934,7 @@ class Test
                             $this->captureCompletion('cases');
                         }
                     }
+                    $this->collectBrowserLogs();
                     $this->event(['type' => 'case_attempt_finished', 'status' => $this->failures ? 'FAIL' : 'PASS',
                         'duration' => (hrtime(true) - $attemptStarted) / 1e9]);
                     if (!$this->failures || $attempt > $case['retry']) {
@@ -935,6 +973,7 @@ class Test
     /** Stop setup at its first thrown failure; attempt every teardown hook independently. */
     private function runHooks(Test\Suite $suite, array $hooks, string $phase, bool $teardown = false): bool
     {
+        $this->collectBrowserLogs();
         $this->phase = match ($phase) {
             'SuiteBefore' => 'suite-setup', 'CaseBefore' => 'case-setup',
             'CaseAfter' => 'case-teardown', 'SuiteAfter' => 'suite-teardown',
@@ -945,6 +984,7 @@ class Test
             $started = hrtime(true);
             $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name']]);
             $completed = $this->invokeSuiteMethod($suite, $hook['method']);
+            $this->collectBrowserLogs();
             $this->hook = null;
             $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name'] . ' finished',
                 'duration' => (hrtime(true) - $started) / 1e9]);

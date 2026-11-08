@@ -490,8 +490,33 @@
                 }
             }
 
+            // Log metadata describes when the runner observed an entry, not what caused it.
+            function browserLogs(parent, records) {
+                for (const record of records) {
+                    const entry = record.entry;
+                    const box = element('div', 'assertion');
+                    fields(box, [['Severity', entry.level], ['Type', entry.type], ['Method', entry.method]]);
+                    box.append(element('pre', '', entry.text ?? 'No message recorded.'));
+                    fields(box, [
+                        ['Browser timestamp', present(entry.timestamp) ? date(entry.timestamp) : null],
+                        ['Observed at', present(record.observedAt) ? date(record.observedAt) : null],
+                        ['Session ID', record.sessionId],
+                        ['Observed during phase', record.phase],
+                        ['Observed during hook', record.hook],
+                        ['Observed during step', record.stepId],
+                    ]);
+                    for (const [label, value] of [['Source', entry.source], ['Arguments', entry.args], ['Stack trace', entry.stackTrace]]) {
+                        if (!present(value)) continue;
+                        const details = element('details', 'stack');
+                        details.append(element('summary', '', label), element('pre', '', value));
+                        box.append(details);
+                    }
+                    parent.append(box);
+                }
+            }
+
             // Inner tabbed container within an attempt panel. Steps (suites: Steps/Cases) is the
-            // default; Screenshots and Session appear only when the attempt has that content.
+            // default; Screenshots, Browser logs and Session appear only when the attempt has that content.
             function attemptPanel(parent, record, isSuite, renderCases) {
                 const inner = element('div', 'tabs inner-tabs');
                 const tablist = element('div', 'tablist');
@@ -523,6 +548,7 @@
                 stepsList(steps, record);
                 if (isSuite) renderCases(steps);
                 if (list(record.screenshots).length) screenshots(add('Screenshots', 'inner-screens', false), record.screenshots, true);
+                if (list(record.browserLogs).length) browserLogs(add('Browser logs', 'inner-browser-logs', false), record.browserLogs);
                 if (isSuite && record.session) {
                     const session = add('Session', 'inner-session', false);
                     fields(session, [['Session ID', record.session.sessionId]]);
