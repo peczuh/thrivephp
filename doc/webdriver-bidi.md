@@ -2,7 +2,7 @@
 
 Classic WebDriver remains the browser API's baseline. Optional BiDi supplies
 events and commands over a session-owned WebSocket. The dispatcher is shared by
-logging and the planned network, browsing-context, and script features.
+logging, network observation, and the planned browsing-context and script features.
 `Browser::bidi()` exposes the internal dispatcher for feature implementations;
 its listener/decision API is internal, not the public network interception API.
 
@@ -55,6 +55,68 @@ Console, JSON, and HTML use the same recorded entries. Attempt records contain
 attempt supplies retry attribution. “Observed during” does not claim the active
 operation caused an asynchronous event. Failed attempts retain their logs.
 
+## Network observation
+
+```php
+$browser = $driver->browser(bidi: true);
+$network = $browser->network()->startCapture();
+$browser->navigate('https://app.example.test');
+$posts = $network->requests(fn (array $hop): bool => $hop['request']['method'] === 'POST');
+$network->stopCapture();
+$browser->quit();
+$history = $network->requests();
+$error = $network->captureError();
+```
+
+`Browser::network()` returns the same `Network` object for the session. Obtaining
+it does not subscribe; `startCapture()` explicitly starts session-wide observation
+of `network.beforeRequestSent`, `network.responseStarted`,
+`network.responseCompleted`, and `network.fetchError`. Repeated starts do not
+duplicate subscriptions. Capture is independent of console capture and raw
+caller subscriptions. These methods do not create test steps or assertions.
+
+`requests()` returns one value snapshot per observed redirect hop, in
+first-observed order:
+
+| Field | Value |
+| --- | --- |
+| `sessionId` | Original session ID, retained after session deletion |
+| `requestId` | Protocol request ID, reused across redirect hops |
+| `redirectCount` | Protocol redirect count identifying the hop |
+| `request` | Latest observed protocol request data |
+| `response` | Latest observed protocol response data, or `null` |
+| `events` | Arrival-ordered event envelopes containing `type`, `method`, and unmodified `params` |
+
+Earlier event snapshots remain available when later events change request or
+response data. Headers remain ordered lists with duplicate names and protocol
+byte values intact. Capture includes raw metadata such as URLs, headers, and
+cookies. Request and response body contents are not collected by these events.
+Body retrieval requires separate BiDi data-collection support.
+
+Reads collect available input and never consume history or `Browser::event()`
+entries. The optional predicate runs outside dispatch, after collection, and
+receives each hop. A predicate exception propagates without becoming a capture
+failure. Existing `Browser::wait()` can poll `requests()` for an expected event.
+
+Stopping removes only this collector's subscription and listeners, including
+events observed during the stop operation. Restarting appends to history;
+matching request IDs and redirect counts continue the same hop. Capture may
+start or stop mid-request and may have gaps between capture periods. Missing
+events remain missing; neither a response nor a completion is fabricated.
+The latest request/response fields summarize observed events, not a guarantee
+that capture covered the whole request.
+
+History has no automatic eviction and survives stop, session cleanup, and
+capture failure. `captureError()` inspects failure state without network I/O.
+HTTP error statuses and `network.fetchError` entries are diagnostic data, not
+collector failures. A failed capture operation throws and records its failure;
+after a lost connection, retained entries remain readable. A successful restart
+clears the prior capture error, retaining history. Session cleanup performs final
+collection before deletion, but events generated after that collection or during
+remote shutdown are not guaranteed. Explicit BiDi is required; there is no
+protocol fallback. Automatic suite network reporting and managed interception
+are subsequent increments.
+
 ## Transport and dispatch
 
 `WebSocket` retains partial frame headers, payloads, fragmented text, and outgoing
@@ -66,7 +128,7 @@ operation timeouts close the connection; an idle poll does not.
 `BiDi` owns command IDs, pending responses, internal listeners, and the low-level
 event queue. Replies can arrive out of order. Internal observers do not consume
 `Browser::event()` entries. Each received event is observed once, even when a
-caller later retrieves it from the raw queue. Both retained logs and the raw
+caller later retrieves it from the raw queue. Retained logs, network hops, and the raw
 event queue consume memory until their owner releases them; no entries are
 silently dropped to enforce a retention cap.
 
@@ -162,6 +224,10 @@ console and exception capture. Protocol fixtures in
 replies, subscription ownership, reentry rejection, and report attribution.
 `test/test-browser-logs.php [chrome|firefox] [1|2]` checks real suite hooks, case
 retries, and serial/parallel reports.
+`test/webdriver-network-browser.php [chrome|firefox]` uses a loopback HTTP fixture
+to check redirect correlation, concurrent fetches, HTTP/fetch errors, independent
+stop/restart, retained metadata, and last-window cleanup. Run it with
+`php -d short_open_tag=1`; its HTTP fixture requires `pcntl`.
 
 Observed during implementation:
 
@@ -176,7 +242,13 @@ Observed during implementation:
   ThrivePHP does not silently replace classic navigation with BiDi.
   Last-window deletion can end its BiDi stream without a close frame. The client
   accepts EOF between messages only when the HTTP response confirms no windows
-  remain; truncated messages and connection loss with remaining windows still fail.
+   remain; truncated messages and connection loss with remaining windows still fail.
+- Chrome 156 and Firefox 147 network observation reused a request ID across three
+  redirect hops with redirect counts 0, 1, and 2. The fixture served
+  `302`, `307`, `200`; earlier Chrome probes reported `302`, `302`, `200`, while
+  the native observation test reported the served statuses on both browsers.
+  The Chrome discrepancy was not reproduced on every run. Capture preserves
+  browser-reported values without correction.
 - Safari Technology Preview 27.0 / driver 21626.1.6.19.1 exposed an experimental
   WebSocket with `safari:experimentalWebSocketUrl`, but its subscription response
   lacked the required subscription ID. Managed capture rejects that response;

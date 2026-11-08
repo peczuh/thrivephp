@@ -61,6 +61,8 @@
 		/** Protocol entries outlive the connection and are never consumed by logs(). */
 		private array $logs = [];
 		private ?\Throwable $logFailure = null;
+		/** One network collector per session; retained records outlive session cleanup. */
+		private ?Network $network = null;
 		/** Window objects are shared so frame selection and closure stay consistent. */
 		private array $windows = [];
 		private ?Window $currentWindow = null;
@@ -825,6 +827,13 @@
 			return $this->connection;
 		}
 
+		/** Return this session's network observer. First access requires BiDi; capture starts explicitly. */
+		public function network(): Network
+		{
+			$this->connection?->assertCallable();
+			return $this->network ??= new Network($this->bidi(), $this->sessionId);
+		}
+
 		/** Start session-wide console/exception capture. Requires bidi: true; repeated starts are harmless. */
 		public function startLogCapture(): self
 		{
@@ -934,13 +943,18 @@
 			endif;
 			try {
 				try {
-					$this->collectLogs();
+					try {
+						$this->collectLogs();
+					} finally {
+						$this->network?->collect();
+					}
 				} finally {
 					$this->request('DELETE', $this->sessionPath());
 					$this->invalidateSession();
 				}
 			} finally {
 				$this->detachLogs();
+				$this->network?->detach();
 				$this->connection?->disconnect();
 				$this->connection = null;
 			}
@@ -964,6 +978,7 @@
 		{
 			$this->sessionId = null;
 			$this->detachLogs();
+			$this->network?->detach();
 			$this->connection?->disconnect();
 			$this->connection = null;
 			$this->currentWindow = null;
@@ -1039,6 +1054,7 @@
 		{
 			$this->activate($window, null);
 			$this->collectLogs();
+			$this->network?->collect();
 			$handles = $this->sessionRequest('DELETE', '/window');
 			$window->markClosed();
 			$this->currentWindow = null;

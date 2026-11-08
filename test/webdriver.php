@@ -1536,6 +1536,209 @@ scenario('normal BiDi close during last-window deletion preserves capture', func
 	$browser->quit();
 });
 
+/** Network fixtures retain protocol byte values, duplicate headers, and arbitrary event fields. */
+function networkEvent(string $method, string $id, int $redirect = 0, array $extra = []): array
+{
+	return ['type' => 'event', 'method' => 'network.' . $method, 'params' => array_replace([
+		'context' => 'window/1', 'navigation' => null, 'timestamp' => 100, 'isBlocked' => false,
+		'redirectCount' => $redirect, 'request' => ['request' => $id, 'url' => 'http://example.test/' . $redirect,
+			'method' => 'GET', 'headers' => [['name' => 'X-Test', 'value' => ['type' => 'string', 'value' => 'one']],
+				['name' => 'X-Test', 'value' => ['type' => 'base64', 'value' => '/w==']]], 'cookies' => []],
+	], $extra)];
+}
+
+$networkEvents = [
+	networkEvent('beforeRequestSent', 'redirect'),
+	networkEvent('responseStarted', 'partial', extra: ['response' => ['status' => 503, 'headers' => []]]),
+	networkEvent('beforeRequestSent', 'unfinished'),
+	networkEvent('responseCompleted', 'redirect', extra: ['response' => ['status' => 302, 'headers' => []]]),
+	networkEvent('beforeRequestSent', 'redirect', 1),
+	networkEvent('fetchError', 'partial', extra: ['errorText' => 'connection reset']),
+	networkEvent('responseCompleted', 'redirect', 1, ['response' => ['status' => 307, 'headers' => []]]),
+];
+$networkMethods = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
+
+scenario('network capture correlates interleaved hops, preserves raw data and isolates browser errors', function ($listener) use ($networkEvents, $networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'raw']]);
+	bidiRequest($ws, 2, 'session.subscribe', ['events' => ['log.entryAdded']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['subscription' => 'logs']]);
+	bidiRequest($ws, 3, 'session.subscribe', ['events' => $networkMethods]);
+	foreach (array_slice($networkEvents, 0, 3) as $event) bidiReply($ws, $event);
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => ['subscription' => 'network']]);
+	[$http] = acceptRequest($listener);
+	foreach (array_slice($networkEvents, 3) as $event) bidiReply($ws, $event);
+	usleep(20000);
+	$json = json_encode(['value' => ['error' => 'unknown error', 'message' => 'navigation failed']]);
+	fwrite($http, "HTTP/1.1 500 Error\r\nContent-Length: " . strlen($json) . "\r\nConnection: close\r\n\r\n" . $json);
+	fclose($http);
+	bidiRequest($ws, 4, 'browsingContext.getTree');
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['contexts' => []]]);
+	bidiRequest($ws, 5, 'session.unsubscribe', ['subscriptions' => ['network']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => (object)[]]);
+	bidiRequest($ws, 6, 'browsingContext.getTree');
+	bidiReply($ws, networkEvent('beforeRequestSent', 'raw-only'));
+	bidiReply($ws, ['type' => 'event', 'method' => 'log.entryAdded', 'params' => ['type' => 'console', 'text' => 'still subscribed']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 6, 'result' => ['contexts' => []]]);
+	bidiRequest($ws, 7, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, networkEvent('responseCompleted', 'unfinished', extra: ['response' => ['status' => 200, 'headers' => []]]));
+	bidiReply($ws, ['type' => 'success', 'id' => 7, 'result' => ['subscription' => 'network2']]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) use ($networkEvents) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$browser->subscribe(['network.beforeRequestSent']);
+	$browser->startLogCapture();
+	$network = $browser->network();
+	verify($network === $browser->network() && $network->requests() === [], 'Network accessor started capture or lost identity.');
+	verify($network->startCapture()->startCapture() === $network, 'Capture lost its receiver.');
+	$before = $network->requests();
+	verify(count($before) === 3 && $before[0]['response'] === null, 'Events before the subscription reply were lost.');
+	expectError(fn () => $browser->sessionRequest('POST', '/url', ['url' => 'http://example.test/']), 'navigation failed');
+	$hops = $network->requests();
+	verify(array_column($hops, 'requestId') === ['redirect', 'partial', 'unfinished', 'redirect'] && array_column($hops, 'redirectCount') === [0, 0, 0, 1], 'Interleaved hops merged or changed order.');
+	verify($hops[0]['sessionId'] === 'session/1' && $hops[0]['events'] === [$networkEvents[0], $networkEvents[3]], 'Raw event snapshots changed.');
+	verify($hops[1]['response']['status'] === 503 && $hops[1]['events'][1] === $networkEvents[5], 'Partial observation lost response or fetch error.');
+	verify($hops[2]['response'] === null && count($hops[2]['events']) === 1 && $before[0]['response'] === null, 'Completion was invented or an earlier value snapshot mutated.');
+	$filtered = $network->requests(function ($hop) use ($browser): bool {
+		if ($hop['redirectCount'] !== 1) return false;
+		$browser->command('browsingContext.getTree');
+		return true;
+	});
+	verify($filtered === [$hops[3]], 'Filter ran in dispatch or changed the matching hop.');
+	verify($network->captureError() === null && $browser->logCaptureError() === null, 'Browser errors became collection failures.');
+	foreach ($networkEvents as $event) verify($browser->event() === $event, 'Capture consumed or reordered raw events.');
+	$network->stopCapture()->stopCapture();
+	$stopped = $network->requests();
+	$browser->command('browsingContext.getTree');
+	verify($browser->event() === networkEvent('beforeRequestSent', 'raw-only'), 'Stop cancelled the raw subscription.');
+	verify($network->requests() === $stopped && $browser->logs()[0]['text'] === 'still subscribed', 'Stopped capture continued or stopped log capture.');
+	$network->startCapture();
+	$restarted = $network->requests();
+	verify(count($restarted) === 4 && count($restarted[2]['events']) === 2 && $restarted[2]['response']['status'] === 200, 'Restart lost history or fabricated a new hop.');
+	$browser->quit();
+	verify($browser->network() === $network && $network->requests() === $restarted && $network->captureError() === null, 'Session cleanup lost network history or identity.');
+	$network->stopCapture();
+	expectError(fn () => $network->startCapture(), 'No active WebDriver BiDi');
+});
+
+scenario('network collection drains bursts and updates latest data without changing earlier events', function ($listener) use ($networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'network']]);
+	[$http] = acceptRequest($listener);
+	for ($i = 0; $i < 256; $i++) bidiReply($ws, networkEvent('beforeRequestSent', (string)$i));
+	$changed = networkEvent('responseCompleted', '0', extra: ['response' => ['status' => 200, 'headers' => []]]);
+	$changed['params']['request']['method'] = 'POST';
+	bidiReply($ws, $changed);
+	fwrite($http, "HTTP/1.1 200 OK\r\nContent-Length: 16\r\nConnection: close\r\n\r\n{\"value\":\"done\"}");
+	fclose($http);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network()->startCapture();
+	$browser->sessionRequest('GET', '/title');
+	$browser->wait(fn () => count($network->requests(fn ($hop) => $hop['response'] !== null)) === 1, timeout: 1000);
+	$hops = $network->requests();
+	verify(array_column($hops, 'requestId') === array_map(strval(...), range(0, 255)), 'Burst lost or reordered requests.');
+	verify($hops[0]['request']['method'] === 'POST' && $hops[0]['events'][0]['params']['request']['method'] === 'GET', 'Latest request replaced an earlier event snapshot.');
+	$hops[0]['events'][0]['params']['request']['method'] = 'DELETE';
+	verify($network->requests()[0]['events'][0]['params']['request']['method'] === 'GET', 'Returned records mutated retained history.');
+	expectError(fn () => $network->requests(fn () => throw new RuntimeException('predicate failed')), 'predicate failed');
+	verify($network->captureError() === null, 'Predicate error became a capture failure.');
+	$browser->quit();
+});
+
+foreach (['missing subscription', 'unsubscribe error', 'transport failure'] as $failure):
+	scenario('network capture retains diagnostics and permits cleanup after ' . $failure, function ($listener) use ($networkMethods, $failure) {
+		createSession($listener, bidi: true);
+		$ws = upgrade($listener);
+		bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+		bidiReply($ws, networkEvent('beforeRequestSent', 'retained'));
+		bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => $failure === 'missing subscription' ? (object)[] : ['subscription' => 'network']]);
+		if ($failure === 'unsubscribe error'):
+			bidiRequest($ws, 2, 'session.unsubscribe', ['subscriptions' => ['network']]);
+			bidiReply($ws, ['type' => 'error', 'id' => 2, 'error' => 'invalid argument', 'message' => 'unsubscribe failed']);
+		elseif ($failure === 'transport failure'):
+			bidiRequest($ws, 2, 'browsingContext.getTree');
+			bidiReply($ws, ['type' => 'broken']);
+		endif;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		fclose($ws);
+	}, function ($url) use ($failure) {
+		$browser = new Browser($url, 'firefox', bidi: true);
+		$network = $browser->network();
+		if ($failure === 'missing subscription'):
+			expectError(fn () => $network->startCapture(), 'subscription ID');
+		else:
+			$network->startCapture();
+			if ($failure === 'unsubscribe error') expectError(fn () => $network->stopCapture(), 'unsubscribe failed');
+			else expectError(fn () => $browser->command('browsingContext.getTree'), 'Invalid WebDriver BiDi');
+		endif;
+		$error = $network->captureError();
+		verify($error !== null && $network->requests()[0]['requestId'] === 'retained', 'Failure hid diagnostics or retained entries.');
+		verify($browser->logCaptureError() === null, 'Network-only capture failure became a log failure.');
+		$browser->quit();
+		verify($network->captureError() === $error && $network->requests()[0]['sessionId'] === 'session/1', 'Cleanup lost original capture failure or session identity.');
+	});
+endforeach;
+
+scenario('network capture can restart after a rejected subscription without duplicate listeners', function ($listener) use ($networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, networkEvent('beforeRequestSent', 'retry'));
+	bidiReply($ws, ['type' => 'error', 'id' => 1, 'error' => 'invalid argument', 'message' => 'subscription rejected']);
+	bidiRequest($ws, 2, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, networkEvent('responseCompleted', 'retry', extra: ['response' => ['status' => 200, 'headers' => []]]));
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['subscription' => 'network']]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	expectError(fn () => $network->startCapture(), 'subscription rejected');
+	verify($network->captureError() !== null, 'Rejected subscription lost its failure.');
+	$network->startCapture();
+	$hops = $network->requests();
+	verify($network->captureError() === null && count($hops) === 1 && count($hops[0]['events']) === 2, 'Restart retained failed listeners, lost history or failed to clear the error.');
+	$browser->quit();
+});
+
+scenario('last-window close retains network capture without a false transport failure', function ($listener) use ($networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'network']]);
+	exchange($listener, 'GET', '/session/session%2F1/window', null, 'window/1');
+	[$http] = acceptRequest($listener);
+	bidiReply($ws, networkEvent('beforeRequestSent', 'last-window'));
+	fwrite($ws, "\x88\x00");
+	usleep(20000);
+	fwrite($http, "HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\n{\"value\":[]}");
+	fclose($http);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network()->startCapture();
+	$browser->window()->close();
+	verify(!$browser->active() && $network->captureError() === null && $network->requests()[0]['requestId'] === 'last-window', 'Normal closure lost history or became a capture failure.');
+	$browser->quit();
+});
+
+scenario('network observation requires explicit BiDi', function ($listener) {
+	createSession($listener, discover: false);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	expectError(fn () => $browser->network(), 'No active WebDriver BiDi');
+	$browser->quit();
+});
+
 scenario('BiDi handlers cannot reenter classic browser operations', function ($listener) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);
