@@ -102,7 +102,7 @@ Element assertions and actions preserve their element receiver.
 | `alertAccept`, `alertDismiss`, `alertType`, `cookie` setter, `cookieDelete`, `cookieDeleteAll` | One operation; no polling |
 | `script` | One script invocation; synchronous or callback-completed execution uses its own script timeout |
 | `actions`, `releaseActions` | One native action/release sequence; no replay after partial input |
-| `screenshot`, `pdf` | Immediate eager captures; capture objects remain usable after session cleanup |
+| `screenshot`, `snapshot`, `pdf` | Immediate eager captures; capture objects remain usable after session cleanup. `snapshot` captures the selected HTML document/frame with script elements removed, UTF-8 encoding and a resolved base URL; resources remain external |
 | `sleep` | Local delay in nonnegative finite seconds; no polling or assertion |
 | Browser `windows`, `window`, `open`, `switch`, `close`; window `close` | Window discovery/selection/lifecycle, no polling. `open` returns a window; window `close` returns the browser |
 | Browser `timeouts`, `pageLoadTimeout`, `implicitTimeout`, `scriptTimeout` | Read/set remote timeout settings; setters use seconds and do not change local polling budgets |

@@ -16,6 +16,7 @@ use ThriveData\ThrivePHP\WebDriver\ElementSet;
 use ThriveData\ThrivePHP\WebDriver\Window;
 use ThriveData\ThrivePHP\WebDriver\ShadowRoot;
 use ThriveData\ThrivePHP\WebDriver\Screenshot;
+use ThriveData\ThrivePHP\WebDriver\Snapshot;
 use ThriveData\ThrivePHP\WebDriver\PDF;
 use ThriveData\ThrivePHP\Test;
 
@@ -2854,6 +2855,47 @@ scenario('screenshot and PDF objects, decoding, persistence, and invalid capture
 	} finally {
 		unlink($path);
 	}
+});
+
+scenario('HTML snapshots are eager, unrecorded captures with independent persistence and driver errors', function ($listener) {
+	createSession($listener);
+	scriptExchange($listener, [], '<!DOCTYPE html><html><head><base href="https://example.test/a/"></head><body>First €</body></html>');
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => 0], null);
+	scriptExchange($listener, [], '<html><head><base href="https://example.test/frame/"></head><body>Frame</body></html>');
+	scriptExchange($listener, [], ['error' => 'javascript error', 'message' => 'snapshot failed'], 500);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$snapshot = null;
+	[$status, $output, $record] = runChecks(['check' => function () use ($browser, &$snapshot) { $snapshot = $browser->snapshot(); }]);
+	verify($status === 0 && $record['suites'][0]['attempts'][0]['steps'] === [], 'Snapshot recorded its internal script as an action.');
+	verify($snapshot instanceof Snapshot && str_contains($snapshot->data(), 'First €'), 'Snapshot HTML changed or was not returned eagerly.');
+	$browser->switchFrame(0);
+	$frame = $browser->window()->snapshot();
+	verify(str_contains($frame->data(), '>Frame<'), 'Window snapshot lost frame capture.');
+	expectError(fn() => $browser->snapshot(), 'javascript error: snapshot failed');
+	$browser->quit();
+	$path = tempnam(sys_get_temp_dir(), 'webdriver-snapshot-');
+	try {
+		foreach ([$snapshot, $frame] as $capture):
+			verify($capture->save($path) === $capture && file_get_contents($path) === $capture->data(), 'Snapshot save lost its receiver or captured HTML.');
+			expectError(fn() => $capture->save($path . '/missing/file'), 'Could not write the complete snapshot');
+		endforeach;
+	} finally {
+		unlink($path);
+	}
+});
+
+scenario('snapshot propagates stale selected-frame restoration without executing the script', function ($listener) {
+	createSession($listener);
+	exchange($listener, 'GET', '/session/session%2F1/timeouts', null, ['script' => 30000]);
+	exchange($listener, 'POST', '/session/session%2F1/frame', ['id' => [Element::REFERENCE => 'gone']], ['error' => 'stale element reference', 'message' => 'frame gone'], 404);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox');
+	$browser->window()->rememberFrames([[Element::REFERENCE => 'gone']]);
+	expectError(fn() => $browser->snapshot(), 'context restoration failed');
+	$browser->quit();
 });
 
 scenario('general actions retain input until explicit release', function ($listener) {

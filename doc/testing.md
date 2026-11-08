@@ -211,6 +211,34 @@ Reporting regression checks are `php test/test-report.php`,
 exercise intentional failures and retries, and print a retained artifact directory
 after checking the final counts and PNG files.
 
+### HTML snapshots
+
+`Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document
+or frame immediately and return a `WebDriver\Snapshot` object:
+
+```php
+$snapshot = $browser->snapshot();
+$html = $snapshot->data();
+$browser->quit();
+$snapshot->save('page.html');
+```
+
+Like screenshot and PDF captures, the object remains usable after the session
+ends. `save()` returns the same capture, overwrites the destination, and throws
+on failed or incomplete writes. The parent directory must already exist.
+Capturing does not add an action step or assertion to the test report.
+
+The capture clones the live DOM without changing it, removes script elements,
+declares UTF-8, and replaces base elements with the document's resolved base URL.
+This preserves relative resource URLs, including document-relative paths and
+existing `<base>` elements. The doctype and serialized markup are retained.
+Images and stylesheets remain external references; child-frame documents, shadow
+trees, JavaScript memory, canvas pixels and property-only form state are not
+archived. Script removal is not HTML sanitization; inline event handlers remain.
+
+Native checks: `php -d short_open_tag=1 test/webdriver-snapshot-browser.php chrome`.
+The same test accepts `firefox`, `safaripreview`, or `safari`.
+
 ## Selecting files, cases, and tags
 
 Pass one or more regex selectors to `run()`:

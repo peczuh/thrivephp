@@ -387,6 +387,38 @@
 		}
 
 		/**
+		 * Capture this window's selected HTML document/frame, using a detached DOM copy.
+		 * Remove script elements, declare UTF-8, and replace base elements with document.baseURI
+		 * so relative resources keep their original resolution, including any existing base.
+		 * Preserve the doctype and serialized markup, not JavaScript memory, canvas pixels,
+		 * shadow trees or property-only form state. Resources and child frames are not bundled.
+		 * Script removal is not HTML sanitization; inline event handlers remain.
+		 * Use ->data() or ->save('page.html'), even after session cleanup. Driver errors propagate.
+		 */
+		public function snapshot(): Snapshot
+		{
+			// Use the script endpoint directly, as captures do not create recorded action steps.
+			$timeouts = $this->browser->timeouts();
+			return new Snapshot($this->request('POST', '/execute/sync', [
+				'script' => <<<'JS'
+					const snapshot = document.cloneNode(true);
+					for (const node of snapshot.querySelectorAll('script, base')) node.remove();
+					for (const meta of snapshot.querySelectorAll('meta')) {
+						if (meta.hasAttribute('charset') || (meta.getAttribute('http-equiv') || '').toLowerCase() === 'content-type') meta.remove();
+					}
+					const encoding = snapshot.createElement('meta');
+					encoding.setAttribute('charset', 'utf-8');
+					const base = snapshot.createElement('base');
+					base.setAttribute('href', document.baseURI);
+					snapshot.head.prepend(encoding, base);
+					const doctype = snapshot.doctype ? new XMLSerializer().serializeToString(snapshot.doctype) + '\n' : '';
+					return doctype + snapshot.documentElement.outerHTML;
+					JS,
+				'args' => [],
+			], extraTimeout: ($timeouts['script'] ?? 0) / 1000));
+		}
+
+		/**
 		 * Capture a PDF of the selected browsing context immediately. Use ->data() for
 		 * decoded bytes or ->save('page.pdf') to write them. Browser/driver support varies;
 		 * unsupported commands and invalid options propagate the driver's error.

@@ -608,6 +608,17 @@
 		}
 
 		/**
+		 * Capture the current HTML document/frame immediately without changing the live DOM.
+		 * Script elements are removed and a resolved base URL preserves resource references.
+		 * Use ->data() for HTML or ->save('page.html'); the capture survives session cleanup.
+		 * Resources, child-frame documents and shadow trees are not bundled. See Window::snapshot().
+		 */
+		public function snapshot(): Snapshot
+		{
+			return $this->window()->snapshot();
+		}
+
+		/**
 		 * Capture a PDF of the current window/frame immediately using W3C print options.
 		 * Use ->data() for decoded bytes or ->save('page.pdf') to write them.
 		 * Support depends on the browser/driver; unsupported-command errors propagate.
