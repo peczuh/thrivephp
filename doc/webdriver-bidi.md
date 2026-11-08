@@ -2,7 +2,7 @@
 
 Classic WebDriver remains the browser API's baseline. Optional BiDi supplies
 events and commands over a session-owned WebSocket. The dispatcher is shared by
-logging, network observation, and the planned browsing-context and script features.
+logging, network observation/interception, and the planned browsing-context and script features.
 `Browser::bidi()` exposes the internal dispatcher for feature implementations;
 its listener/decision API is internal, not the public network interception API.
 
@@ -118,7 +118,92 @@ protocol fallback. Set `SuiteConfig::$browserNetwork = true` for automatic suite
 capture and console/JSON/HTML reporting. Explicit capture started under an active
 test also reports events, with each event attributed to the attempt, phase, hook,
 and step where it was observed. See [network reporting](testing.md#browser-network-observation).
-Managed interception is a subsequent increment.
+
+## Request interception and mocking
+
+```php
+use ThriveData\ThrivePHP\WebDriver\NetworkDecision;
+
+$browser = $driver->browser(bidi: true);
+$network = $browser->network();
+$id = $network->intercept(
+    fn (array $event): NetworkDecision => NetworkDecision::respond(
+        status: 200,
+        headers: [['Content-Type', 'application/json']],
+        body: '{"available":true}',
+    ),
+    urlPatterns: [['type' => 'string', 'pattern' => 'https://app.example.test/api/availability']],
+);
+// Perform browser operations that make the request, using a tested navigation path below.
+$network->removeIntercept($id);
+$network->stopInterception();
+```
+
+`intercept(callable $handler, array $urlPatterns = [], string $phase = 'beforeRequestSent')`
+returns the remote intercept ID. Only `beforeRequestSent` is supported. Patterns
+are BiDi URL-pattern objects, not PHP regular expressions or shell globs; an empty
+list matches all requests. The browser supplies matching intercept IDs. Among
+active managed rules, the first registered matching rule handles the pause,
+regardless of the order of IDs in the event. An explicit continue ends rule
+evaluation. Foreign-only pauses are ignored. Manual controllers must not also
+decide pauses owned by these managed rules.
+
+The handler receives the event's `params`, including `request`, `redirectCount`,
+and `intercepts`. It must return one of these values:
+
+- `NetworkDecision::continueRequest()` passes through unchanged. Optional `url`,
+  `method`, `headers`, and `body` replace the supplied fields. `null` leaves a field
+  unchanged; `[]` supplies an empty header list and `''` supplies an empty body.
+- `NetworkDecision::respond(int $status = 200, array $headers = [], string $body = '')`
+  supplies a response. Status must be 100 through 599.
+- `NetworkDecision::fail()` makes the browser fail the request. An intentional
+  fail decision is not an interception error.
+
+Headers are ordered `[name, value]` string pairs and preserve duplicate names.
+UTF-8 header values use BiDi string values; other bytes use base64. Bodies are PHP
+byte strings, encoded as BiDi base64 values. Supplying bodies does not enable
+captured-body retrieval. Browser limitations on overrides still apply.
+
+Decision values perform no I/O. The dispatcher sends the returned decision and
+checks its reply. Handlers cannot call browser operations, including during
+replay of events received before `addIntercept` returns its ID. Handlers run
+synchronously; a nonreturning callback prevents same-thread servicing and cleanup.
+There is no background event loop while application code is idle. Browser
+operations and test checkpoints service events.
+
+Capture and interception have separate subscriptions and lifecycles. Interception
+alone does not populate `requests()` or enable raw metadata reporting. Stopping
+capture does not stop interception. Removing a rule stops its handler immediately;
+requests already decided retain that decision. A failed removal retains ownership
+and passes subsequent matching pauses through without calling that handler.
+
+`removeIntercept($id)` is repeatable for a removed managed ID. Unknown IDs throw.
+`stopInterception()` removes all remaining rules and settles known decisions
+under one shared command-timeout budget. Ordinary removal errors do not prevent
+attempts to remove the other rules. Successful stop leaves the session usable.
+Removed IDs and a passive responder remain until session cleanup because removing
+an intercept does not release already-paused requests or fence late events.
+Late owned pauses continue without invoking retired handlers. Session deletion
+releases remote pauses directly; it does not need to remove each rule first.
+
+Handler exceptions, invalid return values, and rejected decisions are retained in
+`interceptionError(): ?NetworkError`, independently of `captureError()`. The first
+original exception remains `getPrevious()`. `failures()` returns arrival-ordered
+`{requestId, redirectCount, phase, error}` entries, with nullable correlation for
+controller/transport failures. Recovery and cleanup errors append to this list.
+For a handler failure or rejected continuation/response, the controller attempts
+at most one fail recovery for the still-current pause. It does not retry after
+`no such request`, a failed fail decision, or a newer pause of the same request.
+Older replies cannot clear newer occurrences.
+
+Managed errors do not escape the dispatcher or become capture failures. Active
+test checkpoints report every retained failure once per attempt, including later
+recovery failures and failures carried into retries. Explicit `stopInterception()`
+throws the retained aggregate after cleanup, including on repeated calls. Errors
+are not reset by stopping or adding another rule. Transport failures still throw
+from the detecting operation. Deadline exhaustion during stop invalidates BiDi
+rather than leaving ambiguous pending replies; HTTP session cleanup remains
+available. Failed cleanup cannot guarantee that every remote pause was released.
 
 ## Transport and dispatch
 
@@ -141,9 +226,11 @@ under one deadline. Internal listeners may return a `{method, params}` decision;
 the dispatcher queues that protocol command and checks its reply. Browser calls
 inside a listener are rejected. User code executes synchronously and blocks
 servicing until it returns. Deadline checks cannot interrupt arbitrary PHP code.
-Exceptions and failed internal response commands propagate and invalidate BiDi;
-classic HTTP cleanup remains available. Feature-specific handling of paused
-requests belongs to the corresponding network/prompt implementation.
+Exceptions and failed internal response commands without a feature-specific
+settler propagate and invalidate BiDi; classic HTTP cleanup remains available.
+Managed network decisions attach a guarded settler that records rejection and
+may return one recovery command. Transport and malformed-envelope failures remain
+fatal. Feature-specific handling of pauses belongs to the corresponding controller.
 
 `HttpRequest` uses cURL multi for HTTP framing, TLS, and partial transfers. It
 advances BiDi while HTTP is pending, including before HTTP response headers arrive.
@@ -231,6 +318,12 @@ retries, and serial/parallel reports.
 to check redirect correlation, concurrent fetches, HTTP/fetch errors, independent
 stop/restart, retained metadata, and last-window cleanup. Run it with
 `php -d short_open_tag=1`; its HTTP fixture requires `pcntl`.
+`test/webdriver-intercept-browser.php [chrome|firefox]` checks native mocking,
+header and URL replacement, method/body replacement, failed fetches, session
+reuse after stop, and suite errors with capture disabled. Use the same PHP option.
+Protocol fixtures additionally cover registration races, overlapping rules,
+retired ownership, out-of-order settlement,
+recovery errors, shared cleanup deadlines, and reporting across retries.
 
 Observed during implementation:
 
@@ -251,7 +344,17 @@ Observed during implementation:
   `302`, `307`, `200`; earlier Chrome probes reported `302`, `302`, `200`, while
   the native observation test reported the served statuses on both browsers.
   The Chrome discrepancy was not reproduced on every run. Capture preserves
-  browser-reported values without correction.
+   browser-reported values without correction.
+- Chrome 156 sent base64 request-header values literally in the native test.
+  UTF-8 string header values worked in both tested browsers; arbitrary non-UTF-8
+  header bytes are protocol-encoded but are not certified on Chrome 156.
+  Firefox 147 applied header replacement alone but dropped it when the same
+  continuation also replaced the URL. The native test verifies these replacements
+  separately; ThrivePHP does not split one decision into multiple commands.
+- Firefox 147 classic navigation hung after an intentional `failRequest`, and
+  later HTTP commands timed out. The native failure test uses `fetch()` and checks
+  both promise rejection and `network.fetchError`, then verifies continued session
+  use. This does not establish failed-navigation support for that driver version.
 - Safari Technology Preview 27.0 / driver 21626.1.6.19.1 exposed an experimental
   WebSocket with `safari:experimentalWebSocketUrl`, but its subscription response
   lacked the required subscription ID. Managed capture rejects that response;

@@ -256,6 +256,24 @@ Run `php -d short_open_tag=1 test/test-browser-network.php chrome 2` or substitu
 generated HTML report and checks the Network tab, raw disclosures, and inert
 protocol text.
 
+### Managed network interception errors
+
+Call `$browser->network()->intercept(...)` under an active test to register a
+managed request handler. The browser session must request BiDi explicitly, for
+example through `$config->bidi = true` in a browser suite. Interception does not
+enable metadata capture; `$config->browserNetwork` remains an independent option.
+See [request interception and mocking](webdriver-bidi.md#request-interception-and-mocking)
+for decisions, URL patterns, cleanup, and tested browser limitations.
+
+Handler, decision, recovery, and cleanup failures become execution errors at test
+checkpoints, even with metadata capture disabled. Reports retain each failure in
+arrival order. A later recovery failure is reported even when an earlier checkpoint
+already recorded its cause. Each retry reports retained interception failures for
+that attempt; stopping interception does not erase them. The aggregate thrown by
+`stopInterception()` does not duplicate failures already reported in the attempt.
+Intentional `NetworkDecision::fail()` decisions remain successful controller
+operations unless the browser rejects the decision itself.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document

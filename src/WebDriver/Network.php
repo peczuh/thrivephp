@@ -1,7 +1,7 @@
 <?php
 	namespace ThriveData\ThrivePHP\WebDriver;
 
-	/** Session-wide network metadata capture. Obtain the session's instance through Browser::network(). */
+	/** Session-wide metadata capture and request interception. Obtain the instance through Browser::network(). */
 	final class Network
 	{
 		private const EVENTS = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
@@ -11,6 +11,19 @@
 		/** Request ID and redirect count identify each hop; insertion order is first-observed order. */
 		private array $hops = [];
 		private ?\Throwable $failure = null;
+		private ?string $interceptSubscription = null;
+		private ?int $interceptListener = null;
+		/** Remote ID => handler, or null while retiring. Removed IDs remain owned for late paused events. */
+		private array $rules = [];
+		private array $retired = [];
+		private bool $installing = false;
+		private array $provisional = [];
+		/** Local occurrence => request identity/in-flight state; replies can follow a newer pause of the same request. */
+		private array $paused = [];
+		private array $current = [];
+		private int $nextPause = 0;
+		private ?NetworkError $interceptionFailure = null;
+		private ?\Throwable $transportFailure = null;
 
 		/** @internal Retain the originating session ID even after Browser releases its session. */
 		public function __construct(private BiDi $connection, private string $sessionId) {}
@@ -88,11 +101,13 @@
 		{
 			$this->connection->assertCallable();
 			$this->captureError();
-			if ($this->subscription !== null && $this->connection->active()):
+			$this->interceptionError();
+			if (($this->subscription !== null || $this->interceptSubscription !== null) && $this->connection->active()):
 				try {
 					$this->connection->drain();
 				} catch (\Throwable $error) {
-					$this->failure = $error;
+					if ($this->subscription !== null) $this->failure = $error;
+					if ($this->interceptSubscription !== null) $this->recordInterceptionFailure($error);
 					throw $error;
 				}
 			endif;
@@ -105,6 +120,185 @@
 				$this->failure ??= $this->connection->failure() ?? new \RuntimeException('Network collection lost its BiDi connection.');
 			endif;
 			return $this->failure;
+		}
+
+		/**
+		 * Install an ordered managed rule. The handler receives blocked event params and must
+		 * return NetworkDecision; browser reentry is forbidden. URL patterns use BiDi syntax,
+		 * not globs. Only beforeRequestSent is supported. First matching managed rule wins;
+		 * manual controllers must not also decide managed-owned requests. Capture is independent.
+		 */
+		public function intercept(callable $handler, array $urlPatterns = [], string $phase = 'beforeRequestSent'): string
+		{
+			$this->connection->assertCallable();
+			if ($phase !== 'beforeRequestSent') throw new \InvalidArgumentException('Only beforeRequestSent interception is supported.');
+			if ($this->interceptSubscription === null):
+				$this->interceptListener = $this->connection->listen('network.beforeRequestSent', $this->onRequest(...));
+				try {
+					$result = $this->connection->command('session.subscribe', ['events' => ['network.beforeRequestSent']]);
+					if (!is_string($result['subscription'] ?? null) || $result['subscription'] === '') throw new \RuntimeException('WebDriver BiDi did not return a subscription ID.');
+					$this->interceptSubscription = $result['subscription'];
+				} catch (\Throwable $error) {
+					$this->connection->unlisten($this->interceptListener);
+					$this->interceptListener = null;
+					throw $error;
+				}
+			endif;
+			\ThriveData\ThrivePHP\Test::active()?->watchBrowserNetwork($this);
+			$this->installing = true;
+			try {
+				$result = $this->connection->command('network.addIntercept', ['phases' => [$phase], 'urlPatterns' => array_values($urlPatterns)]);
+				$id = $result['intercept'] ?? null;
+				if (!is_string($id) || $id === ''):
+					$error = new \RuntimeException('WebDriver BiDi did not return an intercept ID; remote ownership is unknown.');
+					$this->recordInterceptionFailure($error);
+					throw $error;
+				endif;
+				$this->rules[$id] = \Closure::fromCallable($handler);
+			} finally {
+				$this->installing = false;
+				$events = $this->provisional;
+				$this->provisional = [];
+			}
+			foreach ($events as $event) $this->connection->decide($this->onRequest(...), $event);
+			return $id;
+		}
+
+		/** Remove a managed rule. Late paused requests remain owned and pass through without invoking its handler. */
+		public function removeIntercept(string $id): self
+		{
+			$this->connection->assertCallable();
+			if (isset($this->retired[$id])) return $this;
+			if (!array_key_exists($id, $this->rules)) throw new \InvalidArgumentException('Unknown managed network intercept: ' . $id);
+			try {
+				$this->removeRule($id);
+			} catch (\Throwable $error) {
+				$this->recordInterceptionFailure($error);
+				throw $error;
+			}
+			return $this;
+		}
+
+		private function removeRule(string $id, ?float $deadline = null): void
+		{
+			$this->rules[$id] = null;
+			$this->connection->command('network.removeIntercept', ['intercept' => $id], $deadline);
+			$this->retired[$id] = true;
+			unset($this->rules[$id]);
+		}
+
+		/**
+		 * Remove rules and settle known decisions under one command budget. Retain a passive
+		 * responder until session cleanup for late owned pauses. Cleanup is best-effort on
+		 * failure; deadline exhaustion invalidates BiDi, leaving HTTP quit available.
+		 * Throws retained NetworkError after cleanup, including on repeated calls.
+		 */
+		public function stopInterception(): self
+		{
+			$this->connection->assertCallable();
+			$deadline = $this->connection->deadline();
+			foreach ($this->rules as &$handler) $handler = null;
+			unset($handler);
+			foreach (array_keys($this->rules) as $id):
+				try {
+					$this->removeRule($id, $deadline);
+				} catch (\Throwable $error) {
+					$this->recordInterceptionFailure($error);
+					if (!$this->connection->active()) break;
+				}
+			endforeach;
+			if ($this->interceptSubscription !== null && $this->connection->active()):
+				try {
+					do {
+						$this->connection->drain($deadline);
+						$waiting = array_any($this->paused, fn ($pause) => $pause['inflight']);
+						if ($waiting) $this->connection->wait($deadline);
+					} while ($waiting);
+				} catch (\Throwable $error) {
+					$this->recordInterceptionFailure($error);
+				}
+			endif;
+			if ($this->interceptionError() !== null) throw $this->interceptionFailure;
+			return $this;
+		}
+
+		/** Inspect retained handler, resolution and cleanup failures without I/O. Capture failures are separate. */
+		public function interceptionError(): ?NetworkError
+		{
+			if ($this->interceptSubscription !== null && !$this->connection->active() && $this->transportFailure === null) {
+				$this->recordInterceptionFailure($this->connection->failure() ?? new \RuntimeException('Network interception lost its BiDi connection.'));
+			}
+			return $this->interceptionFailure;
+		}
+
+		/** Return one decision for an owned pause; unknown IDs are held only during an add command. */
+		private function onRequest(array $event): ?array
+		{
+			if (!($event['isBlocked'] ?? false)) return null;
+			$ids = $event['intercepts'] ?? [];
+			$owned = false;
+			$handler = null;
+			foreach ($this->rules as $id => $candidate):
+				if (!in_array($id, $ids, true)) continue;
+				$owned = true;
+				if ($candidate !== null) { $handler = $candidate; break; }
+			endforeach;
+			$owned = $owned || array_any($ids, fn ($id) => isset($this->retired[$id]));
+			if (!$owned):
+				if ($this->installing) $this->provisional[] = $event;
+				return null;
+			endif;
+			$token = ++$this->nextPause;
+			$request = $event['request']['request'];
+			$this->paused[$token] = ['requestId' => $request, 'redirectCount' => $event['redirectCount'], 'phase' => 'beforeRequestSent', 'inflight' => true];
+			$this->current[$request] = $token;
+			try {
+				$decision = $handler === null ? NetworkDecision::continueRequest() : $handler($event);
+				if (!$decision instanceof NetworkDecision) throw new \UnexpectedValueException('Network intercept handlers must return NetworkDecision.');
+			} catch (\Throwable $error) {
+				$this->recordInterceptionFailure($error, $this->paused[$token]);
+				$decision = NetworkDecision::fail();
+			}
+			return $this->resolve($token, $decision);
+		}
+
+		private function resolve(int $token, NetworkDecision $decision): array
+		{
+			$pause = $this->paused[$token];
+			$command = $decision->command($pause['requestId']);
+			$command['settle'] = function (array $reply) use ($token, $pause, $command): ?array {
+				if ($reply['type'] === 'success'):
+					unset($this->paused[$token]);
+					if (($this->current[$pause['requestId']] ?? null) === $token) unset($this->current[$pause['requestId']]);
+					return null;
+				endif;
+				$this->recordInterceptionFailure(new \RuntimeException('WebDriver BiDi ' . $reply['error'] . ': ' . $reply['message']), $pause);
+				if ($command['method'] !== 'network.failRequest' && $reply['error'] !== 'no such request'
+					&& ($this->current[$pause['requestId']] ?? null) === $token) return $this->resolve($token, NetworkDecision::fail());
+				$this->paused[$token]['inflight'] = false;
+				return null;
+			};
+			return $command;
+		}
+
+		private function recordInterceptionFailure(\Throwable $error, array $request = []): void
+		{
+			if ($request === [] && !$this->connection->active()):
+				if ($this->transportFailure !== null) return;
+				$this->transportFailure = $error = $this->connection->failure() ?? $error;
+			endif;
+			if ($this->interceptionFailure === null) $this->interceptionFailure = new NetworkError($error, $request);
+			else $this->interceptionFailure->add($error, $request);
+		}
+
+		/** @internal Session deletion releases remote pauses; retain history/errors but drop all local ownership. */
+		public function disconnect(): void
+		{
+			$this->detach();
+			if ($this->interceptListener !== null) $this->connection->unlisten($this->interceptListener);
+			$this->interceptListener = null;
+			$this->interceptSubscription = null;
+			$this->rules = $this->retired = $this->paused = $this->current = $this->provisional = [];
 		}
 
 		/** @internal Release local capture ownership at session end; history and errors remain readable. */

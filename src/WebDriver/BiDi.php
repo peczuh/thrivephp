@@ -41,13 +41,17 @@
 		}
 
 		/** Drain available input without waiting for new events; a continuous flood shares one deadline. */
-		public function drain(): void
+		public function drain(?float $deadline = null): void
 		{
 			$this->assertCallable();
-			$deadline = hrtime(true) / 1e9 + $this->timeout;
+			$capped = $deadline !== null;
+			$deadline = min($deadline ?? INF, $this->deadline());
 			do {
 				$this->tick();
-				if (hrtime(true) / 1e9 >= $deadline) throw new \RuntimeException('WebDriver BiDi collection timed out.');
+				if (hrtime(true) / 1e9 >= $deadline):
+					if ($capped) $this->expire();
+					throw new \RuntimeException('WebDriver BiDi collection timed out.');
+				endif;
 				if ($this->socket->buffered()) continue;
 				$read = [$this->socket->stream()];
 				$write = $except = [];
@@ -69,10 +73,11 @@
 		public function unlisten(int $id): void { unset($this->listeners[$id]); }
 
 		/** Run a command while continuing to dispatch events and responses to other pending commands. */
-		public function command(string $method, array $params = []): array
+		public function command(string $method, array $params = [], ?float $deadline = null): array
 		{
 			$this->assertCallable();
-			$id = $this->submit($method, $params, false);
+			if ($deadline !== null && hrtime(true) / 1e9 >= $deadline) $this->expire();
+			$id = $this->submit($method, $params, false, deadline: $deadline);
 			try {
 				while ($this->pending[$id]['response'] === null):
 					$this->tick();
@@ -97,6 +102,27 @@
 			return array_shift($this->events);
 		}
 
+		/** One absolute command budget, shared by managed teardown commands and waits. */
+		public function deadline(): float { return hrtime(true) / 1e9 + $this->timeout; }
+
+		/** @internal Guard live/replayed decisions and their settlers; only returned commands perform I/O. */
+		public function decide(callable $handler, array $params): void
+		{
+			$this->assertCallable();
+			$this->dispatching = true;
+			try {
+				$decision = $handler($params);
+				if ($decision !== null) $this->submit($decision['method'], $decision['params'] ?? [], true, $decision['settle'] ?? null);
+			} catch (\Throwable $error) {
+				// Registration replay runs outside tick(), but an unsent decision is equally fatal.
+				$this->failure = $error;
+				$this->socket = null;
+				throw $error;
+			} finally {
+				$this->dispatching = false;
+			}
+		}
+
 		/** Process a bounded batch so a busy browser cannot starve HTTP progress or deadlines. */
 		public function tick(): void
 		{
@@ -118,16 +144,9 @@
 					if ($type === 'event'):
 						if (!is_string($message['method'] ?? null) || !is_array($message['params'] ?? null)) throw new \RuntimeException('Invalid WebDriver BiDi event.');
 						$this->events[] = $message;
-						$this->dispatching = true;
-						try {
-							foreach ($this->listeners as [$method, $handler]):
-								if ($method !== $message['method']) continue;
-								$decision = $handler($message['params']);
-								if ($decision !== null) $this->submit($decision['method'], $decision['params'] ?? [], true);
-							endforeach;
-						} finally {
-							$this->dispatching = false;
-						}
+						foreach ($this->listeners as [$method, $handler]):
+							if ($method === $message['method']) $this->decide($handler, $message['params']);
+						endforeach;
 					else:
 						if (($type !== 'success' && $type !== 'error')
 							|| ($type === 'success' && !is_array($message['result'] ?? null))
@@ -139,8 +158,10 @@
 							throw new \RuntimeException('WebDriver BiDi response has an unexpected command ID.');
 						endif;
 						if ($this->pending[$id]['internal']):
+							$settle = $this->pending[$id]['settle'];
 							unset($this->pending[$id]);
-							$this->result($message);
+							if ($settle !== null) $this->decide($settle, $message);
+							else $this->result($message);
 						else:
 							$this->pending[$id]['response'] = $message;
 						endif;
@@ -166,8 +187,7 @@
 			foreach ($this->pending as $pending) $deadline = min($deadline, $pending['deadline']);
 			$remaining = $deadline - hrtime(true) / 1e9;
 			if ($remaining <= 0):
-				$this->socket = null;
-				throw new \RuntimeException('WebDriver BiDi operation timed out.');
+				$this->expire();
 			endif;
 			$read = [$this->socket->stream()];
 			$write = $this->socket->writing() ? $read : [];
@@ -180,12 +200,12 @@
 			endif;
 		}
 
-		private function submit(string $method, array $params, bool $internal): int
+		private function submit(string $method, array $params, bool $internal, ?callable $settle = null, ?float $deadline = null): int
 		{
 			$this->requireConnection();
 			$id = ++$this->nextId;
 			$this->socket->enqueue(json_encode(['id' => $id, 'method' => $method, 'params' => (object)$params], JSON_THROW_ON_ERROR));
-			$this->pending[$id] = ['deadline' => hrtime(true) / 1e9 + $this->timeout, 'internal' => $internal, 'response' => null];
+			$this->pending[$id] = ['deadline' => min($deadline ?? INF, $this->deadline()), 'internal' => $internal, 'response' => null, 'settle' => $settle];
 			return $id;
 		}
 
@@ -200,6 +220,13 @@
 			foreach ($this->pending as $pending):
 				if ($pending['response'] === null && hrtime(true) / 1e9 >= $pending['deadline']) throw new \RuntimeException('WebDriver BiDi operation timed out.');
 			endforeach;
+		}
+
+		/** Expired coordinated waits cannot leave ambiguous pending replies on a reusable socket. */
+		private function expire(): never
+		{
+			$this->socket = null;
+			throw $this->failure = new \RuntimeException('WebDriver BiDi operation timed out.');
 		}
 
 		private function requireConnection(): void

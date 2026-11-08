@@ -31,6 +31,8 @@ class Test
     private array $networkCollectors = [];
     /** Attempt ID => collector ID => reported failure. Retries must report a persistently broken collector again. */
     private array $networkErrors = [];
+    /** Attempt ID => collector ID => number of interception failures already reported. */
+    private array $interceptionCursor = [];
     private ?array $failureCapture = null;
     private array $capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
     private bool $bootstrapped = false;
@@ -270,12 +272,13 @@ class Test
         foreach ($this->networkCollectors as $id => $network) {
             try {
                 $network->collect();
-                if ($network->captureError() !== null) throw $network->captureError();
             } catch (\Throwable $error) {
-                if (!isset($this->networkErrors[$this->attemptId()][$id])) {
-                    $this->executionError($error, 'Browser network collection');
-                }
+                if ($network->captureError() === null && $network->interceptionError() === null) $this->executionError($error, 'Browser network collection');
             }
+            if ($network->captureError() !== null && !isset($this->networkErrors[$this->attemptId()][$id])) {
+                $this->executionError($network->captureError(), 'Browser network collection');
+            }
+            if ($network->interceptionError() !== null) $this->executionError($network->interceptionError());
         }
     }
 
@@ -350,6 +353,24 @@ class Test
     }
 
     private function executionError(\Throwable $error, string $prefix = 'Execution error'): void
+    {
+        foreach ($this->networkCollectors as $id => $network) {
+            $interception = $network->interceptionError();
+            $failures = $interception?->failures() ?? [];
+            if ($error !== $interception && !array_any($failures, fn ($failure) => $failure['error'] === $error)) continue;
+            foreach ($failures as $index => $failure) {
+                if (($this->interceptionCursor[$this->attemptId()][$id] ?? 0) > $index) continue;
+                $this->recordExecutionError($failure['error'], 'Browser network interception'
+                    . ($failure['requestId'] !== null ? ' (' . $failure['requestId'] . ', hop ' . $failure['redirectCount'] . ')' : ''));
+                $this->interceptionCursor[$this->attemptId()][$id] = $index + 1;
+            }
+            return;
+        }
+        $this->recordExecutionError($error, $prefix);
+    }
+
+    /** Record each interception occurrence separately, even when handlers throw the same exception object. */
+    private function recordExecutionError(\Throwable $error, string $prefix): void
     {
         // An operation or its finally checkpoint can report the same capture failure first.
         $reported = false;
@@ -799,7 +820,7 @@ class Test
                 $this->ordinal = 0;
                 $this->screenshotSource = null;
                 $this->logBrowsers = $this->logErrors = [];
-                $this->networkCollectors = $this->networkErrors = [];
+                $this->networkCollectors = $this->networkErrors = $this->interceptionCursor = [];
                 $this->failureCapture = null;
                 $attemptStarted = hrtime(true);
                 $this->event(['type' => 'suite_started', 'file' => $this->diagnostic->path($path)]);
@@ -858,7 +879,7 @@ class Test
         } finally {
             $this->screenshotSource = null;
             $this->logBrowsers = $this->logErrors = [];
-            $this->networkCollectors = $this->networkErrors = [];
+            $this->networkCollectors = $this->networkErrors = $this->interceptionCursor = [];
             $this->failureCapture = null;
             self::$active = $previous;
             restore_error_handler();

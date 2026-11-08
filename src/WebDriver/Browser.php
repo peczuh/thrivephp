@@ -827,7 +827,7 @@
 			return $this->connection;
 		}
 
-		/** Return this session's network observer. First access requires BiDi; capture starts explicitly. */
+		/** Return this session's network controller. Requires BiDi; capture and interception start independently. */
 		public function network(): Network
 		{
 			$this->connection?->assertCallable();
@@ -954,7 +954,7 @@
 				}
 			} finally {
 				$this->detachLogs();
-				$this->network?->detach();
+				$this->network?->disconnect();
 				$this->connection?->disconnect();
 				$this->connection = null;
 			}
@@ -978,7 +978,7 @@
 		{
 			$this->sessionId = null;
 			$this->detachLogs();
-			$this->network?->detach();
+			$this->network?->disconnect();
 			$this->connection?->disconnect();
 			$this->connection = null;
 			$this->currentWindow = null;

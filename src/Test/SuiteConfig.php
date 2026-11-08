@@ -20,6 +20,8 @@ class SuiteConfig
         public bool $browserLogs = false,
         /** Require BiDi network metadata capture before browser suite setup; unavailable support fails setup. */
         public bool $browserNetwork = false,
+        /** Request BiDi for explicit features such as interception, without enabling capture. */
+        public bool $bidi = false,
     ) {}
 
     /** Reject misspelled options on every supported PHP version. */

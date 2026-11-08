@@ -22,7 +22,7 @@ abstract class SuiteBrowser extends Suite
         $this->driver = $this->createDriver($config);
         $this->browser = $this->driver->browser(
             headless: $this->test->headless(),
-            bidi: $config->browserLogs || $config->browserNetwork,
+            bidi: $config->bidi || $config->browserLogs || $config->browserNetwork,
             timeout: $config->timeout,
             capabilities: $config->capabilities,
             waitTimeout: $config->waitTimeout,
