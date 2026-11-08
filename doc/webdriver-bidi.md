@@ -114,8 +114,11 @@ after a lost connection, retained entries remain readable. A successful restart
 clears the prior capture error, retaining history. Session cleanup performs final
 collection before deletion, but events generated after that collection or during
 remote shutdown are not guaranteed. Explicit BiDi is required; there is no
-protocol fallback. Automatic suite network reporting and managed interception
-are subsequent increments.
+protocol fallback. Set `SuiteConfig::$browserNetwork = true` for automatic suite
+capture and console/JSON/HTML reporting. Explicit capture started under an active
+test also reports events, with each event attributed to the attempt, phase, hook,
+and step where it was observed. See [network reporting](testing.md#browser-network-observation).
+Managed interception is a subsequent increment.
 
 ## Transport and dispatch
 

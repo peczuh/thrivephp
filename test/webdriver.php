@@ -19,6 +19,10 @@ use ThriveData\ThrivePHP\WebDriver\Screenshot;
 use ThriveData\ThrivePHP\WebDriver\Snapshot;
 use ThriveData\ThrivePHP\WebDriver\PDF;
 use ThriveData\ThrivePHP\Test;
+use ThriveData\ThrivePHP\Test\Suite;
+use ThriveData\ThrivePHP\Test\SuiteBefore;
+use ThriveData\ThrivePHP\Test\SuiteAfter;
+use ThriveData\ThrivePHP\Test\Test as TestCase;
 
 /** Observe protocol assertion results independently of the runner's stopping behavior. */
 class RecordingBrowser extends Browser
@@ -1736,6 +1740,128 @@ scenario('network observation requires explicit BiDi', function ($listener) {
 }, function ($url) {
 	$browser = new Browser($url, 'firefox');
 	expectError(fn () => $browser->network(), 'No active WebDriver BiDi');
+	$browser->quit();
+});
+
+scenario('network reports preserve actual observation attempts across a case retry', function ($listener) use ($networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'network']]);
+	foreach ([2 => 'beforeRequestSent', 3 => 'responseCompleted'] as $id => $method):
+		bidiRequest($ws, $id, 'fixture.attempt');
+		bidiReply($ws, networkEvent($method, 'spanning', extra: $id === 3 ? ['response' => ['status' => 404, 'headers' => []]] : []));
+		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	endforeach;
+	bidiRequest($ws, 4, 'fixture.cleanup');
+	bidiReply($ws, networkEvent('fetchError', 'cleanup', extra: ['errorText' => 'diagnostic only']));
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network()->startCapture();
+	[$status, $output, $record] = runChecks(['suite' => function ($test) use ($browser) {
+		return new class($test, $browser) extends Suite {
+			private int $attempt = 0;
+			public function __construct($test, private Browser $browser) { parent::__construct($test); }
+			#[SuiteBefore]
+			public function setup(): void { $this->browser->network()->startCapture(); }
+			#[TestCase('Retry with an unfinished request', retry: 1)]
+			public function body(): void {
+				$this->browser->command('fixture.attempt');
+				$this->test->assert(++$this->attempt === 2, 'second attempt passes');
+			}
+			#[SuiteAfter]
+			public function cleanup(): void { $this->browser->command('fixture.cleanup'); $this->browser->quit(); }
+		};
+	}]);
+	$suite = $record['suites'][0]['attempts'][0];
+	$attempts = $suite['cases'][0]['attempts'];
+	verify($status === 0 && count($attempts) === 2 && $attempts[0]['status'] === 'FAIL' && $attempts[1]['status'] === 'PASS', 'Network diagnostics changed retry outcomes.');
+	foreach ($attempts as $index => $attempt):
+		verify(count($attempt['browserNetwork']) === 1, 'Network event duplicated or moved between attempts.');
+		$entry = $attempt['browserNetwork'][0];
+		verify($entry['phase'] === 'test' && $entry['hook'] === null && $entry['stepId'] === $attempt['steps'][0]['id'], 'Network event lost observation attribution.');
+		verify($entry['event'] === networkEvent($index ? 'responseCompleted' : 'beforeRequestSent', 'spanning', extra: $index ? ['response' => ['status' => 404, 'headers' => []]] : []), 'Raw headers, byte values or event envelope changed in report.');
+	endforeach;
+	verify(count($suite['browserNetwork']) === 1 && $suite['browserNetwork'][0]['phase'] === 'suite-teardown'
+		&& $suite['browserNetwork'][0]['hook'] === 'SuiteAfter cleanup', 'Cleanup event lost suite attribution.');
+	verify(str_contains($output, 'NETWORK') && str_contains($output, 'HTTP 404') && str_contains($output, 'diagnostic only'), 'Console omitted network diagnostics.');
+	verify(count($network->requests()[0]['events']) === 2 && $network->captureError() === null, 'Reporting consumed retained history or failed capture.');
+});
+
+foreach (['propagated', 'swallowed', 'stop'] as $mode):
+	scenario('network capture failure reports once per retry: ' . $mode, function ($listener) use ($networkMethods, $mode) {
+		createSession($listener, bidi: true);
+		$ws = upgrade($listener);
+		bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+		bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'network']]);
+		if ($mode === 'stop'):
+			bidiRequest($ws, 2, 'session.unsubscribe', ['subscriptions' => ['network']]);
+			bidiReply($ws, ['type' => 'error', 'id' => 2, 'error' => 'invalid argument', 'message' => 'stop failed']);
+		else:
+			bidiRequest($ws, 2, 'fixture.failure');
+			bidiReply($ws, ['type' => 'broken']);
+		endif;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		fclose($ws);
+	}, function ($url) use ($mode) {
+		$browser = new Browser($url, 'firefox', bidi: true);
+		$browser->network()->startCapture();
+		[$status, , $record] = runChecks(['suite' => function ($test) use ($browser, $mode) {
+			return new class($test, $browser, $mode) extends Suite {
+				private int $attempt = 0;
+				public function __construct($test, private Browser $browser, private string $mode) { parent::__construct($test); }
+				#[SuiteBefore]
+				public function setup(): void { $this->browser->network()->startCapture(); }
+				#[TestCase('Persistent capture failure', retry: 1)]
+				public function body(): void {
+					if (++$this->attempt !== 1) return;
+					if ($this->mode === 'stop') { $this->browser->network()->stopCapture(); return; }
+					try { $this->browser->command('fixture.failure'); }
+					catch (Throwable $error) { if ($this->mode !== 'swallowed') throw $error; }
+				}
+				#[SuiteAfter]
+				public function cleanup(): void { $this->browser->quit(); }
+			};
+		}]);
+		$suite = $record['suites'][0]['attempts'][0];
+		$attempts = $suite['cases'][0]['attempts'];
+		verify($status === 1 && count($attempts) === 2, 'Persistent failure did not trigger retry.');
+		foreach ($attempts as $attempt) verify($attempt['status'] === 'FAIL' && count($attempt['errors']) === 1, 'Capture failure duplicated or disappeared in retry.');
+		verify(count($suite['errors']) === 1, 'Case suppression leaked into suite teardown.');
+		if ($mode !== 'stop') verify($attempts[0]['steps'][0]['error'] !== null, 'Attempt deduplication erased failed step details.');
+	});
+endforeach;
+
+scenario('network reporting resumes after recovery and retains a distinct later operation failure', function ($listener) use ($networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'first']]);
+	bidiRequest($ws, 2, 'session.unsubscribe', ['subscriptions' => ['first']]);
+	bidiReply($ws, ['type' => 'error', 'id' => 2, 'error' => 'invalid argument', 'message' => 'first stop failed']);
+	bidiRequest($ws, 3, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, networkEvent('beforeRequestSent', 'recovered'));
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => ['subscription' => 'second']]);
+	bidiRequest($ws, 4, 'session.unsubscribe', ['subscriptions' => ['second']]);
+	bidiReply($ws, ['type' => 'error', 'id' => 4, 'error' => 'invalid argument', 'message' => 'second stop failed']);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	[$status, , $record] = runChecks(['check' => function ($test) use ($browser) {
+		$network = $browser->network()->startCapture();
+		expectError(fn () => $network->stopCapture(), 'first stop failed');
+		$test->assert(true, 'checkpoint reports swallowed failure');
+		$network->startCapture();
+		verify($network->captureError() === null, 'Successful restart retained failure.');
+		$network->stopCapture();
+	}]);
+	$attempt = $record['suites'][0]['attempts'][0];
+	verify($status === 1 && count($attempt['errors']) === 2, 'Recovery hid distinct failure or duplicated checkpoints.');
+	verify(count($attempt['browserNetwork']) === 1 && $attempt['browserNetwork'][0]['event']['params']['request']['request'] === 'recovered', 'Restart did not resume reporting.');
 	$browser->quit();
 });
 

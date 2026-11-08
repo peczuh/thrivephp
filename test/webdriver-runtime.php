@@ -581,7 +581,7 @@ try {
 		check(events($log) === [], 'Skipped/filtered browser suite started a driver.');
 	});
 
-	foreach (['config', 'exit', 'session-error', 'case', 'cleanup', 'delete-error'] as $failure):
+	foreach (['config', 'exit', 'session-error', 'network-support', 'case', 'cleanup', 'delete-error'] as $failure):
 		scenario("SuiteBrowser cleans up after $failure failure", function () use ($failure, $log) {
 			if (in_array($failure, ['exit', 'session-error', 'delete-error'], true)) putenv('WEBDRIVER_FIXTURE_MODE=' . $failure);
 			$suite = null;
@@ -594,6 +594,7 @@ try {
 						protected function configure(SuiteConfig $config): void
 						{
 							if ($this->failure === 'config') $config->browswer = 'safari';
+							if ($this->failure === 'network-support') $config->browserNetwork = true;
 						}
 
 						#[Test('browser assertion')]
@@ -619,7 +620,7 @@ try {
 			check($status === 1 && str_contains($output, 'PASS  SUITE next') && in_array('cleanup', $suite->trace, true), $output);
 			check($suite->process === null || !$suite->process->running(), 'Failure leaked a driver.');
 			check(!isset($suite->browser) || !$suite->browser->active(), 'Failure leaked a browser session.');
-			if (in_array($failure, ['config', 'exit', 'session-error'], true)):
+			if (in_array($failure, ['config', 'exit', 'session-error', 'network-support'], true)):
 				check(str_contains($output, 'Cases: 0 passed, 0 failed, 1 skipped') && $suite->trace === ['cleanup'], $output);
 			else:
 				check(count(array_filter(events($log), fn($event) => ($event['method'] ?? '') === 'DELETE')) === 1, 'Browser cleanup was skipped or repeated.');

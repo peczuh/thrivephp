@@ -56,6 +56,17 @@ class ReportBrowser extends Browser
     }
 }
 
+/** Simulate a network event delivered by the shared dispatcher at every log checkpoint. */
+class NetworkBoundaryBrowser extends ReportBrowser
+{
+    public function collectLogs(): void
+    {
+        Runner::active()?->browserNetwork('boundary-session', ['type' => 'event', 'method' => 'network.beforeRequestSent',
+            'params' => ['request' => ['request' => 'boundary', 'method' => 'GET',
+                'url' => 'https://example.test/</script><script>window.networkInjected=true</script>'], 'redirectCount' => 0]]);
+    }
+}
+
 /** A helper call must retain this source location rather than the owning case invocation. */
 function reportHelper(Element $element): void
 {
@@ -71,7 +82,8 @@ Settings::$data['test']['screenshots']['suites'] = 'always';
         #[SuiteBefore]
         public function startBrowser(): void
         {
-            $this->reference = $this->browser = new ReportBrowser();
+            $this->reference = $this->browser = new NetworkBoundaryBrowser();
+            $this->test->watchBrowserLogs($this->browser);
             $this->test->browserSession(['sessionId' => 'session-1', 'capabilities' => [
                 'browserName' => 'fixture', 'browserVersion' => '123.4', 'platformName' => 'test-platform',
             ]], fn () => $this->browser->screenshot());
@@ -131,6 +143,9 @@ check(array_column($second['steps'], 'label') === ['assert', 'find', 'textEquals
 check(array_column($suite['steps'], 'phase') === ['suite-setup', 'suite-teardown'], 'Suite hook steps collided.');
 check($first['steps'][0]['phase'] === 'case-setup' && end($first['steps'])['phase'] === 'case-teardown', 'Case phase attribution failed.');
 check($first['steps'][2]['phase'] === 'test' && $second['steps'][2]['phase'] === 'test', 'Test phase was not renamed.');
+check($first['browserNetwork'][0]['phase'] === 'case-setup' && $second['browserNetwork'][0]['phase'] === 'case-setup'
+    && end($suite['browserNetwork'])['phase'] === 'suite-teardown', 'Network boundary observation inherited the previous attempt phase.');
+check(array_any($first['browserNetwork'], fn ($entry) => $entry['phase'] === 'case-teardown' && $entry['hook'] === 'CaseAfter clean'), 'Case teardown lost its observation context.');
 check($record['environment']['root'] === realpath(PATH_ROOT)
     && $first['steps'][2]['location']['file'] === 'test/test-report.php'
     && $record['environment']['root'] . '/' . $first['steps'][2]['location']['file'] === __FILE__
@@ -284,6 +299,8 @@ $attempts = 0;
     return new #[Test('Retry suite', retry: 1)] class($test, $attempts) extends \ThriveData\ThrivePHP\Test\Suite {
         private int $caseAttempt = 0;
         public function __construct(Runner $test, private int $suiteAttempt) { parent::__construct($test); }
+        #[SuiteBefore]
+        public function observe(): void { $this->test->watchBrowserLogs(new NetworkBoundaryBrowser()); }
         #[Test('Retry case', retry: 1)]
         public function body(): void { $this->test->assert($this->suiteAttempt === 2 && ++$this->caseAttempt === 2, 'retry result'); }
     };
@@ -301,6 +318,8 @@ $ids = [];
 foreach ($attempts as $attempt) foreach ($attempt['cases'][0]['attempts'] as $case) $ids[] = $case['steps'][0]['id'];
 check(count(array_unique($ids)) === 4, 'Retry step identities collided.');
 foreach ($attempts as $attempt) foreach ($attempt['cases'][0]['attempts'] as $case) {
+    check($case['browserNetwork'][0]['phase'] === 'case-setup' && $case['browserNetwork'][0]['hook'] === null,
+        'Retry checkpoint retained the preceding attempt phase or hook.');
     $step = $case['steps'][0];
     check($step['error'] === null && ($step['status'] === 'PASS'
         || ($step['assertions'][0]['class'] === 'AssertionFailure' && !isset($step['assertions'][0]['stack']))),

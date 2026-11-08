@@ -28,6 +28,9 @@ class Test
     /** Capturing sessions in the current suite attempt, including manually owned browsers. */
     private array $logBrowsers = [];
     private array $logErrors = [];
+    private array $networkCollectors = [];
+    /** Attempt ID => collector ID => reported failure. Retries must report a persistently broken collector again. */
+    private array $networkErrors = [];
     private ?array $failureCapture = null;
     private array $capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
     private bool $bootstrapped = false;
@@ -164,6 +167,7 @@ class Test
             return $operation();
         }
         $this->collectBrowserLogs();
+        $this->collectBrowserNetwork();
         $started = hrtime(true);
         $this->failureCapture = null;
         $this->step = ['id' => $this->attemptId() . '/s' . ++$this->ordinal, 'label' => $label,
@@ -184,6 +188,7 @@ class Test
         } finally {
             try {
                 $this->collectBrowserLogs();
+                $this->collectBrowserNetwork();
                 if ($this->step['status'] === 'RUN') {
                     $this->step['status'] = 'PASS';
                 }
@@ -241,6 +246,35 @@ class Test
             } catch (\Throwable $error) {
                 $this->logErrors[$id] = true;
                 $this->executionError($error, 'Browser log collection');
+            }
+        }
+    }
+
+    /** @internal Register explicit or suite-managed capture without taking session ownership. */
+    public function watchBrowserNetwork(WebDriver\Network $network): void
+    {
+        $this->networkCollectors[spl_object_id($network)] = $network;
+    }
+
+    /** Record each event where observed, even when its request spans attempts. */
+    public function browserNetwork(string $sessionId, array $event): void
+    {
+        $this->event(['type' => 'browser_network', 'network' => ['event' => $event,
+            'sessionId' => $sessionId, 'observedAt' => Test\Record::now(),
+            'phase' => $this->phase, 'hook' => $this->hook, 'stepId' => $this->step['id'] ?? null]]);
+    }
+
+    /** Keep collecting after errors so successful capture restarts resume reporting. */
+    private function collectBrowserNetwork(): void
+    {
+        foreach ($this->networkCollectors as $id => $network) {
+            try {
+                $network->collect();
+                if ($network->captureError() !== null) throw $network->captureError();
+            } catch (\Throwable $error) {
+                if (!isset($this->networkErrors[$this->attemptId()][$id])) {
+                    $this->executionError($error, 'Browser network collection');
+                }
             }
         }
     }
@@ -317,6 +351,14 @@ class Test
 
     private function executionError(\Throwable $error, string $prefix = 'Execution error'): void
     {
+        // An operation or its finally checkpoint can report the same capture failure first.
+        $reported = false;
+        foreach ($this->networkCollectors as $id => $network) {
+            if ($network->captureError() !== $error) continue;
+            $reported = $reported || ($this->networkErrors[$this->attemptId()][$id] ?? null) === $error;
+            $this->networkErrors[$this->attemptId()][$id] = $error;
+        }
+        if ($reported) return;
         $this->failures[] = $prefix . ': ' . get_class($error) . ': ' . $error->getMessage();
         $this->event(['type' => 'error', 'error' => $this->diagnostic->error($error) + ['phase' => $this->phase, 'hook' => $this->hook]]);
     }
@@ -757,6 +799,7 @@ class Test
                 $this->ordinal = 0;
                 $this->screenshotSource = null;
                 $this->logBrowsers = $this->logErrors = [];
+                $this->networkCollectors = $this->networkErrors = [];
                 $this->failureCapture = null;
                 $attemptStarted = hrtime(true);
                 $this->event(['type' => 'suite_started', 'file' => $this->diagnostic->path($path)]);
@@ -801,6 +844,7 @@ class Test
                     $this->executionError($error);
                 }
                 $this->collectBrowserLogs();
+                $this->collectBrowserNetwork();
                 $failed = $casesFailed > 0 || $this->failures;
                 $this->event(['type' => 'suite_attempt_finished', 'status' => $failed ? 'FAIL' : ($skipped ? 'SKIP' : ($filtered ? 'FILTERED' : 'PASS')),
                     'duration' => (hrtime(true) - $attemptStarted) / 1e9, 'maxAttempts' => $retry + 1]);
@@ -814,6 +858,7 @@ class Test
         } finally {
             $this->screenshotSource = null;
             $this->logBrowsers = $this->logErrors = [];
+            $this->networkCollectors = $this->networkErrors = [];
             $this->failureCapture = null;
             self::$active = $previous;
             restore_error_handler();
@@ -908,6 +953,8 @@ class Test
                 do {
                     $attempt++;
                     $this->caseAttempt = $attempt;
+                    $this->phase = 'case-setup';
+                    $this->hook = null;
                     $this->ordinal = 0;
                     $this->failureCapture = null;
                     $attemptStarted = hrtime(true);
@@ -935,6 +982,7 @@ class Test
                         }
                     }
                     $this->collectBrowserLogs();
+                    $this->collectBrowserNetwork();
                     $this->event(['type' => 'case_attempt_finished', 'status' => $this->failures ? 'FAIL' : 'PASS',
                         'duration' => (hrtime(true) - $attemptStarted) / 1e9]);
                     if (!$this->failures || $attempt > $case['retry']) {
@@ -959,6 +1007,8 @@ class Test
             }
         } finally {
             $this->caseMethod = null;
+            $this->phase = 'suite-teardown';
+            $this->hook = null;
             $this->ordinal = $suiteOrdinal;
             $this->failureCapture = null;
             [$this->passed, $this->failed, $this->failures] = $suiteState;
@@ -974,6 +1024,7 @@ class Test
     private function runHooks(Test\Suite $suite, array $hooks, string $phase, bool $teardown = false): bool
     {
         $this->collectBrowserLogs();
+        $this->collectBrowserNetwork();
         $this->phase = match ($phase) {
             'SuiteBefore' => 'suite-setup', 'CaseBefore' => 'case-setup',
             'CaseAfter' => 'case-teardown', 'SuiteAfter' => 'suite-teardown',
@@ -985,6 +1036,7 @@ class Test
             $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name']]);
             $completed = $this->invokeSuiteMethod($suite, $hook['method']);
             $this->collectBrowserLogs();
+            $this->collectBrowserNetwork();
             $this->hook = null;
             $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name'] . ' finished',
                 'duration' => (hrtime(true) - $started) / 1e9]);

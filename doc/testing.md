@@ -225,6 +225,37 @@ See [BiDi capture, browser support, and transport limitations](webdriver-bidi.md
 for lifecycle details, event attribution, cURL scheduling, and upstream PHP API
 improvements that would benefit this implementation.
 
+### Browser network observation
+
+Set `$config->browserNetwork = true` to capture network metadata before browser
+suite setup. It works independently of `$config->browserLogs`; either option
+requests BiDi. Unavailable requested capture fails setup.
+
+Console, JSON, and HTML report the same observation records. Each attempt's
+`browserNetwork` array contains the protocol `event`, `sessionId`, `observedAt`,
+`phase`, nullable `hook`, and nullable `stepId`. Events stay in the attempt where
+they were observed, even when a request spans retries. HTTP error statuses and
+`network.fetchError` are diagnostic; tests can assert against `requests()` when
+they want those outcomes to fail.
+
+Records include raw URLs, headers, cookies, duplicate header values, and protocol
+byte values. Body contents are not collected. The HTML Network tab shows event
+summaries and expandable raw records. Observation labels do not claim causation
+or a complete request history.
+
+Explicit `$browser->network()->startCapture()` under an active test also enables
+reporting. Repeating it registers an already-running collector with that test
+without another subscription. Stopping capture retains earlier report entries.
+Capture failures fail each affected attempt, with one passive collection
+diagnostic per collector per attempt. An operation and its checkpoint do not
+duplicate the same failure; failed steps still retain their own error details.
+A successful capture restart resumes collection without erasing earlier errors.
+
+Run `php -d short_open_tag=1 test/test-browser-network.php chrome 2` or substitute
+`firefox` and `1` for native serial/parallel coverage. The test also opens the
+generated HTML report and checks the Network tab, raw disclosures, and inert
+protocol text.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document

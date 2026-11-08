@@ -233,6 +233,29 @@ try {
         'Inherited diagnostics failed: exit=' . $code . ', stdout=' . strlen($out) . ', stderr=' . strlen($err) . ', tail=' . substr($out, -1000));
     echo "PASS: multi-megabyte TCP results and inherited stdout/stderr do not block or lose bytes\n";
 
+    $networks = [];
+    foreach ([1, 2] as $workers) {
+        [$code, $out, $err, , $record] = runParallel(['a' => 'network'], ['workers' => $workers]);
+        check($code === 0 && $err === '', $out . $err);
+        $events = $record['suites'][0]['attempts'][0]['cases'][1]['attempts'][0]['browserNetwork'];
+        check(count($events) === 2 && $events[0]['phase'] === 'test' && $events[0]['hook'] === null
+            && $events[0]['stepId'] === null && $events[0]['sessionId'] === 'worker-session', 'Worker attribution changed.');
+        $headers = $events[0]['event']['params']['request']['headers'];
+        check($headers[0]['value']['value'] === str_repeat('n', 131072) && $headers[1]['value'] === ['type' => 'base64', 'value' => '/w==']
+            && array_column($headers, 'name') === ['X-Duplicate', 'X-Duplicate'], 'Large network event lost bytes or duplicate headers.');
+        check($events[1]['event']['params'] === ['futureField' => ['retained' => true]], 'Worker validation rewrote raw protocol fields.');
+        foreach ($events as &$event) unset($event['observedAt']);
+        unset($event);
+        $networks[] = $events;
+    }
+    check($networks[0] === $networks[1], 'Serial/parallel network records differ.');
+    foreach (['type', 'method', 'params'] as $field) {
+        [$code, $out, $err, , $record] = runParallel(['a' => 'network-invalid-' . $field]);
+        check($code === 1 && str_contains($out, 'Invalid browser network event.'), $out . $err);
+        check(count($record['suites'][0]['attempts'][0]['cases'][1]['attempts'][0]['browserNetwork']) === 1, 'Malformed event discarded earlier valid network records.');
+    }
+    echo "PASS: serial/parallel network records retain large raw payloads and reject malformed envelopes\n";
+
     [$code, $out, $err] = runParallel(['a' => 'normal'], ['workers' => 2], ['TEST_BROWSER' => 'safari']);
     check($code === 1 && str_contains($out, 'does not support parallel') && !str_contains($out, 'RUN   SUITE a'), $out . $err);
     [$code, $out, $err] = runParallel(['a' => 'normal'], environment: ['TEST_BROWSER' => 'safaripreview']);

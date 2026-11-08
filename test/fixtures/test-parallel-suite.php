@@ -75,6 +75,23 @@ $suite = new class($test) extends Suite {
             case 'large':
                 $this->test->verify(false, 'LARGE-BEGIN' . str_repeat('x', 2 * 1024 * 1024) . 'LARGE-END');
                 break;
+            case 'network':
+            case 'network-invalid-type':
+            case 'network-invalid-method':
+            case 'network-invalid-params':
+                $entry = ['type' => 'event', 'method' => 'network.responseCompleted', 'params' => [
+                    'request' => ['request' => 'worker-request', 'method' => 'GET', 'url' => 'https://example.test/',
+                        'headers' => [['name' => 'X-Duplicate', 'value' => ['type' => 'string', 'value' => str_repeat('n', 131072)]],
+                            ['name' => 'X-Duplicate', 'value' => ['type' => 'base64', 'value' => '/w==']]]],
+                    'response' => ['status' => 404], 'redirectCount' => 1, 'futureField' => ['retained' => true]]];
+                $this->test->browserNetwork('worker-session', $entry);
+                if ($this->mode === 'network') {
+                    $entry['params'] = ['futureField' => ['retained' => true]];
+                } else {
+                    $entry[substr($this->mode, strlen('network-invalid-'))] = null;
+                }
+                $this->test->browserNetwork('worker-session', $entry);
+                break;
             case 'diagnostics':
                 fwrite(STDOUT, 'OUT-BEGIN' . str_repeat('o', 1024 * 1024) . 'OUT-END');
                 fwrite(STDERR, 'ERR-BEGIN' . str_repeat('e', 1024 * 1024) . 'ERR-END');

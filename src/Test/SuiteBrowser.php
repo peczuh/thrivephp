@@ -22,7 +22,7 @@ abstract class SuiteBrowser extends Suite
         $this->driver = $this->createDriver($config);
         $this->browser = $this->driver->browser(
             headless: $this->test->headless(),
-            bidi: $config->browserLogs,
+            bidi: $config->browserLogs || $config->browserNetwork,
             timeout: $config->timeout,
             capabilities: $config->capabilities,
             waitTimeout: $config->waitTimeout,
@@ -31,6 +31,7 @@ abstract class SuiteBrowser extends Suite
         );
         $this->test->browserSession($this->browser->session(), fn () => $this->browser->screenshot());
         if ($config->browserLogs) $this->browser->startLogCapture();
+        if ($config->browserNetwork) $this->browser->network()->startCapture();
     }
 
     /** Driver creation is overridable so protocol fixtures can exercise the real lifecycle. */

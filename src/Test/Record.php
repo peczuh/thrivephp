@@ -47,7 +47,7 @@ final class Record
     private static function attempt(string $id, int $index, string $time): array
     {
         return ['id' => $id, 'index' => $index, 'status' => 'RUN', 'startedAt' => $time,
-            'endedAt' => null, 'duration' => 0, 'steps' => [], 'errors' => [], 'screenshots' => [], 'browserLogs' => [],
+            'endedAt' => null, 'duration' => 0, 'steps' => [], 'errors' => [], 'screenshots' => [], 'browserLogs' => [], 'browserNetwork' => [],
             'assertionsPassed' => 0, 'assertionsFailed' => 0];
     }
 
@@ -98,6 +98,9 @@ final class Record
         switch ($type) {
             case 'browser_log':
                 $node['browserLogs'][] = $event['log'];
+                break;
+            case 'browser_network':
+                $node['browserNetwork'][] = $event['network'];
                 break;
             case 'session':
                 $attempt['session'] = $event['session'];

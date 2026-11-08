@@ -515,8 +515,33 @@
                 }
             }
 
+            function browserNetwork(parent, records) {
+                parent.append(element('p', 'muted', 'Events were observed during this attempt. Requests may span attempts; phase, hook, and step labels describe observation context, not cause.'));
+                for (const record of records) {
+                    const event = record.event;
+                    const params = event.params;
+                    const box = element('div', 'assertion');
+                    box.append(element('h3', 'assertion-title', event.method));
+                    fields(box, [
+                        ['HTTP method', params.request?.method], ['URL', params.request?.url],
+                        ['HTTP status', params.response?.status], ['Network error', params.errorText],
+                        ['Request ID', params.request?.request], ['Redirect count', params.redirectCount],
+                        ['Session ID', record.sessionId],
+                        ['Observed at', present(record.observedAt) ? date(record.observedAt) : null],
+                        ['Observed during phase', record.phase], ['Observed during hook', record.hook],
+                        ['Observed during step', record.stepId],
+                    ]);
+                    const details = element('details', 'stack');
+                    const raw = element('pre', '', record);
+                    raw.tabIndex = 0;
+                    details.append(element('summary', '', 'Raw event record'), raw);
+                    box.append(details);
+                    parent.append(box);
+                }
+            }
+
             // Inner tabbed container within an attempt panel. Steps (suites: Steps/Cases) is the
-            // default; Screenshots, Browser logs and Session appear only when the attempt has that content.
+            // default; Screenshots, Browser logs, Network and Session appear only when the attempt has that content.
             function attemptPanel(parent, record, isSuite, renderCases) {
                 const inner = element('div', 'tabs inner-tabs');
                 const tablist = element('div', 'tablist');
@@ -549,6 +574,7 @@
                 if (isSuite) renderCases(steps);
                 if (list(record.screenshots).length) screenshots(add('Screenshots', 'inner-screens', false), record.screenshots, true);
                 if (list(record.browserLogs).length) browserLogs(add('Browser logs', 'inner-browser-logs', false), record.browserLogs);
+                if (list(record.browserNetwork).length) browserNetwork(add('Network', 'inner-network', false), record.browserNetwork);
                 if (isSuite && record.session) {
                     const session = add('Session', 'inner-session', false);
                     fields(session, [['Session ID', record.session.sessionId]]);

@@ -18,6 +18,8 @@ class SuiteConfig
         public float $pollInterval = 500,
         /** Require BiDi log capture before browser suite setup; unavailable support fails setup. */
         public bool $browserLogs = false,
+        /** Require BiDi network metadata capture before browser suite setup; unavailable support fails setup. */
+        public bool $browserNetwork = false,
     ) {}
 
     /** Reject misspelled options on every supported PHP version. */

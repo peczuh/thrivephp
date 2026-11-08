@@ -36,6 +36,16 @@ final class Report
             foreach (['source', 'args', 'stackTrace'] as $field) {
                 if (isset($entry[$field])) echo '    ' . $field . ': ' . self::json($entry[$field]) . PHP_EOL;
             }
+        } elseif ($event['type'] === 'browser_network') {
+            $network = $event['network'];
+            $entry = $network['event'];
+            $params = $entry['params'];
+            $this->line('INFO', 'NETWORK', $context . ' [' . $entry['method'] . '] '
+                . ($params['request']['method'] ?? '') . ' ' . ($params['request']['url'] ?? '')
+                . (isset($params['response']['status']) ? ' HTTP ' . $params['response']['status'] : '')
+                . (isset($params['errorText']) ? ' ' . $params['errorText'] : ''));
+            echo '    Observed during: ' . $network['phase'] . ($network['hook'] !== null ? ' / ' . $network['hook'] : '')
+                . ($network['stepId'] !== null ? ' / ' . $network['stepId'] : '') . PHP_EOL;
         } elseif ($event['type'] === 'step_finished') {
             $this->step($context, $event['step']);
         } elseif ($event['type'] === 'error') {

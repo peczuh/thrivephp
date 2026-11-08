@@ -20,7 +20,10 @@
 		{
 			$this->connection->assertCallable();
 			if (!$this->connection->active()) throw new \LogicException('No active WebDriver BiDi connection.');
-			if ($this->subscription !== null) return $this;
+			if ($this->subscription !== null):
+				\ThriveData\ThrivePHP\Test::active()?->watchBrowserNetwork($this);
+				return $this;
+			endif;
 			try {
 				$this->connection->drain();
 				foreach (self::EVENTS as $method):
@@ -30,13 +33,16 @@
 							'redirectCount' => $params['redirectCount'], 'request' => null, 'response' => null, 'events' => []];
 						$this->hops[$key]['request'] = $params['request'];
 						if (isset($params['response'])) $this->hops[$key]['response'] = $params['response'];
-						$this->hops[$key]['events'][] = ['type' => 'event', 'method' => $method, 'params' => $params];
+						$event = ['type' => 'event', 'method' => $method, 'params' => $params];
+						$this->hops[$key]['events'][] = $event;
+						\ThriveData\ThrivePHP\Test::active()?->browserNetwork($this->sessionId, $event);
 					});
 				endforeach;
 				$result = $this->connection->command('session.subscribe', ['events' => self::EVENTS]);
 				if (!is_string($result['subscription'] ?? null) || $result['subscription'] === '') throw new \RuntimeException('WebDriver BiDi did not return a subscription ID.');
 				$this->subscription = $result['subscription'];
 				$this->failure = null;
+				\ThriveData\ThrivePHP\Test::active()?->watchBrowserNetwork($this);
 			} catch (\Throwable $error) {
 				$this->failure = $error;
 				$this->detach();

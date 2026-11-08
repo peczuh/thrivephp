@@ -328,6 +328,19 @@ final class Parallel
                     throw new \RuntimeException('Invalid browser log entry.');
                 }
                 break;
+            case 'browser_network':
+                $network = $message['network'] ?? null;
+                if (!is_array($network) || !is_array($network['event'] ?? null)
+                    || ($network['event']['type'] ?? null) !== 'event'
+                    || !is_string($network['event']['method'] ?? null) || $network['event']['method'] === ''
+                    || !is_array($network['event']['params'] ?? null)
+                    || !is_string($network['sessionId'] ?? null) || !is_string($network['observedAt'] ?? null)
+                    || !is_string($network['phase'] ?? null)
+                    || !array_key_exists('hook', $network) || ($network['hook'] !== null && !is_string($network['hook']))
+                    || !array_key_exists('stepId', $network) || ($network['stepId'] !== null && !is_string($network['stepId']))) {
+                    throw new \RuntimeException('Invalid browser network event.');
+                }
+                break;
             case 'screenshot':
                 if (!is_array($message['screenshot'] ?? null)
                     || (!is_string($message['screenshot']['path'] ?? null) && !is_string($message['screenshot']['diagnostic'] ?? null))) {
