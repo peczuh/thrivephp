@@ -331,9 +331,117 @@ fails with `no such request`; that error remains visible rather than being ignor
 
 Metadata capture keeps the original `responseStarted` event unchanged. Later
 events may report different values after modification. No snapshot is rewritten
-to claim the server supplied the modified response. This API supplies response
-bodies but does not retrieve them; captured-body retrieval and body-transforming
-callbacks remain separate work.
+to claim the server supplied the modified response. To read collected bodies,
+use the separate API below. Body-transforming callbacks remain separate work.
+
+## Response body collection
+
+Start collection before making the request. The controller owns one session-wide
+response collector, independently of metadata capture and interception:
+
+```php
+$network = $browser->network()->startCapture()->startBodyCollection(1_048_576);
+$url = 'https://app.example.test/result';
+$browser->navigate($url);
+$completed = fn () => $network->requests(fn (array $hop): bool =>
+    $hop['request']['url'] === $url && array_any($hop['events'],
+        fn (array $event): bool => $event['method'] === 'network.responseCompleted'));
+$browser->wait(fn () => $completed() !== []);
+$bytes = $network->responseBody($completed()[0]['requestId'], disown: true);
+$network->stopBodyCollection();
+```
+
+`startBodyCollection(int $maxEncodedDataSize): self` requires a positive limit in
+bytes and calls `network.addDataCollector` with `dataTypes: ['response']`, using
+the protocol's default `blob` collector type. Starting while active throws, even
+with the same limit. Stop and restart to change it. Metadata capture is optional;
+callers can also obtain protocol request IDs through raw network events.
+
+The limit applies to each item's **encoded network size**, not total retention
+or the returned PHP string's size. Compressed responses can expand beyond it.
+The browser enforces the limit, and the tested Chrome version did not enforce it
+for the oversized fixture below. It is not a client-side memory bound.
+
+`responseBody(string $requestId, bool $disown = false): string` always identifies
+the owned collector in `network.getData`. Reading without an active collector
+throws. The result is an eager PHP byte string; BiDi `string` values pass through
+and `base64` values use strict decoding. The specification requires decoded
+response bytes, so ThrivePHP does not decompress them again or convert a text
+charset. Browser-side conversions can still affect fidelity, as observed below.
+Returned PHP strings remain usable after collection stops or the session ends.
+
+Default reads retain remote ownership and permit repeated reads. `disown: true`
+reads and releases only this collector's ownership of the item. That remote
+release precedes local result validation, so malformed bytes can throw after the
+item has already been released. Invalid result shapes and base64 throw without
+independently invalidating an otherwise healthy BiDi connection.
+
+`stopBodyCollection(): self` removes only the owned collector. Successful removal
+clears ownership; failed removal throws and retains the ID for another explicit
+call. Stopping while inactive is harmless. Session deletion releases remote
+collectors, and local session cleanup forgets the ID. A successful add response
+without a usable collector ID throws with unknown remote ownership; ordinary
+session deletion is the cleanup backstop.
+
+The [BiDi collection algorithms](https://www.w3.org/TR/webdriver-bidi/#network-collectors)
+store only the final redirect response body, keyed by request ID and data type.
+There is no historical per-hop body lookup. A captured redirect-hop snapshot does
+not imply that its body is separately retrievable.
+
+A present empty body can return `''`. A null body may have no collected item.
+Oversized, uncollected, null-body, and disowned data can all produce
+`no such network data`; the API preserves native errors and does not infer an
+oversized diagnosis. Other errors, including `unavailable network data`,
+`no such network collector`, and unsupported commands, also propagate normally.
+
+The specification allows `getData` to wait for pending data. Such commands use
+the existing timeout and continue servicing interception decisions. The installed
+browsers have early-read limitations below. **Wait for `network.responseCompleted`
+for routine reads.** All three methods reject calls from interception handlers,
+including local validation and no-op paths.
+
+Body operations create no implicit steps, asynchronous error accessor, local
+cache, or automatic report attachment. Synchronous failures are ordinary test
+execution errors. Existing `requests()` snapshots and canonical console/JSON/HTML
+reports remain metadata-only. Request-body collection is not part of this API.
+
+### Native body findings
+
+`php -d short_open_tag=1 test/webdriver-body-browser.php [chrome|firefox]` checks
+the API on Chrome/ChromeDriver 156.0.8078.80 and Firefox 147.0.1/GeckoDriver 0.37.1
+on macOS. These are observed version-specific results, not runtime version gates:
+
+- Both collected UTF-8 text and binary `application/octet-stream` bytes exactly.
+  Both returned empty strings for the tested empty 200, HEAD, and 204 responses.
+- Both returned 7,168 decoded bytes from a gzip item under the 128-byte encoded
+  limit, and returned the final redirect body using the shared request ID.
+- Repeated reads, read-and-disown, explicit removal, restart, and isolation from
+  a separately owned collector passed. Body collection worked without metadata
+  capture, then alongside capture and managed interception.
+- Firefox rejected the 1,024-byte uncompressed item under a 128-byte limit with
+  `no such network data`. Chrome returned it. No client-side replacement limit
+  is imposed.
+- With the binary fixture labeled `text/html`, Firefox returned a string in which
+  byte `FF` became UTF-8 `C3 BF`; Chrome preserved the original bytes. Firefox's
+  `application/octet-stream` result used base64 and preserved the bytes.
+- After `responseStarted` but before a delayed body completed, Chrome rejected
+  retrieval with `unknown error: No data found for resource with given identifier`.
+  Its post-completion read succeeded. Firefox returned the received one-byte
+  prefix; after completion, another read failed with
+  `unknown error: RangeError: source array is too long`.
+- Both collected request-stage mocked bodies and unchanged continued responses.
+  Chrome collected the original server body after response-stage replacement,
+  although the page received the replacement. Firefox's response-stage body
+  replacement remains unsupported as documented above.
+- Firefox collected the final response after the tested HTTP Basic challenge.
+  Chrome returned `no such network data`, although the authenticated page fetch
+  succeeded. This does not identify why Chrome lacked the item.
+
+Native tests print these limitations separately from successful assertions.
+Protocol fixtures verify malformed-result handling, removal retry, handler
+reentry guards, synchronous reporting, and a pending `getData` reply interleaved
+with a response-required decision. That fixture establishes dispatcher behavior;
+it does not certify native pending-body support.
 
 ## Transport and dispatch
 

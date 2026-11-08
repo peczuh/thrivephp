@@ -1563,6 +1563,179 @@ $networkEvents = [
 ];
 $networkMethods = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
 
+scenario('response body ownership, decoding, explicit removal retry and session cleanup', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 128]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['collector' => 'owned']]);
+	foreach ([2 => ['string', "text\0✓"], 3 => ['base64', 'AP8='], 4 => ['base64', '']] as $id => [$type, $value]):
+		bidiRequest($ws, $id, 'network.getData', ['request' => 'request', 'dataType' => 'response', 'collector' => 'owned', 'disown' => $id === 4]);
+		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => ['bytes' => ['type' => $type, 'value' => $value]]]);
+	endforeach;
+	bidiRequest($ws, 5, 'network.getData', ['request' => 'request', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+	bidiReply($ws, ['type' => 'error', 'id' => 5, 'error' => 'no such network data', 'message' => 'item released']);
+	bidiRequest($ws, 6, 'network.removeDataCollector', ['collector' => 'owned']);
+	bidiReply($ws, ['type' => 'error', 'id' => 6, 'error' => 'unknown error', 'message' => 'removal rejected']);
+	bidiRequest($ws, 7, 'network.removeDataCollector', ['collector' => 'owned']);
+	bidiReply($ws, ['type' => 'success', 'id' => 7, 'result' => (object)[]]);
+	bidiRequest($ws, 8, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 256]);
+	bidiReply($ws, ['type' => 'success', 'id' => 8, 'result' => ['collector' => 'replacement']]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	verify($network->stopBodyCollection() === $network, 'Inactive stop was not fluent.');
+	expectError(fn () => $network->responseBody('request'), 'not active');
+	foreach ([0, -1] as $size) expectError(fn () => $network->startBodyCollection($size), 'positive maxEncodedDataSize');
+	verify($network->startBodyCollection(128) === $network, 'Start was not fluent.');
+	foreach ([128, 256] as $size) expectError(fn () => $network->startBodyCollection($size), 'already active');
+	verify($network->responseBody('request') === "text\0✓", 'String body changed.');
+	$body = $network->responseBody('request');
+	verify($body === "\0\xff" && $network->responseBody('request', disown: true) === '', 'Binary/empty body changed.');
+	expectError(fn () => $network->responseBody('request'), 'no such network data: item released');
+	expectError(fn () => $network->stopBodyCollection(), 'removal rejected');
+	expectError(fn () => $network->startBodyCollection(128), 'already active');
+	verify($network->stopBodyCollection()->stopBodyCollection() === $network, 'Repeated stop was not fluent.');
+	expectError(fn () => $network->responseBody('request'), 'not active');
+	$network->startBodyCollection(256);
+	verify($network->requests() === [] && $network->captureError() === null && $network->interceptionError() === null, 'Body errors contaminated capture/interception.');
+	$browser->quit();
+	$network->stopBodyCollection();
+	expectError(fn () => $network->responseBody('request'), 'not active');
+	verify($body === "\0\xff", 'Eager bytes depended on session lifetime.');
+});
+
+scenario('malformed collector and body results remain local and propagate ordinary protocol errors', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	foreach ([1 => [], 2 => ['collector' => ''], 3 => ['collector' => 42], 4 => ['collector' => 'owned']] as $id => $result):
+		bidiRequest($ws, $id, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 128]);
+		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)$result]);
+	endforeach;
+	$bad = [[], ['bytes' => null], ['bytes' => 'text'], ['bytes' => ['value' => 'text']],
+		['bytes' => ['type' => 'hex', 'value' => '00']], ['bytes' => ['type' => 'string', 'value' => 7]],
+		['bytes' => ['type' => 'base64', 'value' => '*invalid*']]];
+	$id = 4;
+	foreach ($bad as $result):
+		bidiRequest($ws, ++$id, 'network.getData', ['request' => 'bad', 'dataType' => 'response', 'collector' => 'owned', 'disown' => true]);
+		bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)$result]);
+	endforeach;
+	foreach (['no such network data', 'unavailable network data', 'no such network collector', 'invalid argument', 'unknown command', 'unsupported operation'] as $error):
+		bidiRequest($ws, ++$id, 'network.getData', ['request' => 'bad', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+		bidiReply($ws, ['type' => 'error', 'id' => $id, 'error' => $error, 'message' => 'native detail']);
+	endforeach;
+	bidiRequest($ws, ++$id, 'network.removeDataCollector', ['collector' => 'owned']);
+	bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	bidiRequest($ws, ++$id, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 128]);
+	bidiReply($ws, ['type' => 'error', 'id' => $id, 'error' => 'unsupported operation', 'message' => 'collector unsupported']);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	for ($i = 0; $i < 3; $i++) expectError(fn () => $network->startBodyCollection(128), 'collector ID; remote ownership is unknown');
+	$network->startBodyCollection(128);
+	for ($i = 0; $i < 7; $i++) expectError(fn () => $network->responseBody('bad', true), 'response body bytes');
+	foreach (['no such network data', 'unavailable network data', 'no such network collector', 'invalid argument', 'unknown command', 'unsupported operation'] as $error):
+		expectError(fn () => $network->responseBody('bad'), $error . ': native detail');
+	endforeach;
+	$network->stopBodyCollection();
+	expectError(fn () => $network->startBodyCollection(128), 'unsupported operation: collector unsupported');
+	$network->stopBodyCollection();
+	verify($browser->bidi()->active() && $network->captureError() === null && $network->interceptionError() === null, 'Feature errors invalidated transport or polluted passive diagnostics.');
+	$browser->quit();
+});
+
+scenario('pending body reads dispatch response decisions and guard all body operations against reentry', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.responseStarted']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'responses']]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['responseStarted'], 'urlPatterns' => []]);
+	bidiReply($ws, networkEvent('responseStarted', 'early', extra: ['isBlocked' => true, 'intercepts' => ['rule']]));
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'rule']]);
+	bidiRequest($ws, 3, 'network.continueResponse', ['request' => 'early']);
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
+	bidiRequest($ws, 4, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 128]);
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['collector' => 'owned']]);
+	bidiRequest($ws, 5, 'network.getData', ['request' => 'pending', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+	bidiReply($ws, networkEvent('responseStarted', 'pending', extra: ['isBlocked' => true, 'intercepts' => ['rule']]));
+	bidiRequest($ws, 6, 'network.continueResponse', ['request' => 'pending']);
+	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => ['bytes' => ['type' => 'string', 'value' => 'complete']]]);
+	bidiReply($ws, ['type' => 'success', 'id' => 6, 'result' => (object)[]]);
+	bidiRequest($ws, 7, 'network.removeIntercept', ['intercept' => 'rule']);
+	bidiReply($ws, ['type' => 'success', 'id' => 7, 'result' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	$calls = 0;
+	$network->intercept(function () use ($network, &$calls) {
+		foreach ([fn () => $network->startBodyCollection(0), fn () => $network->startBodyCollection(128),
+			fn () => $network->responseBody('pending'), fn () => $network->stopBodyCollection()] as $call):
+			expectError($call, 'not allowed inside a BiDi event handler');
+		endforeach;
+		$calls++;
+		return NetworkDecision::continueResponse();
+	}, phase: 'responseStarted');
+	$network->startBodyCollection(128);
+	verify($network->responseBody('pending') === 'complete', 'Pending data did not complete after the response decision.');
+	$network->stopInterception();
+	verify($calls === 2 && $network->requests() === [] && $network->interceptionError() === null, 'Reentry guards or capture independence failed.');
+	$browser->quit();
+});
+
+scenario('body reads retain metadata-only reports and synchronous failure attribution', function ($listener) use ($networkMethods) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => $networkMethods]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'metadata']]);
+	bidiRequest($ws, 2, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 128]);
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['collector' => 'owned']]);
+	bidiRequest($ws, 3, 'network.getData', ['request' => 'observed', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+	bidiReply($ws, networkEvent('responseCompleted', 'observed'));
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => ['bytes' => ['type' => 'string', 'value' => 'body-only-marker']]]);
+	bidiRequest($ws, 4, 'network.getData', ['request' => 'missing', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+	bidiReply($ws, ['type' => 'error', 'id' => 4, 'error' => 'no such network data', 'message' => 'absent item']);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	[$status, $output, $record] = runChecks(['check' => function () use ($network) {
+		$network->startCapture()->startBodyCollection(128);
+		verify($network->responseBody('observed') === 'body-only-marker', 'Body read lost bytes.');
+		$network->responseBody('missing');
+	}]);
+	$attempt = $record['suites'][0]['attempts'][0];
+	verify($status === 1 && count($attempt['errors']) === 1 && str_contains($output, 'no such network data: absent item'), 'Synchronous body error lost its ordinary execution attribution.');
+	verify($attempt['steps'] === [] && count($attempt['browserNetwork']) === 1
+		&& !str_contains(json_encode($record), 'body-only-marker') && !str_contains($output, 'body-only-marker'), 'Body reads created steps or attached body bytes to reports.');
+	verify($network->captureError() === null && $network->interceptionError() === null, 'Synchronous body error became a passive diagnostic.');
+	$browser->quit();
+});
+
+scenario('pending body timeout preserves classic session cleanup', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => 128]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['collector' => 'owned']]);
+	bidiRequest($ws, 2, 'network.getData', ['request' => 'pending', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true, timeout: 0.2);
+	$connection = $browser->bidi();
+	$network = $browser->network()->startBodyCollection(128);
+	expectError(fn () => $network->responseBody('pending'), 'timed out');
+	verify(!$connection->active(), 'Timed-out body command left the connection active.');
+	$browser->quit();
+	$network->stopBodyCollection();
+	expectError(fn () => $network->responseBody('pending'), 'not active');
+});
+
 scenario('network capture correlates interleaved hops, preserves raw data and isolates browser errors', function ($listener) use ($networkEvents, $networkMethods) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);

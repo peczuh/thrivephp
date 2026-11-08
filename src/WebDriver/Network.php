@@ -1,7 +1,7 @@
 <?php
 	namespace ThriveData\ThrivePHP\WebDriver;
 
-	/** Session-wide metadata capture and network interception. Obtain the instance through Browser::network(). */
+	/** Session-wide metadata/body collection and network interception. Obtain through Browser::network(). */
 	final class Network
 	{
 		private const EVENTS = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
@@ -11,6 +11,8 @@
 		/** Request ID and redirect count identify each hop; insertion order is first-observed order. */
 		private array $hops = [];
 		private ?\Throwable $failure = null;
+		/** The response-data collector owned by this controller, independent of metadata subscriptions. */
+		private ?string $bodyCollector = null;
 		/** Each phase subscribes lazily and keeps a passive responder until session cleanup. */
 		private array $interceptSubscriptions = [];
 		private array $interceptListeners = [];
@@ -86,7 +88,7 @@
 		 * Collect available events and return one value snapshot per observed redirect hop.
 		 * Each record contains sessionId, requestId, redirectCount, latest request data,
 		 * latest response data (or null), and arrival-ordered event envelopes. Protocol
-		 * headers/byte values are preserved; bodies are not collected. Partial histories
+		 * headers/byte values are preserved; bodies are not included. Partial histories
 		 * are normal. Reads never consume history or Browser::event() entries.
 		 * The optional predicate receives each hop outside dispatch and retains matches.
 		 * The operation detecting a collection failure throws; later reads retain history.
@@ -95,6 +97,57 @@
 		{
 			$this->collect();
 			return array_values($filter === null ? $this->hops : array_filter($this->hops, $filter));
+		}
+
+		/**
+		 * Collect future response bodies across the session. The positive byte limit applies
+		 * per encoded network item, not total retention or decoded body size. Starting while
+		 * active throws; stop before changing the limit. Browser support/errors pass through.
+		 */
+		public function startBodyCollection(int $maxEncodedDataSize): self
+		{
+			$this->connection->assertCallable();
+			if ($maxEncodedDataSize <= 0) throw new \InvalidArgumentException('Expected a positive maxEncodedDataSize in bytes.');
+			if ($this->bodyCollector !== null) throw new \LogicException('Response body collection is already active.');
+			$result = $this->connection->command('network.addDataCollector', ['dataTypes' => ['response'], 'maxEncodedDataSize' => $maxEncodedDataSize]);
+			$id = $result['collector'] ?? null;
+			if (!is_string($id) || $id === '') throw new \RuntimeException('WebDriver BiDi did not return a collector ID; remote ownership is unknown.');
+			$this->bodyCollector = $id;
+			return $this;
+		}
+
+		/**
+		 * Read this collector's final response body by protocol request ID as an eager PHP
+		 * byte string. Pending data uses the normal command timeout; missing data throws.
+		 * Wait for responseCompleted for routine reads; native pending behavior varies.
+		 * The default retains remote ownership for repeated reads.
+		 * Disown releases this collector's item remotely before local decoding, even if
+		 * decoding then fails. No body cache or automatic report attachment is created.
+		 */
+		public function responseBody(string $requestId, bool $disown = false): string
+		{
+			$this->connection->assertCallable();
+			if ($this->bodyCollector === null) throw new \LogicException('Response body collection is not active.');
+			$result = $this->connection->command('network.getData', ['request' => $requestId, 'dataType' => 'response',
+				'collector' => $this->bodyCollector, 'disown' => $disown]);
+			$bytes = $result['bytes'] ?? null;
+			if (!is_array($bytes) || !in_array($bytes['type'] ?? null, ['string', 'base64'], true) || !is_string($bytes['value'] ?? null)):
+				throw new \RuntimeException('WebDriver BiDi did not return valid response body bytes.');
+			endif;
+			if ($bytes['type'] === 'string') return $bytes['value'];
+			$body = base64_decode($bytes['value'], true);
+			if ($body === false) throw new \RuntimeException('WebDriver BiDi returned invalid base64 response body bytes.');
+			return $body;
+		}
+
+		/** Release this remote collector. Failed removal retains ownership for another explicit call. */
+		public function stopBodyCollection(): self
+		{
+			$this->connection->assertCallable();
+			if ($this->bodyCollector === null) return $this;
+			$this->connection->command('network.removeDataCollector', ['collector' => $this->bodyCollector]);
+			$this->bodyCollector = null;
+			return $this;
 		}
 
 		/** @internal Collect before session cleanup without creating a test step or consuming raw events. */
@@ -301,10 +354,11 @@
 			else $this->interceptionFailure->add($error, $request);
 		}
 
-		/** @internal Session deletion releases remote pauses; retain history/errors but drop all local ownership. */
+		/** @internal Session deletion releases remote pauses and collectors; retain history/errors but drop ownership. */
 		public function disconnect(): void
 		{
 			$this->detach();
+			$this->bodyCollector = null;
 			foreach ($this->interceptListeners as $listener) $this->connection->unlisten($listener);
 			$this->interceptListeners = $this->interceptSubscriptions = [];
 			$this->rules = $this->retired = $this->paused = $this->current = $this->provisional = [];

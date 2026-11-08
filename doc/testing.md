@@ -289,6 +289,13 @@ error, even if recovery successfully releases the pause. See
 [response interception](webdriver-bidi.md#response-interception) for supported
 decisions and the native Chrome/Firefox findings.
 
+Response-body collection is explicit through `startBodyCollection()`,
+`responseBody()`, and `stopBodyCollection()`. Retrieved bytes are returned to the
+caller and are not attached to network metadata or console/JSON/HTML reports.
+These methods create no implicit steps; an uncaught synchronous error follows
+ordinary test execution reporting. See [body collection](webdriver-bidi.md#response-body-collection)
+for ownership, encoded-size limits, and native early-read limitations.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document
