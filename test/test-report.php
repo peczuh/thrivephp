@@ -157,8 +157,9 @@ check($browser->trace[$teardown - 1][1] === '/screenshot', 'Suite capture did no
 check($second['screenshots'][0]['path'] === $second['steps'][5]['screenshots'][0]['path'], 'Propagating action/case failure captured twice.');
 $reportFile = glob($runner->saved . '/*/report.json')[0];
 $directory = dirname($reportFile);
-check(count(glob($directory . '/screenshots/*.png')) === 4, 'Unexpected capture count.');
-foreach (glob($directory . '/screenshots/*.png') as $path) {
+$images = iterator_to_array(new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory . '/screenshots', FilesystemIterator::SKIP_DOTS)));
+check(count($images) === 4, 'Unexpected capture count.');
+foreach ($images as $path) {
     check(file_get_contents($path) === ReportBrowser::png(), 'Saved PNG bytes changed.');
 }
 $html = file_get_contents($directory . '/report.html');

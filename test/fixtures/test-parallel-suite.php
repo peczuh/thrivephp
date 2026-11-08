@@ -61,7 +61,7 @@ $suite = new class($test) extends Suite {
                 sleep(30);
                 break;
             case 'step-timeout':
-                $this->test->recordStep('blocked operation', null, ['fixture' => true], function () {
+                $this->test->recordStep('blocked-operation', null, ['fixture' => true], function () {
                     $this->test->verify(false, 'before timeout');
                     sleep(30);
                 });

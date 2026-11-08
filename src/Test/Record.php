@@ -24,7 +24,19 @@ final class Record
         $this->started = hrtime(true) / 1e9;
         $this->run = ['schemaVersion' => 1, 'generatedAt' => null, 'startedAt' => self::now(),
             'endedAt' => null, 'duration' => 0, 'status' => 'RUN', 'environment' => $environment,
-            'totals' => self::TOTALS, 'suites' => []];
+            'totals' => self::TOTALS, 'errors' => [], 'suites' => []];
+    }
+
+    /** Startup failures belong to the run, without inventing suite or assertion outcomes. */
+    public function error(array $error): void
+    {
+        $this->run['errors'][] = $error;
+    }
+
+    /** Complete environment details as configuration, discovery, and browser selection succeed. */
+    public function environment(array $values): void
+    {
+        $this->run['environment'] = array_replace($this->run['environment'], $values);
     }
 
     public static function now(): string
@@ -237,7 +249,7 @@ final class Record
         }
         unset($suite);
         $this->run['suites'] = array_values($suites);
-        $this->run['status'] = $this->run['totals']['checksFailed'] ? 'FAIL' : 'PASS';
+        $this->run['status'] = $this->run['errors'] || $this->run['totals']['checksFailed'] ? 'FAIL' : 'PASS';
         return $this->run;
     }
 }

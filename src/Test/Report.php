@@ -55,6 +55,15 @@ final class Report
         }
     }
 
+    /** Record and print failures that occur before a suite can produce events. */
+    public function runError(\Throwable $error, string $phase): void
+    {
+        $diagnostic = $this->diagnostic->error($error) + ['phase' => $phase];
+        $this->record->error($diagnostic);
+        $this->line('ERROR', 'RUN', '[' . $phase . ']');
+        $this->error($diagnostic);
+    }
+
     public function interrupt(string $name, string $message): void
     {
         $before = $this->record->suite($name);
@@ -228,11 +237,13 @@ final class Report
         $html = str_replace('{{REPORT_DATA}}', json_encode($run, JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),
             file_get_contents(__DIR__ . '/report.html'));
         foreach (['report.json' => $json, 'report.html' => $html] as $file => $contents) {
-            if (file_put_contents($this->directory . '/' . $file, $contents) !== strlen($contents)) {
+            if (@file_put_contents($this->directory . '/' . $file, $contents) !== strlen($contents)) {
+                echo 'ERROR Could not write complete report: ' . $this->diagnostic->path($this->directory . '/' . $file) . PHP_EOL;
                 throw new \RuntimeException('Could not write complete report: ' . $file);
             }
         }
         $t = $run['totals'];
+        if ($run['errors']) echo PHP_EOL . 'Run: FAIL (' . count($run['errors']) . ' run error(s))' . PHP_EOL;
         echo PHP_EOL . "Suites: {$t['checksPassed']} passed, {$t['checksFailed']} failed, {$t['checksSkipped']} skipped" . PHP_EOL;
         if (array_any($run['suites'], fn ($suite) => array_any($suite['attempts'], fn ($attempt) => $attempt['cases'] !== []))) {
             echo "Cases: {$t['casesPassed']} passed, {$t['casesFailed']} failed, {$t['casesSkipped']} skipped" . PHP_EOL;
@@ -241,6 +252,6 @@ final class Report
         echo 'Environment: ' . self::json($run['environment']) . PHP_EOL;
         echo sprintf('Duration: %.3fs', $run['duration']) . PHP_EOL . 'Reports: '
             . $this->diagnostic->path($this->directory) . PHP_EOL;
-        return $t['checksFailed'] ? 1 : 0;
+        return $run['status'] === 'FAIL' ? 1 : 0;
     }
 }

@@ -47,11 +47,6 @@ class Test
     /** Initialize the application without command dispatch; exit with status 1 on failure. */
     public function bootstrap(): void
     {
-        if (!(bool) ini_get('short_open_tag')) {
-            fwrite(STDERR, "ERROR Enable short_open_tag; application and framework files use short tags.\n");
-            exit(1);
-        }
-
         // Catch Composer's platform guard and bootstrap warnings before application logging is installed.
         set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
             if (!(error_reporting() & $severity)) {
@@ -61,14 +56,44 @@ class Test
         });
 
         try {
+            if (!(bool) ini_get('short_open_tag')) {
+                throw new \RuntimeException('Enable short_open_tag; application and framework files use short tags.');
+            }
             define('PATH_ROOT', $this->pathRoot);
             require_once(PATH_ROOT . '/vendor/autoload.php');
             \ThriveData\ThrivePHP\Application::init();
             $this->bootstrapped = true;
         } catch (\Throwable $error) {
             error_clear_last();
-            fwrite(STDERR, 'ERROR Application initialization failed (' . get_class($error)
-                . "). Check PHP requirements, Composer dependencies, and settings JSON.\n");
+            if ($this->channel !== null) {
+                $this->event(['type' => 'error', 'error' => $this->diagnostic->error($error) + ['phase' => 'bootstrap']]);
+                throw $error;
+            }
+            try {
+                // Composer or short-tag settings may be unavailable at this point.
+                $settingsLoaded = class_exists(Settings::class, false);
+                $savePath = $this->pathRoot . '/test/runs';
+                $pathError = null;
+                if ($settingsLoaded) {
+                    try {
+                        $savePath = $this->savePath();
+                    } catch (\Throwable $failure) {
+                        $pathError = $failure;
+                    }
+                }
+                $this->startReport($savePath, [
+                    'project' => $settingsLoaded ? Settings::fetch('test.project') : null,
+                    'url' => $settingsLoaded ? Settings::fetch('site.url') : null,
+                ]);
+                $this->report->runError($error, 'bootstrap');
+                if ($pathError !== null) $this->report->runError($pathError, 'report configuration');
+                $this->report->summary();
+            } catch (\Throwable $reportError) {
+                fwrite(STDERR, 'ERROR Bootstrap failed: ' . get_class($error) . ': ' . $error->getMessage() . PHP_EOL
+                    . 'ERROR Could not write test report: ' . $reportError->getMessage() . PHP_EOL);
+            } finally {
+                $this->report = null;
+            }
             exit(1);
         }
     }
@@ -125,9 +150,13 @@ class Test
         return self::$active === $this && $this->step === null && !$this->suppressSteps;
     }
 
-    /** Execute one author operation, preserving its return value and thrown exception. */
+    /**
+     * Execute one author operation, preserving its return value and thrown exception.
+     * $label must be a safe action name, not a free-form description.
+     */
     public function recordStep(string $label, ?string $target, array $values, callable $operation): mixed
     {
+        Test\Name::validate($label, 'action');
         if (!$this->canRecordStep()) {
             return $operation();
         }
@@ -215,16 +244,22 @@ class Test
         }
         try {
             $image = $this->withoutSteps($this->screenshotSource);
-            $clean = static fn (string $name): string => preg_replace('/[^A-Za-z0-9._-]/', '-', $name);
-            $parts = [$clean($this->checkId), 'a' . $this->suiteAttempt];
+            // Suite filename stems are validated for uniqueness before files or workers start.
+            $directory = 'screenshots/' . basename($this->checkId);
+            $parts = ['a' . $this->suiteAttempt];
             if ($this->caseMethod !== null) {
-                $parts[] = $clean($this->caseMethod);
+                $directory .= '/' . $this->caseMethod;
                 $parts[] = 'a' . $this->caseAttempt;
             }
             if ($step !== null) {
                 $parts[] = 's' . $step;
             }
-            $path = 'screenshots/' . implode('__', $parts) . '__' . $point . '.png';
+            $parent = $this->runDirectory . '/' . $directory;
+            // Parallel suites can create shared ancestor directories concurrently.
+            if (!is_dir($parent) && !@mkdir($parent, 0777, true) && !is_dir($parent)) {
+                throw new \RuntimeException('Could not create screenshot directory: ' . $parent);
+            }
+            $path = $directory . '/' . implode('__', $parts) . '__' . $point . '.png';
             $image->save($this->runDirectory . '/' . $path);
             return ['path' => $path, 'point' => $point, 'status' => $failed ? 'FAIL' : 'PASS',
                 'width' => $image->width(), 'height' => $image->height()];
@@ -429,6 +464,7 @@ class Test
      * Explicit workers > 1 requires a parallel-capable selected browser; 1 runs in-process.
      * Browser and headless apply to every managed SuiteBrowser in this run.
      * Title identifies the project; null uses test.project, then the root Composer package name.
+     * Selected suite filename stems must be safe names and unique ignoring case across directories.
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
      * @param list<string> $selectors Regex selectors: files!!exclude::cases:!exclude##tags#!exclude.
      * Empty selects all; each alternative combines its supplied conditions with AND.
@@ -436,10 +472,32 @@ class Test
     public function run(array $names = [], ?int $workers = null, ?string $browser = null, bool $headless = false,
         array $selectors = [], ?string $title = null): int
     {
-        $directory = rtrim($this->casePath(), '/') . '/';
+        $pathError = null;
+        try {
+            $savePath = $this->savePath();
+        } catch (\Throwable $error) {
+            $pathError = $error;
+            $savePath = $this->pathRoot . '/test/runs';
+        }
+        $this->startReport($savePath, ['project' => $title, 'headless' => $headless]);
         $files = [];
 
         try {
+            if ($pathError !== null) throw $pathError;
+            $root = realpath($this->pathRoot) ?: $this->pathRoot;
+            $title ??= Settings::fetch('test.project');
+            if ($title === null && is_file($root . '/composer.json')) {
+                $title = json_decode(file_get_contents($root . '/composer.json'), true, flags: JSON_THROW_ON_ERROR)['name'] ?? null;
+            }
+            $this->report->record->environment(['project' => $title, 'url' => Settings::fetch('site.url')]);
+            $this->capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
+            foreach ($this->capturePolicy as $level => $default) {
+                $policy = Settings::fetch('test.screenshots.' . $level) ?? $default;
+                if (!in_array($policy, ['off', 'failure', 'always'], true)) {
+                    throw new \InvalidArgumentException('test.screenshots.' . $level . ' must be off, failure, or always.');
+                }
+                $this->capturePolicy[$level] = $policy;
+            }
             if ($workers !== null && $workers < 1) {
                 throw new \InvalidArgumentException('Workers must be a positive integer, or null.');
             }
@@ -450,6 +508,7 @@ class Test
                 }
                 $this->selectors[] = new Test\Selector($selector);
             }
+            $directory = rtrim($this->casePath(), '/') . '/';
             $iterator = new \RecursiveIteratorIterator(
                 new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS)
             );
@@ -481,12 +540,24 @@ class Test
                 $names = array_values(array_filter($names, fn ($name) => array_any($this->selectors,
                     fn ($selector) => $selector->file($name))));
             }
+            $suiteNames = [];
+            foreach ($names as $name) {
+                $suiteName = basename($name);
+                Test\Name::validate($suiteName, 'suite');
+                $key = strtolower($suiteName);
+                if (isset($suiteNames[$key])) {
+                    throw new \InvalidArgumentException('Duplicate suite name ' . var_export($suiteName, true)
+                        . ': ' . $suiteNames[$key] . ' and ' . $name . '. Suite filename stems must be unique, ignoring case.');
+                }
+                $suiteNames[$key] = $name;
+            }
             $this->headless = $headless;
             $this->browserResolved = false;
             $this->selectedBrowser = null;
             if ($workers !== 1 || $browser !== null || $headless) {
                 $this->selectedBrowser = $this->resolveBrowser($browser);
                 $this->browserResolved = true;
+                $this->report->record->environment(['browser' => $this->selectedBrowser]);
                 $this->validateHeadless();
             }
             if (in_array($this->selectedBrowser, ['safari', 'safaripreview'], true)) {
@@ -496,39 +567,15 @@ class Test
                 $workers = 1;
             }
         } catch (\Throwable $error) {
-            echo 'ERROR ' . $error->getMessage() . PHP_EOL;
-            return 1;
-        }
-
-        $savePath = $this->savePath();
-        if (!is_dir($savePath) && !mkdir($savePath, 0777, true)) {
-            throw new \RuntimeException('Could not create test save directory: ' . $savePath);
-        }
-        $this->runDirectory = $savePath . '/' . date('Y-m-d_H-i-s');
-        if (!@mkdir($this->runDirectory)) {
-            throw new \RuntimeException('Could not create run directory (it may already exist): ' . $this->runDirectory);
-        }
-        if (!mkdir($this->runDirectory . '/screenshots')) {
-            throw new \RuntimeException('Could not create screenshots directory.');
-        }
-        $this->capturePolicy = ['steps' => 'failure', 'cases' => 'always', 'suites' => 'off'];
-        foreach ($this->capturePolicy as $level => &$policy) {
-            $policy = Settings::fetch('test.screenshots.' . $level) ?? $policy;
-            if (!in_array($policy, ['off', 'failure', 'always'], true)) {
-                throw new \InvalidArgumentException('test.screenshots.' . $level . ' must be off, failure, or always.');
+            try {
+                $this->report->runError($error, 'preparation');
+                return $this->report->summary();
+            } finally {
+                $this->report = null;
             }
         }
-        unset($policy);
-        $root = realpath($this->pathRoot);
-        $title ??= Settings::fetch('test.project');
-        if ($title === null && is_file($root . '/composer.json')) {
-            $title = json_decode(file_get_contents($root . '/composer.json'), true, flags: JSON_THROW_ON_ERROR)['name'] ?? null;
-        }
-        $this->diagnostic = new Test\Diagnostic($root);
-        $environment = ['root' => $root, 'project' => $title, 'php' => PHP_VERSION, 'os' => php_uname(), 'workers' => max(1, min($workers ?? 2, count($names))),
-            'browser' => $this->selectedBrowser, 'headless' => $headless, 'url' => Settings::fetch('site.url'),
-            'browserVersion' => null, 'platform' => null];
-        $this->report = new Test\Report($this->runDirectory, $environment, (bool) Settings::fetch('test.console.steps'));
+
+        $this->report->record->environment(['workers' => max(1, min($workers ?? 2, count($names))), 'browser' => $this->selectedBrowser]);
         if ($workers !== 1 && $names) {
             $selected = [];
             foreach ($names as $name) {
@@ -554,6 +601,33 @@ class Test
         } finally {
             $this->report = null;
         }
+    }
+
+    /** Reporting must also work when Composer or application initialization has failed. */
+    private function startReport(string $savePath, array $environment): void
+    {
+        foreach (['Record', 'Diagnostic', 'Report'] as $class) {
+            require_once __DIR__ . '/Test/' . $class . '.php';
+        }
+        $root = realpath($this->pathRoot) ?: $this->pathRoot;
+        $this->diagnostic = new Test\Diagnostic($root);
+        try {
+            if (!is_dir($savePath) && !@mkdir($savePath, 0777, true)) {
+                throw new \RuntimeException('Could not create test save directory: ' . $savePath);
+            }
+            $this->runDirectory = $savePath . '/' . date('Y-m-d_H-i-s');
+            if (!@mkdir($this->runDirectory)) {
+                throw new \RuntimeException('Could not create run directory (it may already exist): ' . $this->runDirectory);
+            }
+        } catch (\Throwable $error) {
+            echo 'ERROR Could not initialize test report: ' . $error->getMessage() . PHP_EOL;
+            throw $error;
+        }
+        $this->report = new Test\Report($this->runDirectory, $environment + [
+            'root' => $root, 'project' => null, 'php' => PHP_VERSION, 'os' => php_uname(),
+            'workers' => null, 'browser' => null, 'headless' => false, 'url' => null,
+            'browserVersion' => null, 'platform' => null,
+        ], class_exists(Settings::class, false) && (bool) Settings::fetch('test.console.steps'));
     }
 
     /** Managed suites use the concrete run-level selection, never a new automatic choice in a worker. */

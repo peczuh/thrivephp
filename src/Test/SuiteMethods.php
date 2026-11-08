@@ -43,6 +43,7 @@ final class SuiteMethods
             $selected = [];
             foreach ($methods as ['method' => $method, 'origin' => $origin]) {
                 foreach ($method->getAttributes($attribute) as $metadata) {
+                    if ($attribute === Test::class) Name::validate($method->getName(), 'case');
                     $instance = $metadata->newInstance();
                     $depth = $depths[$method->getDeclaringClass()->getName()];
                     $trait = $origin->getDeclaringClass()->isTrait();

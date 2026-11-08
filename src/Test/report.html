@@ -734,6 +734,14 @@
                 for (const field of byId('environment').querySelectorAll('.fields > div')) {
                     if (['OS', 'Project root'].includes(field.querySelector('dt').textContent)) field.classList.add('full-width');
                 }
+                const runErrors = list(data.errors);
+                if (runErrors.length) {
+                    const failures = element('section');
+                    failures.setAttribute('aria-label', 'Run errors');
+                    failures.append(element('h2', '', 'Run errors'));
+                    for (const failure of runErrors) error(failures, failure);
+                    byId('run-tabs').before(failures);
+                }
                 const suites = list(data.suites).map(renderSuite);
                 function filter(autoExpand = true) {
                     const query = byId('search').value.trim().toLowerCase();
@@ -777,7 +785,7 @@
                     // tabs and reselect a visible panel without disturbing counts.
                     for (const wrap of byId('suites').querySelectorAll('.tabs')) syncTabs(wrap);
                     const visible = suites.filter(suite => !suite.hidden).length;
-                    byId('empty').hidden = visible > 0;
+                    byId('empty').hidden = visible > 0 || (!suites.length && runErrors.length > 0);
                     byId('empty').textContent = suites.length ? 'No results match these filters.' : 'No suites were recorded in this run.';
                 }
                 byId('search').addEventListener('input', () => filter());

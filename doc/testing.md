@@ -38,11 +38,46 @@ Every run produces live console output and both report files:
     report.json
     report.html
     screenshots/
+        <suite>/
+            a1__suite.png
+            <case>/
+                a1__a1__s2__fail.png
+                a1__a2__case.png
 ```
 
 The timestamp uses local time. There is no session suffix. An existing run
 directory causes an exception before any suites execute; files are never overwritten
 by a later run. Move or archive the entire run directory to retain its images.
+
+The suite name is its filename stem, and the case name is its method name.
+For example, `folder/customer-login.php` and its `save()` method write to
+`screenshots/customer-login/save/`. Suite-level captures go directly in
+`screenshots/customer-login/`. Source directories remain in report metadata and
+file selectors, not screenshot directory names. Filenames retain suite attempt,
+case attempt, step ordinal when applicable, and capture point.
+
+Suite, case and action names must contain 1 to 255 ASCII letters, digits,
+underscores or hyphens, starting with a letter or underscore. Filesystem-reserved
+names such as `CON`, `NUL`, `COM1` and `LPT1` are rejected, ignoring case.
+Names are used literally, never sanitized or encoded. `customer login` is invalid;
+it is not converted to `customer-login`. Descriptions in `#[Test('Customer login')]`
+remain unrestricted display labels and do not determine screenshot paths.
+
+Selected suite filename stems must be unique across source directories, ignoring
+case. For example, selecting both `admin/login.php` and `public/Login.php` fails
+before any suite files or workers start. Invalid suite names are also run-level
+preparation errors. Discovered case names are validated before suite configuration
+or lifecycle hooks; PHP already treats method names case-insensitively. Action
+names are validated before their callbacks execute. Repeated actions are allowed
+because their step ordinals distinguish their captures.
+
+Preparation failures, including invalid options, discovery, selectors and browser
+selection, produce run-level diagnostics in all three outputs. Caught application
+bootstrap failures use the same reporter even when Composer or short tags are
+unavailable. If report-path settings cannot be loaded or resolved, reports use
+`<project root>/test/runs`. A failure to create or write report storage is printed
+to the console and remains an error; existing runs are never overwritten.
+Worker bootstrap errors belong to the assigned suite in the parent's report.
 
 ### Console
 
@@ -75,8 +110,13 @@ the report directory can be moved with its images.
 
 Both files use the same event-built record. `report.json` is pretty-printed with
 stable key order. Schema version 1 contains `schemaVersion`, `generatedAt`,
-`startedAt`, `endedAt`, `duration`, `status`, `environment`, `totals`, and `suites`.
+`startedAt`, `endedAt`, `duration`, `status`, `environment`, `totals`, `errors`, and `suites`.
 Durations are seconds. Timestamps include the local UTC offset.
+The additive `errors` array holds run-level diagnostics with phase, class, message,
+source location, stack and previous exception. Any run error sets `status` to
+`FAIL` and returns a nonzero exit status without creating suite or assertion
+failures. A run that fails before execution has empty `suites` and zero totals.
+Unresolved environment fields remain null.
 
 The hierarchy is suite, suite attempt, case, case attempt, step. Arrays retain
 all retry attempts; totals count only final outcomes. IDs derive from the file
@@ -155,16 +195,16 @@ capture. Enabled suite captures occur after cases and before `SuiteAfter`.
 Skipped cases and suites capture nothing. Retried attempts retain their images.
 An action failure and its case can reference the same PNG.
 
-Workers write PNG bytes to disk and send paths and dimensions over TCP. Filenames
-join suite and case names, both retry indexes, step ordinal when applicable,
-and capture point/outcome with `__`, for example
-`folder-one_case__a1__failure_body__a1__s2__fail.png`. Name characters outside
-`A–Z`, `a–z`, `0–9`, `.`, `_`, and `-` become `-`; filenames are not URL-encoded.
-Suite paths must remain distinct after these replacements.
+Workers write PNG bytes to disk and send paths and dimensions over TCP. Within
+the suite/case directories, filenames join both retry indexes, step ordinal when
+applicable, and capture point/outcome with `__`, for example
+`screenshots/one_case/failure_body/a1__a1__s2__fail.png`. Suite-level captures omit
+the case directory and case attempt, for example `screenshots/one_case/a1__suite.png`.
 Capture failures produce a diagnostic in the report
 without replacing the test's result.
 
-Reporting regression checks are `php test/test-report.php` and
+Reporting regression checks are `php test/test-report.php`,
+`php test/test-report-paths.php`, `php test/test-report-startup.php`, `php test/test-names.php`, and
 `php test/test-parallel.php`. For installed-browser coverage, run
 `php test/test-report-browser.php chrome 2` or
 `php test/test-report-browser.php firefox 1`. These use isolated `data:` pages,
