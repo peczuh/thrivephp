@@ -90,7 +90,9 @@ first-observed order:
 Earlier event snapshots remain available when later events change request or
 response data. Headers remain ordered lists with duplicate names and protocol
 byte values intact. Capture includes raw metadata such as URLs, headers, and
-cookies. Request and response body contents are not collected by these events.
+cookies. Standard event fields do not include body contents, but browser extensions
+can: Chrome emits `goog:postData` inside request metadata. Raw capture preserves
+these fields. Explicit body reads do not add their results to captured events.
 Body retrieval requires separate BiDi data-collection support.
 
 Reads collect available input and never consume history or `Browser::event()`
@@ -337,7 +339,8 @@ use the separate API below. Body-transforming callbacks remain separate work.
 ## Response body collection
 
 Start collection before making the request. The controller owns one session-wide
-response collector, independently of metadata capture and interception:
+body collector, independently of metadata capture and interception. It defaults
+to collecting responses:
 
 ```php
 $network = $browser->network()->startCapture()->startBodyCollection(1_048_576);
@@ -351,13 +354,16 @@ $bytes = $network->responseBody($completed()[0]['requestId'], disown: true);
 $network->stopBodyCollection();
 ```
 
-`startBodyCollection(int $maxEncodedDataSize): self` requires a positive limit in
-bytes and calls `network.addDataCollector` with `dataTypes: ['response']`, using
-the protocol's default `blob` collector type. Starting while active throws, even
-with the same limit. Stop and restart to change it. Metadata capture is optional;
+`startBodyCollection(int $maxEncodedDataSize, array $dataTypes = ['response']): self`
+requires a positive per-item limit in bytes and calls `network.addDataCollector`,
+using the protocol's default `blob` collector type. The selection must contain
+`request`, `response`, or both; empty selections and other values are rejected.
+Array keys are discarded and the browser's set conversion handles duplicates.
+Starting while active throws, even with the same configuration. Stop and restart
+to change the limit or selected types. Metadata capture is optional;
 callers can also obtain protocol request IDs through raw network events.
 
-The limit applies to each item's **encoded network size**, not total retention
+For response data, the limit applies to each item's **encoded network size**, not total retention
 or the returned PHP string's size. Compressed responses can expand beyond it.
 The browser enforces the limit, and the tested Chrome version did not enforce it
 for the oversized fixture below. It is not a client-side memory bound.
@@ -376,7 +382,8 @@ release precedes local result validation, so malformed bytes can throw after the
 item has already been released. Invalid result shapes and base64 throw without
 independently invalidating an otherwise healthy BiDi connection.
 
-`stopBodyCollection(): self` removes only the owned collector. Successful removal
+`stopBodyCollection(): self` removes only the owned collector and releases its
+ownership of both request and response items. Successful removal
 clears ownership; failed removal throws and retains the ID for another explicit
 call. Stopping while inactive is harmless. Session deletion releases remote
 collectors, and local session cleanup forgets the ID. A successful add response
@@ -402,8 +409,9 @@ including local validation and no-op paths.
 
 Body operations create no implicit steps, asynchronous error accessor, local
 cache, or automatic report attachment. Synchronous failures are ordinary test
-execution errors. Existing `requests()` snapshots and canonical console/JSON/HTML
-reports remain metadata-only. Request-body collection is not part of this API.
+execution errors. Body reads do not append `getData` results to `requests()` or
+canonical console/JSON/HTML records. Raw event fields, including browser-supplied
+body extensions such as `goog:postData`, are still preserved by existing capture.
 
 ### Native body findings
 
@@ -420,7 +428,7 @@ on macOS. These are observed version-specific results, not runtime version gates
   capture, then alongside capture and managed interception.
 - Firefox rejected the 1,024-byte uncompressed item under a 128-byte limit with
   `no such network data`. Chrome returned it. No client-side replacement limit
-  is imposed.
+is imposed.
 - With the binary fixture labeled `text/html`, Firefox returned a string in which
   byte `FF` became UTF-8 `C3 BF`; Chrome preserved the original bytes. Firefox's
   `application/octet-stream` result used base64 and preserved the bytes.
@@ -442,6 +450,115 @@ Protocol fixtures verify malformed-result handling, removal retry, handler
 reentry guards, synchronous reporting, and a pending `getData` reply interleaved
 with a response-required decision. That fixture establishes dispatcher behavior;
 it does not certify native pending-body support.
+
+## Request body collection
+
+Select `request` explicitly to collect submitted payloads. One collector can own
+both data types:
+
+```php
+$network->startBodyCollection(
+    maxEncodedDataSize: 1_048_576,
+    dataTypes: ['request', 'response'],
+);
+
+// Submit a request, observe its completion, and obtain its protocol request ID.
+$submitted = $network->requestBody($requestId, disown: true);
+$received = $network->responseBody($requestId, disown: true);
+$network->stopBodyCollection();
+```
+
+`requestBody(string $requestId, bool $disown = false): string` uses the owned
+collector and `dataType: 'request'`. It shares `responseBody()`'s strict BytesValue
+decoding, eager strings, command deadline, and no-reentry contract. A value tagged
+`string` is returned literally, even if it resembles base64. The wrapper cannot
+infer that a browser mislabeled bytes. There is no second decoding pass or request
+replay to reconstruct missing data.
+
+Request and response items have separate ownership. Reading and disowning one
+does not release the other or another collector's item. Reading an unselected
+type still sends the requested type and owned collector ID; the native error
+passes through. A rejected request-only or mixed collector does not trigger a
+response-only retry. An accepted collector alone does not establish successful
+retrieval: a read can fail or time out, including after `responseCompleted`.
+
+The lookup is by request ID and data type, not redirect count. Do not assume it
+returns the first, final, or modified request body across redirects and retries.
+Request-stage mocking may leave retrievable bytes even though nothing reached
+the server. The observations below establish only the tested cases.
+
+### Request-size semantics
+
+The positive `maxEncodedDataSize` value is forwarded unchanged. It is a requested
+per-item byte limit, not a total-retention or returned-string cap. The current
+[collection algorithm](https://www.w3.org/TR/webdriver-bidi/#maybe-collect-network-data)
+has an inconsistent request-size calculation: it takes a byte-sequence length
+after [serialization](https://www.w3.org/TR/webdriver-bidi/#serialize-protocol-bytes)
+has converted the bytes into a `{type, value}` map. Response collection supplies
+encoded network size separately, so its compression rule does not resolve this
+request-path ambiguity. ThrivePHP does not substitute a local sizing rule.
+
+With a limit of 128, native request results were:
+
+| Uploaded payload | Chrome 156 | Firefox 147 |
+| --- | --- | --- |
+| ASCII, 128 bytes | Retrieved | Retrieved |
+| ASCII, 129 bytes | Missing | Missing |
+| 65 copies of `é`, 130 UTF-8 bytes | Missing | Retrieved |
+| 64 emoji, 256 UTF-8 bytes | Missing | Retrieved |
+| 65 emoji, 260 UTF-8 bytes | Missing | Missing |
+| Binary, 96 bytes, 128 base64 characters | Retrieved | Retrieved |
+| Binary, 97 bytes, 132 base64 characters | Retrieved | Missing |
+| Binary, 128 bytes | Retrieved | Missing |
+| Binary, 129 bytes | Missing | Missing |
+
+Missing cases returned `no such network data`. Chrome's boundaries matched
+uploaded byte counts. Firefox's results followed the serialized value length,
+counting UTF-16 code units for strings and base64 characters for binary in these
+fixtures. Chrome's binary representation limitation below still applies to its
+successful reads.
+
+### Native request findings
+
+Run `php -d short_open_tag=1 test/webdriver-request-body-browser.php [chrome|firefox]`.
+The loopback fixture records received bytes independently; page responses do not
+echo uploads. Verification used Chrome/ChromeDriver 156.0.8078.80 and Firefox
+147.0.1/GeckoDriver 0.37.1 on macOS.
+
+- Both retrieved UTF-8 text, JSON, and URL-encoded form payloads exactly, using
+  request-only and mixed collectors. Repeated reads, independent request/response
+  disowning, foreign collector ownership, stop/restart, and eager strings passed.
+- Chrome returned base64 text tagged as `string` for the binary and multipart
+  fixtures. For example, uploaded bytes `00 FF 62 79 74 65 73` became the literal
+  string `AP9ieXRlcw==`. Firefox preserved these uploads byte-for-byte, including
+  the generated multipart boundary and binary file contents.
+- Chrome returned `''` for an explicitly empty POST body and
+  `unknown error: No post data available for the request` for an absent body.
+  Firefox returned `no such network data` for both tested cases.
+- After a request-body override, Chrome returned the original bytes while the
+  server received the replacement. Firefox returned the replacement bytes.
+  Override fixtures use equal byte lengths to isolate body identity from
+  Content-Length handling.
+- After a 303 POST-to-GET redirect, Chrome reported no POST data; Firefox returned
+  the original POST body. Both reused the request ID across redirect counts.
+- For 307/308, Firefox sent and collected a distinct second-hop override. Chrome
+  acknowledged that override but sent and collected the original bytes. Because
+  its hop payloads remained identical, Chrome's collection source hop is unproven.
+- Both returned the original request bytes for a mocked request that never
+  reached the server, and collected the payload after a successful HTTP Basic
+  challenge with two observed server requests.
+- Initial Firefox runs accepted both collector configurations and completed the
+  POST, but request retrieval exceeded the default 10-second command timeout even
+  after `responseCompleted`. One run also timed out deleting the HTTP session;
+  the existing owned-runtime termination path completed cleanup. Later fresh
+  runtimes completed the tests above. Successful runs do not erase that observed
+  intermittent limitation. Tests label a recognized timeout separately and do
+  not claim the remaining request checks ran for that configuration.
+
+The protocol suite verifies type selection and routing, mixed ownership,
+malformed request results, handler reentry, pending command dispatch, timeout
+cleanup, and synchronous report attribution. Native tests preserve the observed
+errors and representation differences without a production fallback.
 
 ## Transport and dispatch
 

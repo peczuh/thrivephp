@@ -289,12 +289,17 @@ error, even if recovery successfully releases the pause. See
 [response interception](webdriver-bidi.md#response-interception) for supported
 decisions and the native Chrome/Firefox findings.
 
-Response-body collection is explicit through `startBodyCollection()`,
-`responseBody()`, and `stopBodyCollection()`. Retrieved bytes are returned to the
-caller and are not attached to network metadata or console/JSON/HTML reports.
+Body collection is explicit through `startBodyCollection()`, `requestBody()`,
+`responseBody()`, and `stopBodyCollection()`. The default collects responses;
+pass `dataTypes: ['request', 'response']` to collect both. Retrieved bytes are
+returned to the caller and are not attached to console/JSON/HTML reports.
+Raw network capture still preserves browser event fields, which can include
+payloads in extensions such as Chrome's `goog:postData`.
 These methods create no implicit steps; an uncaught synchronous error follows
 ordinary test execution reporting. See [body collection](webdriver-bidi.md#response-body-collection)
-for ownership, encoded-size limits, and native early-read limitations.
+for ownership, response encoded-size limits, and native early-read limitations,
+and [request collection](webdriver-bidi.md#request-body-collection) for request-size
+and byte-identity findings.
 
 ### HTML snapshots
 
