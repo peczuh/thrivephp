@@ -1,7 +1,7 @@
 <?php
 	namespace ThriveData\ThrivePHP\WebDriver;
 
-	/** A request or authentication decision value. Returning it never performs nested browser I/O. */
+	/** A network interception decision value. Returning it never performs nested browser I/O. */
 	final class NetworkDecision
 	{
 		private function __construct(private string $method, private array $params = []) {}
@@ -17,7 +17,23 @@
 			return new self('network.continueRequest', $params);
 		}
 
-		/** Supply a complete response. Headers preserve duplicate names; body accepts arbitrary bytes, including empty. */
+		/**
+		 * Continue at responseStarted with the original network body. Null fields preserve
+		 * server values; a supplied status must be 100 through 599. Headers are ordered
+		 * [name, value] string pairs; [] requests an empty list. Browser/HTTP rules still apply.
+		 */
+		public static function continueResponse(?int $status = null, ?array $headers = null): self
+		{
+			$params = [];
+			if ($status !== null):
+				if ($status < 100 || $status > 599) throw new \InvalidArgumentException('Expected an HTTP status from 100 through 599.');
+				$params['statusCode'] = $status;
+			endif;
+			if ($headers !== null) $params['headers'] = self::headers($headers);
+			return new self('network.continueResponse', $params);
+		}
+
+		/** Supply a complete response at request/response interception. Headers preserve duplicates; body is bytes, including empty. */
 		public static function respond(int $status = 200, array $headers = [], string $body = ''): self
 		{
 			if ($status < 100 || $status > 599) throw new \InvalidArgumentException('Expected an HTTP status from 100 through 599.');
@@ -25,7 +41,7 @@
 				'body' => ['type' => 'base64', 'value' => base64_encode($body)]]);
 		}
 
-		/** Fail the intercepted request with a browser network error. */
+		/** Fail at request/response interception with a browser network error; authentication requires cancelAuth(). */
 		public static function fail(): self { return new self('network.failRequest'); }
 
 		/** Answer an authRequired challenge with password credentials; the browser determines the authentication scheme. */
@@ -41,8 +57,16 @@
 		/** Cancel an authRequired challenge without providing credentials. */
 		public static function cancelAuth(): self { return new self('network.continueWithAuth', ['action' => 'cancel']); }
 
-		/** @internal The only interception phase in which this managed decision is accepted. */
-		public function phase(): string { return $this->method === 'network.continueWithAuth' ? 'authRequired' : 'beforeRequestSent'; }
+		/** @internal Managed phase compatibility; response replacement and failure work in either non-auth phase. */
+		public function supportsPhase(string $phase): bool
+		{
+			return match ($this->method) {
+				'network.continueRequest' => $phase === 'beforeRequestSent',
+				'network.continueResponse' => $phase === 'responseStarted',
+				'network.continueWithAuth' => $phase === 'authRequired',
+				'network.provideResponse', 'network.failRequest' => in_array($phase, ['beforeRequestSent', 'responseStarted'], true),
+			};
+		}
 
 		/** @internal Bind a value to the owned request; callers cannot substitute another request ID. */
 		public function command(string $request): array

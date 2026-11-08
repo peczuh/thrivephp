@@ -1921,9 +1921,147 @@ scenario('managed interception buffers installation events, orders rules and ret
 	$network->stopInterception()->stopInterception();
 	$browser->command('fixture.afterStop');
 	verify($calls === ['a', 'a', 'b'] && $network->requests() === [] && $network->interceptionError() === null, 'Stop lost passive ownership or enabled metadata capture.');
-	expectError(fn () => $network->intercept(fn () => NetworkDecision::fail(), phase: 'responseStarted'), 'Only beforeRequestSent and authRequired');
+	expectError(fn () => $network->intercept(fn () => NetworkDecision::fail(), phase: 'responseCompleted'), 'Only beforeRequestSent, responseStarted and authRequired');
 	$browser->quit();
 });
+
+expectError(fn () => NetworkDecision::continueResponse(99), 'HTTP status');
+expectError(fn () => NetworkDecision::continueResponse(600), 'HTTP status');
+$decisionCases = [
+	'continueRequest' => [fn () => NetworkDecision::continueRequest(), ['beforeRequestSent'], 'network.continueRequest', []],
+	'continueResponse' => [fn () => NetworkDecision::continueResponse(), ['responseStarted'], 'network.continueResponse', []],
+	'respond' => [fn () => NetworkDecision::respond(), ['beforeRequestSent', 'responseStarted'], 'network.provideResponse',
+		['statusCode' => 200, 'headers' => [], 'body' => ['type' => 'base64', 'value' => '']]],
+	'fail' => [fn () => NetworkDecision::fail(), ['beforeRequestSent', 'responseStarted'], 'network.failRequest', []],
+	'provideCredentials' => [fn () => NetworkDecision::provideCredentials('user', 'pass'), ['authRequired'], 'network.continueWithAuth',
+		['action' => 'provideCredentials', 'credentials' => ['type' => 'password', 'username' => 'user', 'password' => 'pass']]],
+	'defaultAuth' => [fn () => NetworkDecision::defaultAuth(), ['authRequired'], 'network.continueWithAuth', ['action' => 'default']],
+	'cancelAuth' => [fn () => NetworkDecision::cancelAuth(), ['authRequired'], 'network.continueWithAuth', ['action' => 'cancel']],
+];
+foreach ($decisionCases as $name => [$factory, $phases, $method, $params]):
+	foreach (['beforeRequestSent', 'responseStarted', 'authRequired'] as $phase):
+		$valid = in_array($phase, $phases, true);
+		scenario("managed decision phase compatibility: $name at $phase", function ($listener) use ($phase, $valid, $method, $params) {
+			createSession($listener, bidi: true);
+			$ws = upgrade($listener);
+			bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.' . $phase]]);
+			bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'intercepts']]);
+			bidiRequest($ws, 2, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
+			bidiReply($ws, networkEvent($phase, 'early', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+			bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'a']]);
+			bidiRequest($ws, 3, $valid ? $method : ($phase === 'authRequired' ? 'network.continueWithAuth' : 'network.failRequest'),
+				['request' => 'early'] + ($valid ? $params : ($phase === 'authRequired' ? ['action' => 'cancel'] : [])));
+			bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
+			bidiRequest($ws, 4, 'network.removeIntercept', ['intercept' => 'a']);
+			bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => (object)[]]);
+			exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+			fclose($ws);
+		}, function ($url) use ($phase, $valid, $factory) {
+			$browser = new Browser($url, 'firefox', bidi: true);
+			$network = $browser->network();
+			$network->intercept($factory, phase: $phase);
+			if ($valid) $network->stopInterception();
+			else expectError(fn () => $network->stopInterception(), 'not valid for ' . $phase);
+			verify(($network->interceptionError() === null) === $valid && $browser->bidi()->active(), 'Phase validation lost diagnostics or invalidated transport.');
+			$browser->quit();
+		});
+	endforeach;
+endforeach;
+
+scenario('response rules preserve early decisions, precedence, redirects and retired passthrough', function ($listener) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'session.subscribe', ['events' => ['network.responseStarted']]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'responses']]);
+	bidiRequest($ws, 2, 'network.addIntercept', ['phases' => ['responseStarted'], 'urlPatterns' => []]);
+	bidiReply($ws, networkEvent('responseStarted', 'redirect', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+	bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['intercept' => 'a']]);
+	bidiRequest($ws, 3, 'network.continueResponse', ['request' => 'redirect', 'statusCode' => 201,
+		'headers' => [['name' => 'X-Bytes', 'value' => ['type' => 'base64', 'value' => '/w==']]]]);
+	bidiRequest($ws, 4, 'network.addIntercept', ['phases' => ['responseStarted'], 'urlPatterns' => []]);
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['intercept' => 'b']]);
+	bidiRequest($ws, 5, 'fixture.redirect');
+	bidiReply($ws, networkEvent('responseStarted', 'foreign', extra: ['isBlocked' => true, 'intercepts' => ['foreign']]));
+	bidiReply($ws, networkEvent('responseStarted', 'redirect', 1, ['isBlocked' => true, 'intercepts' => ['b', 'a']]));
+	bidiRequest($ws, 6, 'network.continueResponse', ['request' => 'redirect', 'headers' => []]);
+	bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => (object)[]]);
+	bidiReply($ws, ['type' => 'error', 'id' => 6, 'error' => 'unknown error', 'message' => 'redirect response rejected']);
+	bidiRequest($ws, 7, 'network.failRequest', ['request' => 'redirect']);
+	foreach ([7, 5] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	bidiRequest($ws, 8, 'network.removeIntercept', ['intercept' => 'a']);
+	bidiReply($ws, ['type' => 'success', 'id' => 8, 'result' => (object)[]]);
+	bidiRequest($ws, 9, 'fixture.removed');
+	bidiReply($ws, networkEvent('responseStarted', 'active', extra: ['isBlocked' => true, 'intercepts' => ['a', 'b']]));
+	bidiRequest($ws, 10, 'network.provideResponse', ['request' => 'active', 'statusCode' => 202, 'headers' => [], 'body' => ['type' => 'base64', 'value' => 'AP8=']]);
+	foreach ([10, 9] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	bidiRequest($ws, 11, 'network.removeIntercept', ['intercept' => 'b']);
+	bidiReply($ws, networkEvent('responseStarted', 'retiring', extra: ['isBlocked' => true, 'intercepts' => ['b']]));
+	bidiRequest($ws, 12, 'network.continueResponse', ['request' => 'retiring']);
+	foreach ([12, 11] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	bidiRequest($ws, 13, 'fixture.stopped');
+	bidiReply($ws, networkEvent('responseStarted', 'late', extra: ['isBlocked' => true, 'intercepts' => ['a', 'b']]));
+	bidiRequest($ws, 14, 'network.continueResponse', ['request' => 'late']);
+	foreach ([14, 13] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	$calls = [];
+	$a = $network->intercept(function ($event) use (&$calls) {
+		$calls[] = 'a';
+		return $event['redirectCount'] === 0 ? NetworkDecision::continueResponse(201, [['X-Bytes', "\xff"]]) : NetworkDecision::continueResponse(headers: []);
+	}, phase: 'responseStarted');
+	$network->intercept(function () use (&$calls) { $calls[] = 'b'; return NetworkDecision::respond(202, body: "\0\xff"); }, phase: 'responseStarted');
+	$browser->command('fixture.redirect');
+	$network->removeIntercept($a);
+	$browser->command('fixture.removed');
+	expectError(fn () => $network->stopInterception(), 'redirect response rejected');
+	$browser->command('fixture.stopped');
+	$failures = $network->interceptionError()->failures();
+	verify($calls === ['a', 'a', 'b'] && count($failures) === 1 && $failures[0]['redirectCount'] === 1
+		&& $failures[0]['phase'] === 'responseStarted' && $network->requests() === [], 'Response ownership, settlement or capture isolation failed.');
+	$browser->quit();
+});
+
+foreach (['success', 'error'] as $oldReply):
+	scenario('a response pause survives a late request-stage mock reply: ' . $oldReply, function ($listener) use ($oldReply) {
+		createSession($listener, bidi: true);
+		$ws = upgrade($listener);
+		foreach ([1 => 'beforeRequestSent', 3 => 'responseStarted'] as $id => $phase):
+			bidiRequest($ws, $id, 'session.subscribe', ['events' => ['network.' . $phase]]);
+			bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => ['subscription' => $phase]]);
+			bidiRequest($ws, $id + 1, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
+			bidiReply($ws, ['type' => 'success', 'id' => $id + 1, 'result' => ['intercept' => $phase]]);
+		endforeach;
+		bidiRequest($ws, 5, 'fixture.mocked');
+		bidiReply($ws, networkEvent('beforeRequestSent', 'same', extra: ['isBlocked' => true, 'intercepts' => ['beforeRequestSent']]));
+		bidiRequest($ws, 6, 'network.provideResponse', ['request' => 'same', 'statusCode' => 200, 'headers' => [], 'body' => ['type' => 'base64', 'value' => '']]);
+		bidiReply($ws, networkEvent('responseStarted', 'same', extra: ['isBlocked' => true, 'intercepts' => ['responseStarted']]));
+		bidiRequest($ws, 7, 'network.continueResponse', ['request' => 'same']);
+		bidiReply($ws, $oldReply === 'success' ? ['type' => 'success', 'id' => 6, 'result' => (object)[]]
+			: ['type' => 'error', 'id' => 6, 'error' => 'unknown error', 'message' => 'old mock rejected']);
+		bidiReply($ws, ['type' => 'error', 'id' => 7, 'error' => 'unknown error', 'message' => 'current response rejected']);
+		bidiRequest($ws, 8, 'network.failRequest', ['request' => 'same']);
+		foreach ([8, 5] as $id) bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+		foreach ([9 => 'beforeRequestSent', 10 => 'responseStarted'] as $id => $phase):
+			bidiRequest($ws, $id, 'network.removeIntercept', ['intercept' => $phase]);
+			bidiReply($ws, ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+		endforeach;
+		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+		fclose($ws);
+	}, function ($url) use ($oldReply) {
+		$browser = new Browser($url, 'firefox', bidi: true);
+		$network = $browser->network();
+		$network->intercept(fn () => NetworkDecision::respond());
+		$network->intercept(fn () => NetworkDecision::continueResponse(), phase: 'responseStarted');
+		$browser->command('fixture.mocked');
+		expectError(fn () => $network->stopInterception(), 'current response rejected');
+		verify(array_column($network->interceptionError()->failures(), 'phase') === ($oldReply === 'error'
+			? ['beforeRequestSent', 'responseStarted'] : ['responseStarted']) && $browser->bidi()->active(), 'Old mock reply cleared or recovered the newer response pause.');
+		$browser->quit();
+	});
+endforeach;
 
 scenario('authentication owns lazy subscriptions, early events, ordered rules and retired defaults', function ($listener) {
 	createSession($listener, bidi: true);
@@ -2041,22 +2179,23 @@ foreach (['throw', 'null', 'reentry', 'wrong-phase', 'credentials-rejected', 'de
 	});
 endforeach;
 
+foreach (['beforeRequestSent', 'responseStarted'] as $phase):
 foreach (['throw', 'null', 'reentry', 'wrong-phase', 'rejected', 'recovery-rejected', 'no-such-request'] as $mode):
-	scenario('managed decision failure remains local: ' . $mode, function ($listener) use ($networkMethods, $mode) {
+	scenario('managed decision failure remains local: ' . $phase . ' ' . $mode, function ($listener) use ($networkMethods, $mode, $phase) {
 		createSession($listener, bidi: true);
 		$ws = upgrade($listener);
 		bidiRequest($ws, 1, 'session.subscribe', ['events' => ['log.entryAdded']]);
 		bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['subscription' => 'logs']]);
 		bidiRequest($ws, 2, 'session.subscribe', ['events' => $networkMethods]);
 		bidiReply($ws, ['type' => 'success', 'id' => 2, 'result' => ['subscription' => 'capture']]);
-		bidiRequest($ws, 3, 'session.subscribe', ['events' => ['network.beforeRequestSent']]);
+		bidiRequest($ws, 3, 'session.subscribe', ['events' => ['network.' . $phase]]);
 		bidiReply($ws, ['type' => 'success', 'id' => 3, 'result' => ['subscription' => 'intercepts']]);
-		bidiRequest($ws, 4, 'network.addIntercept', ['phases' => ['beforeRequestSent'], 'urlPatterns' => []]);
+		bidiRequest($ws, 4, 'network.addIntercept', ['phases' => [$phase], 'urlPatterns' => []]);
 		bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => ['intercept' => 'a']]);
 		bidiRequest($ws, 5, 'fixture.trigger');
-		bidiReply($ws, networkEvent('beforeRequestSent', 'owned', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
+		bidiReply($ws, networkEvent($phase, 'owned', extra: ['isBlocked' => true, 'intercepts' => ['a']]));
 		$handlerError = in_array($mode, ['throw', 'null', 'reentry', 'wrong-phase'], true);
-		bidiRequest($ws, 6, $handlerError ? 'network.failRequest' : 'network.continueRequest', ['request' => 'owned']);
+		bidiRequest($ws, 6, $handlerError ? 'network.failRequest' : ($phase === 'responseStarted' ? 'network.continueResponse' : 'network.continueRequest'), ['request' => 'owned']);
 		bidiReply($ws, $handlerError ? ['type' => 'success', 'id' => 6, 'result' => (object)[]]
 			: ['type' => 'error', 'id' => 6, 'error' => $mode === 'no-such-request' ? 'no such request' : 'invalid argument', 'message' => 'decision rejected']);
 		$next = 7;
@@ -2071,15 +2210,16 @@ foreach (['throw', 'null', 'reentry', 'wrong-phase', 'rejected', 'recovery-rejec
 		bidiReply($ws, ['type' => 'success', 'id' => $next, 'result' => (object)[]]);
 		exchange($listener, 'DELETE', '/session/session%2F1', null, null);
 		fclose($ws);
-	}, function ($url) use ($mode) {
+	}, function ($url) use ($mode, $phase) {
 		$browser = new Browser($url, 'firefox', bidi: true);
 		$browser->startLogCapture();
 		$network = $browser->network()->startCapture();
 		$original = new RuntimeException('handler failed');
 		$network->intercept(fn () => match ($mode) {
 			'throw' => throw $original, 'null' => null, 'reentry' => $browser->command('must.not.send'),
-			'wrong-phase' => NetworkDecision::provideCredentials('user', 'password'), default => NetworkDecision::continueRequest(),
-		});
+			'wrong-phase' => NetworkDecision::provideCredentials('user', 'password'),
+			default => $phase === 'responseStarted' ? NetworkDecision::continueResponse() : NetworkDecision::continueRequest(),
+		}, phase: $phase);
 		$browser->command('fixture.trigger');
 		$error = $network->interceptionError();
 		verify($browser->bidi()->active() && $network->captureError() === null && $browser->logCaptureError() === null, 'Managed failure invalidated transport or contaminated capture.');
@@ -2092,8 +2232,9 @@ foreach (['throw', 'null', 'reentry', 'wrong-phase', 'rejected', 'recovery-rejec
 		verify($network->interceptionError() === $error && count($network->requests()) === 1, 'Cleanup lost diagnostics or captured history.');
 	});
 endforeach;
+endforeach;
 
-foreach (['beforeRequestSent', 'authRequired'] as $phase):
+foreach (['beforeRequestSent', 'responseStarted', 'authRequired'] as $phase):
 scenario('interception reports later recovery errors without enabling capture or duplicating stop errors: ' . $phase, function ($listener) use ($phase) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);
@@ -2364,7 +2505,7 @@ foreach (['errors', 'deadline'] as $mode):
 	});
 endforeach;
 
-foreach (['beforeRequestSent', 'authRequired'] as $phase):
+foreach (['beforeRequestSent', 'responseStarted', 'authRequired'] as $phase):
 scenario('interception reports repeated exception objects and retains each failure across retries: ' . $phase, function ($listener) use ($phase) {
 	createSession($listener, bidi: true);
 	$ws = upgrade($listener);

@@ -282,6 +282,13 @@ a rule leaves late owned authentication pauses to browser-default handling.
 See [authentication challenges](webdriver-bidi.md#authentication-challenges) for
 bounded challenge handling and the tested browser limitations.
 
+Response rules use `phase: 'responseStarted'` and return `continueResponse()`,
+`respond()`, or `fail()`. Their failures use the same capture-independent reporting
+and retry retention. A browser rejecting response-body replacement is an execution
+error, even if recovery successfully releases the pause. See
+[response interception](webdriver-bidi.md#response-interception) for supported
+decisions and the native Chrome/Firefox findings.
+
 ### HTML snapshots
 
 `Browser::snapshot()` and `Window::snapshot()` capture the selected HTML document

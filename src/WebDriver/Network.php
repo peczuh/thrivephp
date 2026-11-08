@@ -1,7 +1,7 @@
 <?php
 	namespace ThriveData\ThrivePHP\WebDriver;
 
-	/** Session-wide metadata capture and request interception. Obtain the instance through Browser::network(). */
+	/** Session-wide metadata capture and network interception. Obtain the instance through Browser::network(). */
 	final class Network
 	{
 		private const EVENTS = ['network.beforeRequestSent', 'network.responseStarted', 'network.responseCompleted', 'network.fetchError'];
@@ -126,13 +126,13 @@
 		/**
 		 * Install an ordered managed rule. The handler receives blocked event params and must
 		 * return NetworkDecision; browser reentry is forbidden. URL patterns use BiDi syntax,
-		 * not globs. Supports beforeRequestSent and authRequired. First matching managed rule wins;
+		 * not globs. Supports beforeRequestSent, responseStarted and authRequired. First matching managed rule wins;
 		 * manual controllers must not also decide managed-owned requests. Capture is independent.
 		 */
 		public function intercept(callable $handler, array $urlPatterns = [], string $phase = 'beforeRequestSent'): string
 		{
 			$this->connection->assertCallable();
-			if (!in_array($phase, ['beforeRequestSent', 'authRequired'], true)) throw new \InvalidArgumentException('Only beforeRequestSent and authRequired interception are supported.');
+			if (!in_array($phase, ['beforeRequestSent', 'responseStarted', 'authRequired'], true)) throw new \InvalidArgumentException('Only beforeRequestSent, responseStarted and authRequired interception are supported.');
 			if (!isset($this->interceptSubscriptions[$phase])):
 				$this->interceptListeners[$phase] = $this->connection->listen('network.' . $phase, fn ($params) => $this->onRequest($params, $phase));
 				try {
@@ -254,10 +254,13 @@
 			$this->paused[$token] = ['requestId' => $request, 'redirectCount' => $event['redirectCount'], 'phase' => $phase, 'inflight' => true];
 			$this->current[$request] = $token;
 			try {
-				$decision = $handler === null
-					? ($phase === 'authRequired' ? NetworkDecision::defaultAuth() : NetworkDecision::continueRequest()) : $handler($event);
+				$decision = $handler === null ? match ($phase) {
+					'beforeRequestSent' => NetworkDecision::continueRequest(),
+					'responseStarted' => NetworkDecision::continueResponse(),
+					'authRequired' => NetworkDecision::defaultAuth(),
+				} : $handler($event);
 				if (!$decision instanceof NetworkDecision) throw new \UnexpectedValueException('Network intercept handlers must return NetworkDecision.');
-				if ($decision->phase() !== $phase) throw new \UnexpectedValueException('Network decision is not valid for ' . $phase . '.');
+				if (!$decision->supportsPhase($phase)) throw new \UnexpectedValueException('Network decision is not valid for ' . $phase . '.');
 			} catch (\Throwable $error) {
 				$this->recordInterceptionFailure($error, $this->paused[$token]);
 				$decision = $phase === 'authRequired' ? NetworkDecision::cancelAuth() : NetworkDecision::fail();

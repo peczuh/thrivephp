@@ -141,7 +141,8 @@ $network->stopInterception();
 
 `intercept(callable $handler, array $urlPatterns = [], string $phase = 'beforeRequestSent')`
 returns the remote intercept ID. The default phase is `beforeRequestSent`;
-`authRequired` supports the authentication decisions below. Patterns
+`responseStarted` and `authRequired` support the response and authentication
+decisions below. Patterns
 are BiDi URL-pattern objects, not PHP regular expressions or shell globs; an empty
 list matches all requests. The browser supplies matching intercept IDs. Among
 active managed rules, the first registered matching rule handles the pause,
@@ -228,8 +229,8 @@ $id = $network->intercept(
 Use `bidi: true` for a directly created session, or `$config->bidi = true` in a
 browser suite. Authentication does not enable metadata capture. Each phase
 subscribes lazily; request-only interception does not subscribe to auth events.
-Both phases share first-matching-rule precedence, removal, the stop deadline,
-and retained error reporting. Response-phase interception is not supported.
+All phases share first-matching-rule precedence, removal, the stop deadline,
+and retained error reporting.
 
 Authentication handlers return one of:
 
@@ -275,6 +276,64 @@ event queue.
 
 Native verification covers HTTP Basic on the versions below. Digest and proxy
 authentication are not certified by these tests.
+
+## Response interception
+
+Use `phase: 'responseStarted'` to decide after the server's response headers
+arrive, before its body completes:
+
+```php
+$id = $network->intercept(
+    fn (array $event): NetworkDecision => NetworkDecision::continueResponse(
+        status: 201,
+        headers: [['Content-Type', 'application/octet-stream'], ['X-Test', 'modified']],
+    ),
+    urlPatterns: [['type' => 'string', 'pattern' => 'https://app.example.test/result']],
+    phase: 'responseStarted',
+);
+```
+
+`continueResponse(?int $status = null, ?array $headers = null)` continues with
+the original network body. A null field preserves the server value. A supplied
+status must be 100 through 599. Supplied headers replace the header list; `[]`
+requests an empty list. Headers use the same ordered `[name, value]` pairs and
+byte encoding as request decisions. Browsers may retain or generate their own
+transport headers, as noted below. HTTP bodyless semantics still apply, such as
+HEAD responses; changing status does not guarantee page-visible body bytes for
+statuses that forbid a body.
+
+At this phase, `respond(status: ..., headers: ..., body: ...)` supplies a complete
+replacement using the existing defaults of status 200, empty headers, and an
+empty body. `fail()` rejects the request with a network error. Response-body
+replacement is verified on Chrome; Firefox 147 rejects it, including an empty
+body. The framework retains that rejection and attempts one fail recovery. It
+does not substitute a request-stage mock or silently preserve the original body.
+
+`continueRequest()` is valid only at `beforeRequestSent`, `continueResponse()`
+only at `responseStarted`, and authentication decisions only at `authRequired`.
+`respond()` and `fail()` are valid at both non-authentication phases. Wrong-phase
+decisions become retained controller errors and use the actual pause's recovery.
+
+Response rules use the same registration replay, first-matching-rule precedence,
+and occurrence tokens. They subscribe lazily and independently of capture.
+Removed response rules pass late owned pauses through with `continueResponse()`.
+Handler failures and rejected recoverable decisions attempt at most one fail
+recovery for the still-current occurrence; `no such request`, failed fail decisions,
+and superseded occurrences do not trigger another recovery. Errors retain
+`phase: 'responseStarted'` through the existing attempt and retry reporting.
+
+Do not assume a fixed request/authentication/response event sequence. Redirects
+and authentication can produce multiple pauses with the same request ID, even
+the same redirect count. Older command replies cannot clear or recover newer
+pauses. In the tested browsers, overlapping request-stage mocking and response
+interception can produce an event marked blocked whose continuation nevertheless
+fails with `no such request`; that error remains visible rather than being ignored.
+
+Metadata capture keeps the original `responseStarted` event unchanged. Later
+events may report different values after modification. No snapshot is rewritten
+to claim the server supplied the modified response. This API supplies response
+bodies but does not retrieve them; captured-body retrieval and body-transforming
+callbacks remain separate work.
 
 ## Transport and dispatch
 
@@ -401,6 +460,12 @@ or cancellation, browser-default acknowledgement, request/auth rule coexistence,
 capture independence, handler-error recovery, stop, and cleanup. Fresh sessions
 prevent cached credentials from hiding challenges. Reuse is checked after
 credential and cancellation paths, not after browser-default handling.
+`test/webdriver-response-browser.php [chrome|firefox]`, with the same PHP option,
+checks body-preserving continuation, status/header changes, response failure,
+redirects, authentication coexistence, HEAD, original capture snapshots, and
+stop/reuse. It verifies Chrome's empty/binary response replacement and explicitly
+checks Firefox's unsupported-operation error and fail recovery. Known mocked
+response continuation errors are reported as limitations, not treated as success.
 
 Observed during implementation:
 
@@ -443,6 +508,24 @@ Observed during implementation:
   navigation, and both completed rule removal and session cleanup. The native
   authentication test checks that separation rather than claiming default auth
   completes a navigation or permits every subsequent browser operation.
+- Chrome 156 and Firefox 147 continued real responses with byte-identical binary
+  bodies after status/header modification. Chrome exposed only the supplied
+  headers; Firefox retained `Content-Type` and `Content-Length` while removing
+  the fixture's replaced `X-Origin` header. Both respected HEAD bodyless behavior
+  and produced response pauses across redirect hops.
+- Chrome 156 replaced response bodies with supplied empty and binary bodies.
+  Firefox 147 rejected `provideResponse` at `responseStarted` with
+  `unsupported operation: The "body" parameter is only supported for the
+  beforeRequestSent phase at the moment`. Fail recovery released the pause and
+  rejected the fetch while leaving BiDi usable.
+- With request-stage mocking and response interception both enabled, both tested
+  browsers emitted `responseStarted` with `isBlocked: true`, then rejected
+  `continueResponse` with `no such request`; the mocked body still reached the page.
+- For the authenticated fixture, Chrome's blocked-event sequence was request,
+  authentication, then the 200 response. Firefox paused the initial 401 response,
+  then authentication, then another request and the 200 response. Firefox reused
+  the request ID and redirect count throughout. These observations do not impose
+  a universal phase order on the controller.
 - Safari Technology Preview 27.0 / driver 21626.1.6.19.1 exposed an experimental
   WebSocket with `safari:experimentalWebSocketUrl`, but its subscription response
   lacked the required subscription ID. Managed capture rejects that response;
