@@ -103,7 +103,10 @@ try {
         check($browser->script('return window.result') === 'received'
             && base64_decode($records()[$path][0]['body'], true) === "submitted ✓", 'Baseline POST did not reach the server.');
         if (count($types) === 2) check($network->responseBody($request) === 'received', 'Mixed collector lost response data.');
-        else expectError(fn () => $network->responseBody($request));
+        else {
+            expectError(fn () => $network->responseBody($request));
+            expectError(fn () => $network->disownBody($request));
+        }
         try { $retained = $network->requestBody($request); }
         catch (RuntimeException $error) {
             check($name === 'firefox' && $error->getMessage() === 'WebDriver BiDi operation timed out.' && !$connection->active(), $error->getMessage());
@@ -166,7 +169,33 @@ try {
         }
         check($network->requests() === [], 'Body collection enabled metadata capture.');
 
+        $request = $fetch('/case/disown-sole');
+        check($network->requestBody($request) === "submitted ✓" && $network->responseBody($request) === 'received', 'Sole-owned release fixture was not collected.');
+        check($network->disownBody($request) === $network, 'Response release was not fluent.');
+        expectError(fn () => $network->responseBody($request));
+        expectError(fn () => $network->disownBody($request));
+        check($network->requestBody($request) === "submitted ✓", 'Response release removed request ownership.');
+        check($network->disownBody($request, dataType: 'request') === $network, 'Request release was not fluent.');
+        expectError(fn () => $network->requestBody($request));
+        expectError(fn () => $network->disownBody($request, 'request'));
+        expectError(fn () => $network->disownBody('not-a-request'));
+        $later = $fetch('/case/after-disown');
+        check($network->requestBody($later) === "submitted ✓" && $network->responseBody($later) === 'received', 'Standalone release stopped later collection.');
+        echo "PASS: native $name standalone request/response release, sole-owner repeats and continued collection\n";
+
         $manual = $browser->command('network.addDataCollector', ['dataTypes' => $types, 'maxEncodedDataSize' => 4096])['collector'];
+        $request = $fetch('/case/disown-shared');
+        foreach (['response' => 'received', 'request' => "submitted ✓"] as $type => $expected) {
+            $reader = $type . 'Body';
+            check($network->$reader($request) === $expected, 'Shared item or other data type was lost before release.');
+            $network->disownBody($request, $type);
+            expectError(fn () => $network->$reader($request));
+            expectError(fn () => $network->disownBody($request, $type));
+            $result = $browser->command('network.getData', ['request' => $request, 'dataType' => $type, 'collector' => $manual]);
+            check($result['bytes'] === ['type' => 'string', 'value' => $expected], 'Standalone release removed foreign ownership.');
+        }
+        check($connection->active() && $network->captureError() === null && $network->interceptionError() === null, 'Release errors corrupted transport or passive diagnostics.');
+        echo "LIMITATION: $name rejects repeated standalone release even while a foreign collector retains the item; foreign data preserved\n";
         $request = $fetch('/case/shared');
         check($network->requestBody($request, true) === "submitted ✓" && $network->responseBody($request, true) === 'received', 'Mixed disown failed.');
         $network->stopBodyCollection()->startBodyCollection(128, $types);

@@ -290,7 +290,7 @@ error, even if recovery successfully releases the pause. See
 decisions and the native Chrome/Firefox findings.
 
 Body collection is explicit through `startBodyCollection()`, `requestBody()`,
-`responseBody()`, and `stopBodyCollection()`. The default collects responses;
+`responseBody()`, `disownBody()`, and `stopBodyCollection()`. The default collects responses;
 pass `dataTypes: ['request', 'response']` to collect both. Retrieved bytes are
 returned to the caller and are not attached to console/JSON/HTML reports.
 Raw network capture still preserves browser event fields, which can include
@@ -300,6 +300,8 @@ ordinary test execution reporting. See [body collection](webdriver-bidi.md#respo
 for ownership, response encoded-size limits, and native early-read limitations,
 and [request collection](webdriver-bidi.md#request-body-collection) for request-size
 and byte-identity findings.
+Use [standalone release](webdriver-bidi.md#releasing-collected-bodies) to discard
+an owned item without retrieving bytes; repeated releases can report native errors.
 
 ### HTML snapshots
 

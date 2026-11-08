@@ -1738,6 +1738,49 @@ scenario('mixed body reads isolate data types and foreign collector ownership', 
 	verify($body === "\0\xff", 'Request bytes depended on session lifetime.');
 });
 
+foreach (['success', 'error'] as $repeat):
+scenario('standalone body release forwards repeated outcomes and retains the collector: ' . $repeat, function ($listener) use ($repeat) {
+	createSession($listener, bidi: true);
+	$ws = upgrade($listener);
+	bidiRequest($ws, 1, 'network.addDataCollector', ['dataTypes' => ['request', 'response'], 'maxEncodedDataSize' => 128]);
+	bidiReply($ws, ['type' => 'success', 'id' => 1, 'result' => ['collector' => 'owned']]);
+	foreach ([2, 3] as $id):
+		bidiRequest($ws, $id, 'network.disownData', ['request' => 'same', 'dataType' => 'response', 'collector' => 'owned']);
+		bidiReply($ws, $id === 3 && $repeat === 'error'
+			? ['type' => 'error', 'id' => $id, 'error' => 'no such network data', 'message' => 'item released']
+			: ['type' => 'success', 'id' => $id, 'result' => (object)[]]);
+	endforeach;
+	bidiRequest($ws, 4, 'network.disownData', ['request' => 'same', 'dataType' => 'request', 'collector' => 'owned']);
+	bidiReply($ws, ['type' => 'success', 'id' => 4, 'result' => (object)[]]);
+	bidiRequest($ws, 5, 'network.getData', ['request' => 'later', 'dataType' => 'response', 'collector' => 'owned', 'disown' => false]);
+	bidiReply($ws, ['type' => 'success', 'id' => 5, 'result' => ['bytes' => ['type' => 'string', 'value' => 'later body']]]);
+	bidiRequest($ws, 6, 'network.disownData', ['request' => 'later', 'dataType' => 'response', 'collector' => 'owned']);
+	bidiReply($ws, ['type' => 'error', 'id' => 6, 'error' => 'unsupported operation', 'message' => 'release rejected']);
+	bidiRequest($ws, 7, 'network.removeDataCollector', ['collector' => 'owned']);
+	bidiReply($ws, ['type' => 'success', 'id' => 7, 'result' => (object)[]]);
+	exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+	fclose($ws);
+}, function ($url) use ($repeat) {
+	$browser = new Browser($url, 'firefox', bidi: true);
+	$network = $browser->network();
+	foreach (['request', 'response'] as $type) expectError(fn () => $network->disownBody('same', $type), 'not active');
+	foreach (['', 'invalid', 'REQUEST'] as $type) expectError(fn () => $network->disownBody('same', $type), 'Expected request or response');
+	$network->startBodyCollection(128, ['request', 'response']);
+	expectError(fn () => $network->disownBody('same', 'invalid'), 'Expected request or response');
+	verify($network->disownBody('same') === $network, 'Default response release was not fluent.');
+	if ($repeat === 'error') expectError(fn () => $network->disownBody('same'), 'no such network data: item released');
+	else verify($network->disownBody('same') === $network, 'Repeated release was suppressed or lost its receiver.');
+	verify($network->disownBody('same', dataType: 'request') === $network, 'Request release was not fluent.');
+	verify($network->responseBody('later') === 'later body', 'Release discarded the collector.');
+	expectError(fn () => $network->disownBody('later'), 'unsupported operation: release rejected');
+	verify($browser->bidi()->active() && $network->requests() === [] && $network->captureError() === null
+		&& $network->interceptionError() === null, 'Release errors enabled capture or contaminated transport/diagnostics.');
+	$network->stopBodyCollection();
+	expectError(fn () => $network->disownBody('later'), 'not active');
+	$browser->quit();
+});
+endforeach;
+
 foreach (['request', 'response'] as $dataType):
 scenario('pending body reads dispatch response decisions and guard reentry: ' . $dataType, function ($listener) use ($dataType) {
 	createSession($listener, bidi: true);
@@ -1766,7 +1809,8 @@ scenario('pending body reads dispatch response decisions and guard reentry: ' . 
 	$calls = 0;
 	$network->intercept(function () use ($network, &$calls) {
 		foreach ([fn () => $network->startBodyCollection(0), fn () => $network->startBodyCollection(128), fn () => $network->startBodyCollection(128, []),
-			fn () => $network->requestBody('pending'), fn () => $network->responseBody('pending'), fn () => $network->stopBodyCollection()] as $call):
+			fn () => $network->requestBody('pending'), fn () => $network->responseBody('pending'), fn () => $network->stopBodyCollection(),
+			fn () => $network->disownBody('pending'), fn () => $network->disownBody('pending', 'request'), fn () => $network->disownBody('pending', 'invalid')] as $call):
 			expectError($call, 'not allowed inside a BiDi event handler');
 		endforeach;
 		$calls++;

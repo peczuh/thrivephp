@@ -163,6 +163,21 @@
 			return $body;
 		}
 
+		/**
+		 * Release current ownership of one request/response item without retrieving bytes;
+		 * defaults to response. The collector, other data type and foreign owners remain.
+		 * Use after completion: this is not cancellation or an exclusion from later collection.
+		 * Repeated release may fail; native errors propagate. Handler reentry is forbidden.
+		 */
+		public function disownBody(string $requestId, string $dataType = 'response'): self
+		{
+			$this->connection->assertCallable();
+			if (!in_array($dataType, ['request', 'response'], true)) throw new \InvalidArgumentException('Expected request or response data type.');
+			if ($this->bodyCollector === null) throw new \LogicException('Body collection is not active.');
+			$this->connection->command('network.disownData', ['request' => $requestId, 'dataType' => $dataType, 'collector' => $this->bodyCollector]);
+			return $this;
+		}
+
 		/** Release this collector's request/response data. Failed removal retains ownership for another explicit call. */
 		public function stopBodyCollection(): self
 		{

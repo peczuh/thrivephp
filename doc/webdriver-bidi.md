@@ -560,6 +560,75 @@ malformed request results, handler reentry, pending command dispatch, timeout
 cleanup, and synchronous report attribution. Native tests preserve the observed
 errors and representation differences without a production fallback.
 
+## Releasing collected bodies
+
+Use `disownBody(string $requestId, string $dataType = 'response'): self` to release
+an item without retrieving its bytes:
+
+```php
+// After the request completes, discard either item without transferring its body.
+$network->disownBody($requestId);
+$network->disownBody($requestId, dataType: 'request');
+```
+
+The method sends `network.disownData` with the owned collector ID. It requires
+an active collector and accepts only `request` or `response`. It returns the
+controller, leaves collection active for later requests, and preserves the other
+data type and other collectors' ownership. Existing PHP strings remain usable.
+The method performs no `getData` preflight, decoding, or implicit test step.
+Like the readers, it rejects calls from event handlers and propagates synchronous
+native errors without clearing collector ownership or recording a passive error.
+
+Repeated release is not guaranteed to succeed. The
+[specification](https://www.w3.org/TR/webdriver-bidi/#command-network-disownData)
+returns `no such network data` when the global item is gone. Its ownership-removal
+algorithm allows a no-op success when another collector retains the item but
+this collector no longer owns it. The tested browsers reject that second case
+too, as noted below. ThrivePHP neither suppresses repeated calls nor normalizes
+their errors. A removed remote collector produces `no such network collector`.
+
+Release targets **current ownership**, not cancellation or permanent exclusion
+from collection. Pending data may not yet have owners; a successful release can
+remove nothing, and later collection can assign ownership. Routine usage should
+follow `network.responseCompleted`. The command does not promise that every
+successful early release makes a later read fail.
+
+### Native standalone-release findings
+
+The completed-item checks are part of
+`php -d short_open_tag=1 test/webdriver-request-body-browser.php [chrome|firefox]`.
+Raw probes and acceptance tests used Chrome/ChromeDriver 156.0.8078.80 and Firefox
+147.0.1/GeckoDriver 0.37.1 on macOS:
+
+- Both released completed request and response items. Subsequent owned reads
+  returned `no such network data`; the other data type remained readable.
+- Separately owned data remained readable after release. Both browsers nevertheless
+  rejected a second release with `no such network data` while the foreign owner
+  retained the item, rather than taking the specification's no-op success path.
+- Later requests were still collected. Missing request IDs and unselected types
+  produced `no such network data`. Raw probes with removed collector IDs returned
+  `no such network collector`. Ordinary errors left BiDi usable.
+- Successful verification subscribed to `beforeRequestSent` and completion
+  events. A Firefox raw probe without the `beforeRequestSent` subscription hit
+  the previously observed request-body retrieval timeout before request release
+  could be verified. The successful run with that subscription does not establish
+  its necessity; `disownBody()` itself installs no subscriptions.
+
+An optional bounded delayed-response probe also called release after
+`responseStarted` while the page fetch was unfinished. Chrome acknowledged it;
+the page fetch subsequently finished, but no `responseCompleted` event arrived
+before the fixture's wait timeout, and a body read reported missing data. Firefox
+rejected the early release because the item did not match the collector; a later
+completed-body read failed with `RangeError: source array is too long`. These are
+observations of that sequence, not proof of an internal clone state or a general
+pending-release guarantee. Timing-sensitive pending behavior is not a native
+acceptance requirement.
+
+Protocol fixtures separately exercise both possible repeated-command results,
+default-response and explicit-request routing, validation and reentry, fluent
+returns, and retained collector ownership after rejection. They verify client
+forwarding rather than simulating proof of browser storage behavior.
+
 ## Transport and dispatch
 
 `WebSocket` retains partial frame headers, payloads, fragmented text, and outgoing
