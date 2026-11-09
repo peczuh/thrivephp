@@ -17,5 +17,5 @@ ini_set('include_path', 'fixture="quoted";${HOME};C:\\fixture\\');
 if (getenv('TEST_BOOTSTRAP')) $test->bootstrap();
 else define('PATH_ROOT', $argv[1]);
 $options = json_decode($argv[2], true, flags: JSON_THROW_ON_ERROR);
-\ThriveData\ThrivePHP\Settings::$data['test']['console']['steps'] = (bool) getenv('TEST_CONSOLE_STEPS');
+\ThriveData\ThrivePHP\Settings::set('test.console.steps', (bool) getenv('TEST_CONSOLE_STEPS'));
 exit($test->run(...$options));

@@ -26,7 +26,19 @@ try {
     }
     $channel = new Channel($stream);
     $channel->send(['type' => 'hello', 'token' => $argv[2], 'pid' => getmypid()]);
-    $job = json_decode(base64_decode($argv[3], true), true, flags: JSON_THROW_ON_ERROR);
+    stream_set_timeout($stream, 60);
+    $job = null;
+    while ($job === null) {
+        foreach ($channel->receive() as $message) {
+            if ($message['type'] !== 'job' || !is_array($message['job'] ?? null)) {
+                throw new RuntimeException('Expected a worker job.');
+            }
+            $job = $message['job'];
+        }
+        if ($job === null && (feof($stream) || stream_get_meta_data($stream)['timed_out'])) {
+            throw new RuntimeException('Test parent did not supply a worker job.');
+        }
+    }
     $test = new Test($job['root']);
     $code = $test->runWorker($job, $channel);
     $channel->close();

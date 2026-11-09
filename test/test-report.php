@@ -75,7 +75,7 @@ function reportHelper(Element $element): void
 
 $browser = null;
 $runner = new FixtureTest(PATH_ROOT);
-Settings::$data['test']['screenshots']['suites'] = 'always';
+Settings::set('test.screenshots.suites', 'always');
 [$status, $console, $record] = runChecks(['suite' => function (Runner $test) use (&$browser) {
     return new class($test, $browser) extends SuiteBrowser {
         public function __construct(Runner $test, private mixed &$reference) { parent::__construct($test); }
@@ -236,8 +236,8 @@ $diagnostic = new \ThriveData\ThrivePHP\Test\Diagnostic(__DIR__);
 check($diagnostic->path(__DIR__ . '-other/file.php') === __DIR__ . '-other/file.php', 'Root matching crossed a directory boundary.');
 echo "PASS: relative paths retain reconstructable roots, nested-run isolation and absolute external files\n";
 
-Settings::$data['test']['screenshots'] = ['steps' => 'always', 'cases' => 'always', 'suites' => 'off'];
-Settings::$data['test']['console']['steps'] = true;
+Settings::set('test.screenshots', ['steps' => 'always', 'cases' => 'always', 'suites' => 'off']);
+Settings::set('test.console.steps', true);
 [$status, $console, $record] = runChecks(['check' => function (Runner $test) {
     $browser = new ReportBrowser();
     $browser->captureFails = true;
@@ -292,7 +292,7 @@ check($status === 0 && array_column($steps, 'status') === ['FAIL', 'PASS']
     'Recording replaced argument validation or leaked its guard after a caught exception: ' . json_encode($steps) . $console);
 echo "PASS: invalid supplied values retain their original errors and unwind the shared guard\n";
 
-Settings::$data = [];
+Settings::set('', []);
 $attempts = 0;
 [$status, $console, $record] = runChecks(['suite' => function (Runner $test) use (&$attempts) {
     $attempts++;
@@ -374,9 +374,9 @@ class PathRunner extends Runner
 $root = sys_get_temp_dir() . '/thrive-report-paths-' . bin2hex(random_bytes(8));
 $test = new PathRunner($root);
 check($test->paths() === [$root . '/test', $root . '/test/cases', $root . '/test/runs'], 'Default paths changed.');
-Settings::$data['test'] = ['basepath' => 'spec', 'casepath' => 'checks', 'savepath' => 'artifacts'];
+Settings::set('test', ['basepath' => 'spec', 'casepath' => 'checks', 'savepath' => 'artifacts']);
 check($test->paths() === [$root . '/spec', $root . '/spec/checks', $root . '/spec/artifacts'], 'Relative path anchors changed.');
-Settings::$data['test'] = ['basepath' => $root, 'casepath' => $root . '/cases', 'savepath' => $root . '/runs'];
+Settings::set('test', ['basepath' => $root, 'casepath' => $root . '/cases', 'savepath' => $root . '/runs']);
 mkdir($root . '/cases', 0700, true);
 mkdir($root . '/runs');
 file_put_contents($root . '/cases/check.php', '<?php return static function () {};');
@@ -395,7 +395,7 @@ try {
     rmdir($root . '/cases');
     rmdir($root . '/runs');
     rmdir($root);
-    Settings::$data = [];
+    Settings::set('', []);
 }
 echo "PASS: settings-driven paths retain their anchors and run collisions throw\n";
 
@@ -413,7 +413,7 @@ try {
         ['invalid JSON', 'Configured project', '', ''],
     ] as [$composer, $setting, $title, $expected]) {
         if ($composer !== null) file_put_contents($root . '/composer.json', $composer);
-        Settings::$data = ['test' => ['project' => $setting]];
+        Settings::set('', ['test' => ['project' => $setting]]);
         $runner = new FixtureTest($root, '/cases');
         ob_start();
         try {
@@ -430,7 +430,7 @@ try {
     unlink($root . '/cases/check.php');
     rmdir($root . '/cases');
     rmdir($root);
-    Settings::$data = [];
+    Settings::set('', []);
 }
 echo "PASS: project titles use explicit, settings, and Composer precedence without directory guesses\n";
 

@@ -54,7 +54,7 @@ return new class($test) extends SuiteBrowser {
 };
 PHP;
 foreach (['one', 'two'] as $name) file_put_contents($root . '/test/cases/' . $name . '.php', $suite);
-Settings::$data = ['test' => ['screenshots' => ['steps' => 'off', 'cases' => 'off', 'suites' => 'off']]];
+Settings::set('', ['test' => ['screenshots' => ['steps' => 'off', 'cases' => 'off', 'suites' => 'off']]]);
 $status = (new Test($root))->run(workers: (int)($argv[2] ?? 1), browser: $argv[1] ?? 'chrome', headless: true);
 $path = glob($root . '/test/runs/*/report.json')[0] ?? null;
 check($status === 0 && $path !== null, 'Expected passing diagnostic-only run.');

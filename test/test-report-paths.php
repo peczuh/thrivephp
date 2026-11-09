@@ -52,8 +52,8 @@ foreach ($names as $name) {
     file_put_contents($file, $fixture);
 }
 foreach ([1, 2] as $workers) {
-    Settings::$data = ['test' => ['savepath' => $root . '/runs-' . $workers,
-        'screenshots' => ['steps' => 'always', 'cases' => 'always', 'suites' => 'always']]];
+    Settings::set('', ['test' => ['savepath' => $root . '/runs-' . $workers,
+        'screenshots' => ['steps' => 'always', 'cases' => 'always', 'suites' => 'always']]]);
     $runner = new class($root) extends Test {
         protected function resolveBrowser(?string $browser): ?string { return null; }
     };

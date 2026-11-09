@@ -14,10 +14,9 @@ final class WorkerProcess
     private array $descendants = [];
     private bool $group = false;
 
-    public function __construct(array $php, string $address, string $token, array $job)
+    public function __construct(array $php, string $address, string $token)
     {
-        $command = [...$php, __DIR__ . '/worker.php', $address, $token,
-            base64_encode(json_encode($job, JSON_THROW_ON_ERROR))];
+        $command = [...$php, __DIR__ . '/worker.php', $address, $token];
         if (PHP_OS_FAMILY === 'Windows') {
             // The job-owning supervisor survives a PHP crash and closes the entire job on exit.
             $command = ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',

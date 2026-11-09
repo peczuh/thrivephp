@@ -55,7 +55,7 @@ return new class($test) extends SuiteBrowser {
 PHP;
 file_put_contents($root . '/test/cases/folder/one_case.php', $suite);
 file_put_contents($root . '/test/cases/folder/two_case.php', $suite);
-Settings::$data = ['test' => ['screenshots' => ['suites' => 'always']]];
+Settings::set('', ['test' => ['screenshots' => ['suites' => 'always']]]);
 $runner = new Test($root);
 $status = $runner->run(workers: (int)($argv[2] ?? 2), browser: $argv[1] ?? 'chrome', headless: true);
 $file = glob($root . '/test/runs/*/report.json')[0] ?? null;

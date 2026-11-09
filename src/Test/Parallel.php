@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ThriveData\ThrivePHP\Test;
 
-/** @internal Bounded fresh-process scheduler. Only structured test events travel over TCP. */
+/** @internal Bounded fresh-process scheduler. Jobs and structured test events travel over TCP. */
 final class Parallel
 {
     private const CONNECT_TIMEOUT = 60;
@@ -45,9 +45,9 @@ final class Parallel
                     $name = array_key_first($files);
                     $job = $configuration + ['name' => $name, 'file' => $files[$name]];
                     $token = bin2hex(random_bytes(16));
-                    $process = new WorkerProcess($php, $address, $token, $job);
+                    $process = new WorkerProcess($php, $address, $token);
                     unset($files[$name]);
-                    $this->workers[$token] = ['process' => $process, 'name' => $name, 'label' => $name,
+                    $this->workers[$token] = ['process' => $process, 'name' => $name, 'label' => $name, 'job' => $job,
                         'started' => hrtime(true) / 1e9, 'lastProgress' => hrtime(true) / 1e9,
                         'connection' => null, 'connected' => false, 'configured' => false,
                         'idleTimeout' => null, 'activity' => 'connecting', 'cases' => [], 'activeCase' => null,
@@ -161,6 +161,15 @@ final class Parallel
                     $this->workers[$token]['connected'] = true;
                     $this->workers[$token]['lastProgress'] = hrtime(true) / 1e9;
                     $this->workers[$token]['activity'] = 'connected';
+                    // The worker is waiting to read its job. Keep settings out of process arguments.
+                    stream_set_blocking($connection['channel']->stream, true);
+                    stream_set_timeout($connection['channel']->stream, self::CONNECT_TIMEOUT);
+                    try {
+                        $connection['channel']->send(['type' => 'job', 'job' => $this->workers[$token]['job']]);
+                    } finally {
+                        stream_set_blocking($connection['channel']->stream, false);
+                    }
+                    unset($this->workers[$token]['job']);
                     continue;
                 }
                 $this->message($connection['token'], $message);

@@ -39,6 +39,8 @@ class Test
     private ?string $selectedBrowser = null;
     private bool $browserResolved = false;
     private bool $headless = false;
+    /** Settings plus explicit run overrides, copied into each fresh browser suite configuration. */
+    private array $browserCapabilities = [];
     /** OR alternatives, matched against file paths first and case methods/tags after discovery. */
     private array $selectors = [];
     /** Worker events stay separate from incidental stdout/stderr. Null is the serial path. */
@@ -560,6 +562,7 @@ class Test
      * Null workers prefers two parallel processes, falling back to serial for Safari.
      * Explicit workers > 1 requires a parallel-capable selected browser; 1 runs in-process.
      * Browser and headless apply to every managed SuiteBrowser in this run.
+     * Capabilities replace matching test.browser.capabilities keys before suite configure() runs.
      * Title identifies the project; null uses test.project, then the root Composer package name.
      * Selected suite filename stems must be safe names and unique ignoring case across directories.
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
@@ -567,7 +570,7 @@ class Test
      * Empty selects all; each alternative combines its supplied conditions with AND.
      */
     public function run(array $names = [], ?int $workers = null, ?string $browser = null, bool $headless = false,
-        array $selectors = [], ?string $title = null): int
+        array $selectors = [], ?string $title = null, array $capabilities = []): int
     {
         $pathError = null;
         try {
@@ -581,6 +584,7 @@ class Test
 
         try {
             if ($pathError !== null) throw $pathError;
+            $this->browserCapabilities = array_replace(Settings::fetch('test.browser.capabilities') ?? [], $capabilities);
             $root = realpath($this->pathRoot) ?: $this->pathRoot;
             $title ??= Settings::fetch('test.project');
             if ($title === null && is_file($root . '/composer.json')) {
@@ -683,7 +687,8 @@ class Test
                     'root' => $root, 'cases' => $directory, 'runDirectory' => $this->runDirectory,
                     'capturePolicy' => $this->capturePolicy,
                     'browser' => $this->selectedBrowser, 'headless' => $headless, 'bootstrap' => $this->bootstrapped,
-                    'selectors' => $selectors,
+                    'selectors' => $selectors, 'capabilities' => $this->browserCapabilities,
+                    'settings' => json_encode(Settings::export(), JSON_THROW_ON_ERROR),
                 ], $this->report);
             } finally {
                 $this->report = null;
@@ -743,6 +748,12 @@ class Test
         return $this->headless;
     }
 
+    /** Run-level defaults; a suite can change its own copy in configure(). */
+    public function browserCapabilities(): array
+    {
+        return $this->browserCapabilities;
+    }
+
     /** No ready pair is allowed for non-browser checks; managed browser setup then reports the failure. */
     protected function resolveBrowser(?string $browser): ?string
     {
@@ -780,6 +791,7 @@ class Test
         $this->selectedBrowser = $job['browser'];
         $this->browserResolved = true;
         $this->headless = $job['headless'];
+        $this->browserCapabilities = $job['capabilities'];
         $this->selectors = array_map(fn ($selector) => new Test\Selector($selector), $job['selectors']);
         $this->event(['type' => 'activity', 'activity' => 'application bootstrap started']);
         if ($job['bootstrap']) {
@@ -788,6 +800,7 @@ class Test
             define('PATH_ROOT', $this->pathRoot);
             require_once PATH_ROOT . '/vendor/autoload.php';
         }
+        Settings::set('', json_decode($job['settings'], flags: JSON_THROW_ON_ERROR));
         $this->event(['type' => 'activity', 'activity' => 'application bootstrap finished']);
         $result = $this->executeFile($job['name'], $job['file']);
         $this->event(['type' => 'result', 'result' => $result]);

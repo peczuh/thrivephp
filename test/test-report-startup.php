@@ -58,7 +58,7 @@ foreach ([
     [['browser' => 'safari', 'workers' => 2], [], 'parallel sessions'],
 ] as $index => [$options, $settings, $message]) {
     $save = $root . '/run-' . $index;
-    Settings::$data = ['test' => $settings + ['savepath' => $save]];
+    Settings::set('', ['test' => $settings + ['savepath' => $save]]);
     $runner = new class($root) extends Test {
         protected function resolveBrowser(?string $browser): ?string {
             if ($browser === 'broken') throw new RuntimeException('browser selection failed', 0, new LogicException('original cause'));
@@ -72,7 +72,7 @@ foreach ([
     $record = failedReport($save, $console, $message, 'preparation');
     if (($options['browser'] ?? null) === 'broken') check($record['errors'][0]['previous']['message'] === 'original cause', 'Cause lost.');
 }
-Settings::$data = ['test' => ['savepath' => $root . '/composer-report']];
+Settings::set('', ['test' => ['savepath' => $root . '/composer-report']]);
 file_put_contents($root . '/composer.json', '{');
 ob_start();
 try { $status = (new Test($root))->run(workers: 1); }
@@ -80,7 +80,7 @@ finally { $console = ob_get_clean(); }
 check($status === 1, 'Invalid Composer metadata returned success.');
 failedReport($root . '/composer-report', $console, 'Syntax error', 'preparation');
 unlink($root . '/composer.json');
-Settings::$data = ['test' => ['savepath' => []]];
+Settings::set('', ['test' => ['savepath' => []]]);
 ob_start();
 try { $status = (new Test($root))->run(workers: 1); }
 finally { $console = ob_get_clean(); }
@@ -89,7 +89,7 @@ failedReport($root . '/test/runs', $console, 'string', 'preparation');
 echo "PASS: preparation failures retain console, JSON, HTML, causes and zero-suite totals\n";
 
 file_put_contents($root . '/blocked', 'not a directory');
-Settings::$data = ['test' => ['savepath' => $root . '/blocked/runs']];
+Settings::set('', ['test' => ['savepath' => $root . '/blocked/runs']]);
 ob_start();
 try {
     try {
@@ -136,7 +136,7 @@ foreach (['short-tags', 'composer', 'settings', 'configured', 'invalid-save'] as
         $autoload .= 'require ' . var_export($source . 'Exception.php', true) . '; require ' . var_export($source . 'Settings.php', true) . '; ';
         if ($mode !== 'settings') {
             $save = $mode === 'configured' ? $project . '/artifacts' : $save;
-            $autoload .= '\ThriveData\ThrivePHP\Settings::$data = ' . var_export(['test' => ['savepath' => $mode === 'configured' ? $save : []]], true) . '; ';
+            $autoload .= '\ThriveData\ThrivePHP\Settings::set("", ' . var_export(['test' => ['savepath' => $mode === 'configured' ? $save : []]], true) . '); ';
         }
         $autoload .= 'class_alias("StartupApplication", "ThriveData\\ThrivePHP\\Application"); class StartupApplication {
             public static function init() { json_decode("{", true, flags: JSON_THROW_ON_ERROR); }

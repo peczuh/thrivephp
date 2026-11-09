@@ -71,7 +71,7 @@ PHP;
     foreach (['network_only' => false, 'combined' => true] as $name => $logs) {
         file_put_contents($root . '/test/cases/' . $name . '.php', str_replace(['__BASE__', '__LOGS__'], [var_export($base, true), $logs ? 'true' : 'false'], $suite));
     }
-    Settings::$data = ['test' => ['screenshots' => ['steps' => 'off', 'cases' => 'off', 'suites' => 'off']]];
+    Settings::set('', ['test' => ['screenshots' => ['steps' => 'off', 'cases' => 'off', 'suites' => 'off']]]);
     $name = $argv[1] ?? 'chrome';
     $workers = (int)($argv[2] ?? 1);
     $status = (new Test($root))->run(workers: $workers, browser: $name, headless: true);

@@ -18,6 +18,10 @@ as their argument and report one result per file.
 
 ## Paths and reports
 
+Project/local files deep-merge through [Settings](settings.md). Apply runtime or
+CLI overrides with `Settings::set()` after bootstrap and before `run()`.
+Parallel workers receive the effective settings after their own bootstrap.
+
 The constructor accepts the project root only. The former `$pathChecks` argument
 has been removed. Paths resolve when `run()` starts, after application bootstrap:
 
@@ -435,6 +439,58 @@ Safari and Preview make the default execution mode serial; explicitly requesting
 more than one worker with either browser fails before any checks run.
 
 `browser` and `headless` apply to all managed `SuiteBrowser` sessions in the run.
+
+### Browser capabilities and TLS
+
+Set browser capability defaults in project or local settings:
+
+```json
+{
+  "test": {
+    "browser": {
+      "capabilities": {
+        "acceptInsecureCerts": true
+      }
+    }
+  }
+}
+```
+
+Or supply run overrides:
+
+```php
+$test->run(
+    browser: 'firefox',
+    headless: true,
+    capabilities: ['acceptInsecureCerts' => true],
+);
+```
+
+Precedence is project settings, local settings, runtime `Settings::set()` calls,
+explicit run capabilities, then suite `configure()` changes. File precedence
+follows load order. Run capabilities replace matching top-level capability keys;
+nested browser-option objects and argument lists are not merged at this layer.
+An explicit `false` overrides `true`.
+
+Each browser suite attempt receives its own copy before `configure()`:
+
+```php
+protected function configure(SuiteConfig $config): void
+{
+    $config->capabilities['acceptInsecureCerts'] = false;
+    // Assigning $config->capabilities = [...] replaces all inherited capabilities.
+}
+```
+
+Defaults propagate to workers and fresh retry attempts. Suite changes do not
+modify the run's defaults or Settings. With no capability supplied, the driver
+uses its existing default. `acceptInsecureCerts` controls certificates for pages
+and requests made by the browser. It does not change PHP HTTP or WebDriver/BiDi
+transport TLS verification. Negotiated capabilities remain in session reports.
+Browser/executable selection restrictions and explicit BiDi selection still apply.
+
+### Browser availability
+
 Explicit unavailable browsers fail; headless Safari/Preview fails without switching
 browsers. Headless defaults to false. Checks that need no browser can run without
 an installed pair. Managed browser setup then fails if no pair is available.
@@ -957,6 +1013,8 @@ php test/test-suite.php
 php test/test-attributes.php
 php test/test-selectors.php
 php test/test-parallel.php
+php test/settings.php
+php test/test-configuration.php
 php test/webdriver.php
 php test/webdriver-runtime.php
 ```
@@ -971,3 +1029,9 @@ For DOM behavior, run `php test/webdriver-dom.php chrome` or
 `php test/webdriver-dom.php firefox` with that browser and driver installed.
 These checks create a headless session with isolated documents and cover form
 submission, setters, checkbox/radio events, injection, traversal, and captured contexts.
+
+For certificate policies, run `php test/test-configuration-browser.php chrome`
+and `php test/test-configuration-browser.php firefox`. These require PHP OpenSSL
+and the selected browser/driver. They create a temporary self-signed HTTPS origin
+and verify settings, run overrides, suite overrides, and negotiated capabilities
+through two real browser workers.
