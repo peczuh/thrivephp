@@ -530,6 +530,29 @@
 			return $this;
 		}
 
+		/**
+		 * Tap one key or chord at current focus. Press in argument order, release in reverse,
+		 * then clear input-source state, including after a failed sequence. Never replay input.
+		 * tap(Browser::META, Browser::SHIFT, 'a') holds both modifiers for the letter's keydown.
+		 * Each key is one Unicode character or Browser key constant. For sequential text use
+		 * Element::type()/key(); tap('a', 'b') holds both letters. No arguments is a no-op.
+		 */
+		public function tap(string ...$keys): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($keys === []) return $this;
+			$actions = [];
+			foreach ($keys as $key) $actions[] = ['type' => 'keyDown', 'value' => $key];
+			foreach (array_reverse($keys) as $key) $actions[] = ['type' => 'keyUp', 'value' => $key];
+			$this->browser->activate($this, $this->frames);
+			try {
+				$this->actions([['type' => 'key', 'id' => 'keyboard', 'actions' => $actions]]);
+			} finally {
+				$this->releaseActions();
+			}
+			return $this;
+		}
+
 		/** Release held keys/buttons and clear the session's input-source state. */
 		public function releaseActions(): self
 		{

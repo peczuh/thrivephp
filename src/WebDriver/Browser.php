@@ -702,6 +702,14 @@
 			return $this;
 		}
 
+		/** Tap one key or chord at current focus, with Window::tap() press/release and cleanup semantics. */
+		public function tap(string ...$keys): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->window()->tap(...$keys);
+			return $this;
+		}
+
 		/** Release held keys/buttons and clear the session's input-source state. */
 		public function releaseActions(): self
 		{

@@ -23,7 +23,7 @@
 			$values = [];
 			foreach ((new \ReflectionMethod($receiver, $method))->getParameters() as $index => $parameter):
 				if (array_key_exists($index, $arguments)):
-					$values[$parameter->getName()] = self::value($arguments[$index]);
+					$values[$parameter->getName()] = self::value($parameter->isVariadic() ? array_slice($arguments, $index) : $arguments[$index]);
 				endif;
 			endforeach;
 			return $test->recordStep($method, $target, $values, fn() => $receiver->$method(...$arguments));

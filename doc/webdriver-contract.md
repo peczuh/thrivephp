@@ -115,7 +115,7 @@ Element assertions and actions preserve their element receiver.
 | `resize`, `move`, `maximize`, `minimize`, `fullscreen`, `switchFrame`, `parentFrame`, `defaultFrame`, window `activate` | One command/selection sequence; no polling |
 | `alertAccept`, `alertDismiss`, `alertType`, `cookie` setter, `cookieDelete`, `cookieDeleteAll` | One operation; no polling |
 | `script` | Acquire argument targets under one budget, then invoke once; execution uses its own script timeout |
-| `actions`, `releaseActions` | One native input/release sequence; no replay after partial input |
+| `actions`, `releaseActions`, `tap` | One native input/release sequence; no replay after partial input. `tap` presses a chord at current focus and releases it in reverse order |
 | `screenshot`, `snapshot`, `pdf` | Immediate eager captures; capture objects remain usable after session cleanup. `snapshot` captures the selected HTML document/frame with script elements removed, UTF-8 encoding and a resolved base URL; resources remain external |
 | `sleep` | Local delay in nonnegative finite seconds; no polling or assertion |
 | Browser `windows`, `window`, `open`, `switch`, `close`; window `close` | Window discovery/selection/lifecycle, no polling. `open` returns a window; window `close` returns the browser |
@@ -130,11 +130,11 @@ Element assertions and actions preserve their element receiver.
 | --- | --- |
 | Element/shadow-root `find`, `findAll` | Same lookup contract, retaining their search scope |
 | Element `resolve` | Acquire an exact node, leaving the target search unchanged |
-| `present`, `visible`, `enabled`, `selected`, `valueEquals`, `valueContains`, `textEquals`, `textContains`, `textMatches`, `attributeEquals`, `attributeContains`, `attributeMatches`, `propertyEquals`, `propertyContains`, `propertyMatches`, `cssEquals`, `hasAttribute`, `hasClass`, `hasDescendants` | Unified element conditions; query by default, optional assertions, negation, continuation, and waiting |
+| `present`, `visible`, `enabled`, `selected`, `active`, `valueEquals`, `valueContains`, `textEquals`, `textContains`, `textMatches`, `attributeEquals`, `attributeContains`, `attributeMatches`, `propertyEquals`, `propertyContains`, `propertyMatches`, `cssEquals`, `hasAttribute`, `hasClass`, `hasDescendants` | Unified element conditions; query by default, optional assertions, negation, continuation, and waiting |
 | ElementSet `countEquals` | Unified count condition on current matches or fixed snapshot membership |
 | `click`, `type`, `key`, `clear`, `value` setter, `check`, `uncheck`, `select` | Retrying input actions described below |
 | `hover`, `doubleClick`, `rightClick`, `dragDrop`, `dragBy` | One pointer sequence, followed by release; do not repeat potentially partial input |
-| `submit`, `inject`, `attribute` setter, `property` setter | Acquire targets then invoke once; no replay of scripts or DOM changes |
+| `submit`, `inject`, `attribute` setter, `property` setter, `focus`, `open`, `close` | Acquire targets then invoke once; no replay of scripts or DOM changes. `open`/`close` invoke native dialog methods |
 | `text`, `value` getter, `attribute` getter, `property` getter, `css`, `tag`, `rect`, `role`, `label`, `shadowRoot`, `firstChild`, `lastChild`, `nextSibling`, `previousSibling` | Acquire the target then observe once; no assertions |
 | Element `screenshot`, `sleep` | Eager capture or local delay; no assertion |
 | ElementSet `count`, `first`, `get`, `all`, `getIterator` | Search-backed or explicit snapshot behavior described above; empty sets are truthy objects |
@@ -238,5 +238,6 @@ Additional protocol scenarios cover lazy construction, query silence, count snap
 nodes, context failures, input replay boundaries, and compound deadlines. The
 native test checks dynamic DOM replacement, shadow/frame recovery, disabled and
 intercepted input, original-node disappearance, and continuing verification on
-isolated `data:` pages. The target test checks lazy searches and exact snapshots.
+isolated `data:` pages. The target test also checks nested closed-shadow focus,
+modifier flags on letter key events, Tab traversal, and native dialog lifecycle.
 Both accept `firefox` as an alternative browser argument.

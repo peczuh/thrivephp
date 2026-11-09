@@ -83,6 +83,32 @@ scenario('nested target resolution shares the condition deadline', function ($li
     $browser->quit();
 });
 
+scenario('focus and dialog commands record once while active queries stay silent', function ($listener) {
+    createSession($listener);
+    $node = [Element::REFERENCE => 'node'];
+    scriptExchange($listener, [$node], null);
+    scriptExchange($listener, [$node], true);
+    scriptExchange($listener, [$node], false);
+    scriptExchange($listener, [$node], true);
+    scriptExchange($listener, [$node, true], null);
+    scriptExchange($listener, [$node, null], null);
+    scriptExchange($listener, [$node, false], null);
+    scriptExchange($listener, [$node, ''], null);
+    exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+}, function ($url) {
+    $browser = new Browser($url, 'firefox');
+    $node = new Element($browser->window(), 'node');
+    [$status, $output, $record] = runChecks(['check' => function () use ($node) {
+        verify($node->focus() === $node && $node->active() && $node->active(is: false), 'Focus query or receiver changed.');
+        verify($node->active(assert: true) === $node, 'Focus assertion lost receiver.');
+        verify($node->open()->close()->open(modal: false)->close('') === $node, 'Dialog command lost receiver.');
+    }]);
+    $steps = $record['suites'][0]['attempts'][0]['steps'];
+    verify($status === 0 && array_column($steps, 'label') === ['focus', 'active', 'open', 'close', 'open', 'close']
+        && $record['totals']['assertionsPassed'] === 1, 'Convenience reporting recorded queries or inner scripts: ' . $output);
+    $browser->quit();
+});
+
 scenario('actions retry a missing child under an exact parent', function ($listener) {
     createSession($listener);
     $selector = ['using' => 'css selector', 'value' => '.child'];
@@ -107,3 +133,26 @@ scenario('script arguments share one acquisition deadline before dispatch', func
     expectError(fn() => $browser->script('return true', arguments: [$browser->find('#first'), $browser->find('#second')]), 'wait timed out resolving command arguments');
     $browser->quit();
 });
+
+foreach ([false, true] as $fails):
+    scenario('tap orders a chord and releases state, failure=' . (int)$fails, function ($listener) use ($fails) {
+        createSession($listener);
+        exchange($listener, 'POST', '/session/session%2F1/actions', ['actions' => [[
+            'type' => 'key', 'id' => 'keyboard', 'actions' => [
+                ['type' => 'keyDown', 'value' => Browser::META], ['type' => 'keyDown', 'value' => Browser::SHIFT], ['type' => 'keyDown', 'value' => 'a'],
+                ['type' => 'keyUp', 'value' => 'a'], ['type' => 'keyUp', 'value' => Browser::SHIFT], ['type' => 'keyUp', 'value' => Browser::META],
+            ],
+        ]]], $fails ? ['error' => 'unknown error', 'message' => 'input failed'] : null, $fails ? 500 : 200);
+        exchange($listener, 'DELETE', '/session/session%2F1/actions', null, null);
+        exchange($listener, 'DELETE', '/session/session%2F1', null, null);
+    }, function ($url) use ($fails) {
+        $browser = new Browser($url, 'firefox');
+        verify($browser->tap() === $browser, 'Empty tap lost receiver.');
+        [$status, $output, $record] = runChecks(['check' => fn() => $browser->tap(Browser::META, Browser::SHIFT, 'a')]);
+        $steps = $record['suites'][0]['attempts'][0]['steps'];
+        verify($status === (int)$fails && count($steps) === 1 && $steps[0]['label'] === 'tap'
+            && $steps[0]['values']['keys'] === [Browser::META, Browser::SHIFT, 'a'] && $record['totals']['assertionsFailed'] === 0,
+            'tap lost arguments, recorded nested actions or retried failed input: ' . $output);
+        $browser->quit();
+    });
+endforeach;

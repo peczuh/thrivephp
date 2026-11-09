@@ -760,7 +760,7 @@ This option is available on every comparison method. It applies only to that cal
 A failed assertion still fails the case or suite phase overall. Without an
 active `Test`, failed assertions throw even with `stop: false`.
 
-Element conditions include `present`, `visible`, `valueEquals`, `valueContains`, `textEquals`,
+Element conditions include `present`, `visible`, `active`, `valueEquals`, `valueContains`, `textEquals`,
 `textContains`, `textMatches`, `attributeEquals`, `attributeContains`,
 `attributeMatches`, `propertyEquals`, `propertyContains`, `propertyMatches`,
 `cssEquals`, `enabled`, `selected`, `hasAttribute`, `hasClass`, and
@@ -867,6 +867,36 @@ $element->attribute('disabled', null);       // Remove the attribute.
 
 `value()` replaces the former `setValue()` method. Its getter is an observation;
 its setter records one step and uses native clear/type commands, including for `'0'`.
+
+Focus and keyboard operations can use the current focus without sending keys to
+a new target:
+
+```php
+$input->focus()->active(assert: true);
+$this->browser->tap(Browser::TAB);
+$this->browser->tap(Browser::SHIFT, Browser::TAB);
+$this->browser->tap(Browser::META, Browser::SHIFT, 'a');
+```
+
+Import `ThriveData\ThrivePHP\WebDriver\Browser` for key constants. `tap()` presses
+keys in order and releases them in reverse, then clears input state. The letter's
+keydown sees both modifiers held. This is a chord, not sequential typing.
+`Element::type()`/`key()` target a particular element instead. `active()` checks
+focus through enclosing shadow roots; a host also counts as active when a shadow
+descendant has focus. A missing node does not satisfy `active(is: false)`.
+
+Native dialogs use `open(bool $modal = true)` and `close(?string $returnValue = null)`:
+
+```php
+$dialog->open()->visible(assert: true);       // Native showModal().
+$dialog->close('saved');                     // Native close('saved').
+$dialog->open(modal: false);                 // Native show().
+$dialog->close();                            // Preserve its existing returnValue.
+```
+
+These call the native dialog methods once, preserving browser focus and events.
+They do not run application setup attached to an opening button; click that button
+when testing its application behavior.
 
 For `property()` and `attribute()`, supplying a second argument selects setter behavior, including explicit `null`.
 Setters return the original element and dispatch no automatic `input` or `change`

@@ -63,6 +63,55 @@
 			return ShadowRoot::fromReference($this->window, $this->frames, $this->request('GET', '/shadow'), $this->lookup === null ? null : $this);
 		}
 
+		/** Wait for the target, then call its native focus() once. Non-focusable elements may remain unfocused. */
+		public function focus(): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->script('arguments[0].focus();');
+			return $this;
+		}
+
+		/**
+		 * Check focus through the node's root and each enclosing shadow host. A host is
+		 * active when its shadow descendant has focus, matching DOM activeElement semantics.
+		 * Like other node-requiring conditions, a missing/stale one-shot target throws;
+		 * waiting forms remain unsatisfied. Use present(is: false) for removal.
+		 */
+		public function active(bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
+		{
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->script(<<<'JS'
+				let node = arguments[0];
+				let root = node.getRootNode();
+				if (root.activeElement !== node) return false;
+				while (root.host) {
+					node = root.host;
+					root = node.getRootNode();
+					if (root.activeElement !== node) return false;
+				}
+				return true;
+				JS), fn($actual) => $actual, 'active: expected true', true, $is, $assert, $stop, $wait, $timeout);
+		}
+
+		/** Open a native dialog once, using showModal() by default or show() with $modal=false. */
+		public function open(bool $modal = true): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->script('HTMLDialogElement.prototype[arguments[1] ? "showModal" : "show"].call(arguments[0]);', [$modal]);
+			return $this;
+		}
+
+		/** Close a native dialog once. Null omits the return value; an empty string explicitly sets it. */
+		public function close(?string $returnValue = null): self
+		{
+			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$this->script(<<<'JS'
+				if (arguments[1] === null) HTMLDialogElement.prototype.close.call(arguments[0]);
+				else HTMLDialogElement.prototype.close.call(arguments[0], arguments[1]);
+				JS, [$returnValue]);
+			return $this;
+		}
+
 		/** Pause locally for seconds (including fractions), preserving this element and its context. */
 		public function sleep(float $seconds): self
 		{
