@@ -390,19 +390,19 @@ try {
 			$first = $driver->browser();
 			$continued = false;
 			[$status, $output] = runChecks(['check' => function () use ($first, &$continued) {
-				check($first->urlMatches('~/fixture$~') === $first, 'Successful assertion lost its receiver.');
-				$first->urlMatches('~/missing$~', wait: false);
+				check($first->urlMatches('~/fixture$~', assert: true) === $first, 'Successful assertion lost its receiver.');
+				$first->urlMatches('~/missing$~', assert: true, wait: false);
 				$continued = true;
 			}]);
 			check($status === 1 && !$continued && str_contains($output, 'Assertions: 1 passed, 1 failed') && !str_contains($output, 'Execution error'), $output);
-			raises(fn() => $first->urlMatches('~/missing$~', wait: false), 'WebDriver assertion failed');
+			raises(fn() => $first->urlMatches('~/missing$~', assert: true, wait: false), 'WebDriver assertion failed');
 			$first->quit();
 			$second = $driver->browser();
 			[$status, $output] = runChecks(['check' => function () use ($second) {
-				$second->urlMatches('~/fixture$~');
+				$second->urlMatches('~/fixture$~', assert: true);
 			}]);
 			check($status === 0 && str_contains($output, 'Assertions: 1 passed, 0 failed'), $output);
-			raises(fn() => $second->urlMatches('~/missing$~', wait: false), 'WebDriver assertion failed');
+			raises(fn() => $second->urlMatches('~/missing$~', assert: true, wait: false), 'WebDriver assertion failed');
 			check(TestRunner::active() === null, 'Factory assertion leaked a recorder.');
 		} finally {
 			$driver->stop();
@@ -443,7 +443,7 @@ try {
 						$started = microtime(true);
 						$this->browser->wait(function () use (&$calls) { return ++$calls === 2; });
 						check(microtime(true) - $started >= 0.01 && microtime(true) - $started < 0.3, 'Suite poll interval was not forwarded.');
-						$this->browser->urlMatches('~/fixture$~');
+						$this->browser->urlMatches('~/fixture$~', assert: true);
 						$this->trace[] = 'login';
 					}
 
@@ -451,7 +451,7 @@ try {
 					public function first(): void
 					{
 						$this->test->assert($this->browser === $this->original, 'Shared session.');
-						$this->browser->urlMatches('~/fixture$~');
+						$this->browser->urlMatches('~/fixture$~', assert: true);
 						$this->trace[] = 'first';
 					}
 
@@ -465,7 +465,7 @@ try {
 					#[SuiteAfter]
 					public function logout(): void
 					{
-						$this->browser->urlMatches('~/fixture$~');
+						$this->browser->urlMatches('~/fixture$~', assert: true);
 						$this->trace[] = 'logout';
 					}
 				};
@@ -474,7 +474,7 @@ try {
 				check(!$suites[0]->process->running(), 'Previous suite still owns a driver.');
 				return $suites[] = new class($test) extends FixtureBrowserSuite {
 					#[Test('default browser configuration')]
-					public function defaults(): void { $this->browser->urlMatches('~/fixture$~'); }
+					public function defaults(): void { $this->browser->urlMatches('~/fixture$~', assert: true); }
 				};
 			},
 		], browser: 'safari');
@@ -507,12 +507,12 @@ try {
 					#[Test('failing browser case')]
 					public function first(): void
 					{
-						$this->browser->urlMatches('~/missing$~', wait: false, verify: true);
+						$this->browser->urlMatches('~/missing$~', assert: true, wait: false, stop: false);
 						$this->trace[] = 'continued';
 					}
 
 					#[Test('later browser case')]
-					public function second(): void { $this->trace[] = 'second'; $this->browser->urlMatches('~/fixture$~'); }
+					public function second(): void { $this->trace[] = 'second'; $this->browser->urlMatches('~/fixture$~', assert: true); }
 
 					#[SuiteAfter]
 					public function cleanup(): void { $this->trace[] = 'cleanup'; }
@@ -542,7 +542,7 @@ try {
 				public function body(): void
 				{
 					$this->trace[] = 'body';
-					$this->browser->urlMatches($this->fail ? '~/missing$~' : '~/fixture$~', wait: false);
+					$this->browser->urlMatches($this->fail ? '~/missing$~' : '~/fixture$~', assert: true, wait: false);
 				}
 				#[Test('later browser case')]
 				public function later(): void { $this->trace[] = 'later'; $this->test->assert(true, 'retry restored later cases'); }
@@ -602,7 +602,7 @@ try {
 						public function body(): void
 						{
 							$this->trace[] = 'case';
-							$this->browser->urlMatches($this->failure === 'case' ? '~/missing$~' : '~/fixture$~', wait: false);
+							$this->browser->urlMatches($this->failure === 'case' ? '~/missing$~' : '~/fixture$~', assert: true, wait: false);
 							$this->trace[] = 'continued';
 						}
 

@@ -2,22 +2,18 @@
 	namespace ThriveData\ThrivePHP\WebDriver;
 
 	/**
-	 * A DOM element bound to its browser window and original frame path. Commands
-	 * select that context automatically and return this element for fluent chaining.
-	 * Actions try the captured reference first and recover retained lookups after staleness.
-	 * Observations never re-find. Assertions wait by default, re-find retained selectors
-	 * including ancestor scopes, and adopt the successful reference.
-	 * Script/focus references have no lookup: they can be polled but staleness propagates.
-	 * Original-node disappearance waits never re-find. visible(invert: true) also accepts a stale
-	 * original reference when no lookup is being retried. Assertions return this element
-	 * and report once to the active Test. Failed comparisons stop the case by default;
-	 * $verify records the failure and continues. Outside Test::run(), failures always throw.
-	 * Driver errors propagate in either mode. find() and wait() stop unless $verify is true.
-		 * Assertion $timeout is positive, finite milliseconds, null for assertionTimeout,
-		 * and ignored with $wait=false, which checks once. Polling uses pollInterval;
-	 * commands retain their own timeouts.
-	 * $invert negates comparisons on an existing element; only inverted visibility
-	 * accepts a missing element. Failed comparisons never adopt replacement nodes.
+	 * A selector-backed target or an exact DOM node in a captured window/frame.
+	 * Searches resolve afresh per operation; resolve() freezes the resulting node.
+	 * Ordinary readers wait for presence, then read once. Exact nodes never re-find.
+	 * Conditions return bool by default. $is=false negates the predicate; $assert=true
+	 * records one result and returns this element. $stop=false continues after a failed
+	 * assertion under an active Test; outside a Test, assertion failures always throw.
+	 * Null $wait checks queries once and polls assertions. Explicit $wait overrides this.
+	 * Condition $timeout is positive, finite milliseconds, null for assertionTimeout,
+	 * ignored without waiting. One budget covers lookup and evaluation at pollInterval.
+	 * Commands retain their own timeouts. Context and unrelated driver errors propagate.
+	 * Absence makes present()/visible() false. Other one-shot conditions require a node;
+	 * waiting conditions remain unsatisfied while it is missing, even with $is=false.
 	 */
 	class Element
 	{
@@ -25,23 +21,23 @@
 		public const REFERENCE = 'element-6066-11e4-a52e-4f735466cecf';
 
 		/** @internal Elements are normally obtained through find(), findAll(), or script(). */
-		public function __construct(private Window $window, private string $id, private array $frames = [], private ?Lookup $lookup = null)
+		public function __construct(private Window $window, private ?string $id, private array $frames = [], private ?Lookup $lookup = null)
 		{
-			if ($id === ''):
-				throw new \InvalidArgumentException('Element ID must not be empty.');
+			if ($id === '' || ($id === null) === ($lookup === null)):
+				throw new \InvalidArgumentException('An element requires either a nonempty node ID or a search.');
 			endif;
 		}
 
-		/** The opaque remote ID, for logging or protocol integration. */
+		/** Resolve a search and return its remote ID; exact nodes return their ID without a freshness check. */
 		public function id(): string
 		{
-			return $this->id;
+			return $this->lookup === null ? $this->id : $this->resolve()->id;
 		}
 
 		/** Author-facing selector; script-returned nodes may have no retained selector. */
 		public function description(): string
 		{
-			return $this->lookup?->description() ?? 'Element (no retained selector)';
+			return $this->lookup?->description() ?? 'Element ' . var_export($this->id, true);
 		}
 
 		public function window(): Window
@@ -49,30 +45,22 @@
 			return $this->window;
 		}
 
-		/**
-		 * Find a descendant using Browser::find() conditions, millisecond timeouts and reporting.
-		 * Scoped XPath should be relative, e.g. .//input. Waiting defaults to true and
-		 * re-finds this parent when it has a retained lookup; $wait=false checks once.
-		 * Positive success returns a child; inverted success null. $verify records one
-		 * assertion and returns null on an unmet condition through an active Test.
-		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?self
+		/** Describe a descendant search without looking up a node. Scoped XPath should be relative, e.g. .//input. */
+		public function find(string $selector, string $using = 'css selector'): self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout, $verify);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->target();
 		}
 
-		/** Return matching descendants in document order, possibly an empty collection. */
+		/** Describe a descendant collection; count()/all() search when called. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->all(false);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->collection();
 		}
 
 		/** Return the accessible shadow root; throws if the host has none. */
 		public function shadowRoot(): ShadowRoot
 		{
-			return ShadowRoot::fromReference($this->window, $this->frames, $this->request('GET', '/shadow'), $this);
+			return ShadowRoot::fromReference($this->window, $this->frames, $this->request('GET', '/shadow'), $this->lookup === null ? null : $this);
 		}
 
 		/** Pause locally for seconds (including fractions), preserving this element and its context. */
@@ -157,25 +145,25 @@
 			return $this;
 		}
 
-		/** Return the first element child, ignoring text/comments, or null; never wait or re-find. */
+		/** Acquire the target, then return its first element child as an exact node, or null. Ignore text/comments. */
 		public function firstChild(): ?Element
 		{
 			return $this->script('return arguments[0].firstElementChild;');
 		}
 
-		/** Return the last element child, ignoring text/comments, or null; never wait or re-find. */
+		/** Acquire the target, then return its last element child as an exact node, or null. Ignore text/comments. */
 		public function lastChild(): ?Element
 		{
 			return $this->script('return arguments[0].lastElementChild;');
 		}
 
-		/** Return the next element sibling, ignoring text/comments, or null; never wait or re-find. */
+		/** Acquire the target, then return its next element sibling as an exact node, or null. Ignore text/comments. */
 		public function nextSibling(): ?Element
 		{
 			return $this->script('return arguments[0].nextElementSibling;');
 		}
 
-		/** Return the previous element sibling, ignoring text/comments, or null; never wait or re-find. */
+		/** Acquire the target, then return its previous element sibling as an exact node, or null. Ignore text/comments. */
 		public function previousSibling(): ?Element
 		{
 			return $this->script('return arguments[0].previousElementSibling;');
@@ -198,7 +186,7 @@
 		}
 
 		/**
-		 * Null reads immediately; a string clears then types and returns this element. Empty strings only clear.
+		 * Null acquires the target and reads once; a string clears then types and returns this element. Empty strings only clear.
 		 * Setter retries share one timeout in milliseconds; each replacement is cleared before typing.
 		 * $wait=false makes one attempt. Reads ignore $wait and $timeout.
 		 */
@@ -286,7 +274,8 @@
 		public function dragDrop(Element $target): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->drag(['origin' => $target->reference($this->window, $this->frames), 'x' => 0, 'y' => 0]);
+			$target->assertContext($this->window, $this->frames);
+			$this->drag(['origin' => $target, 'x' => 0, 'y' => 0]);
 			return $this;
 		}
 
@@ -366,157 +355,105 @@
 			return $this->request('GET', '/computedlabel');
 		}
 
-		/** Return displayedness; visibility does not guarantee an unobstructed click. */
-		public function displayed(): bool
+		/** Check node presence; missing or stale nodes are absent. */
+		public function present(bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			return $this->request('GET', '/displayed');
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(function ($element) { $element->tag(); return true; }, fn($actual) => $actual,
+				'presence: expected true', true, $is, $assert, $stop, $wait, $timeout, absence: true);
+		}
+
+		/** Check displayedness; missing or stale nodes are invisible. Visibility does not guarantee clickability. */
+		public function visible(bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
+		{
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->request('GET', '/displayed'), fn($actual) => $actual,
+				'visibility: expected true', true, $is, $assert, $stop, $wait, $timeout, absence: true);
+		}
+
+		/** Compare the live DOM value property, not the HTML attribute, using strict equality. */
+		public function valueEquals(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
+		{
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->property('value'), fn($actual) => $actual === $expected,
+				'value: expected ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
+		}
+
+		/** Compare rendered text using strict equality. */
+		public function textEquals(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
+		{
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->text(), fn($actual) => $actual === $expected,
+				'text: expected ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
+		}
+
+		/** Check a case-sensitive substring of rendered text. */
+		public function textContains(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
+		{
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->text(), fn($actual) => str_contains($actual, $expected),
+				'text: expected to contain ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
+		}
+
+		/** Compare an attribute using strict equality; null expects an absent attribute on an existing node. */
+		public function attributeEquals(string $name, ?string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
+		{
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->attribute($name), fn($actual) => $actual === $expected,
+				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
 		/**
-		 * Wait for the original node's presence, or displayedness with $visible. $invert
-		 * requires staleness for presence, or hiddenness/staleness for visibility. Never
-		 * re-find replacements. Return this element on success; a stale reference stays unusable.
-		 * Poll at pollInterval. $timeout is positive, finite milliseconds; null uses
-		 * waitTimeout. In-flight commands retain their own timeouts. $assert reports
-		 * one final result. $verify also reports once, returning this element on expiry
-		 * through an active Test; this does not make the element usable. Otherwise expiry throws.
-		 * $verify takes precedence over $assert; failures still throw outside an active Test.
-		 * Staleness immediately fails positive conditions; context and unrelated driver
-		 * errors always propagate.
+		 * Check an attribute against a delimited PHP regex; absence never matches.
+		 * Invalid patterns throw before polling.
 		 */
-		public function wait(bool $visible = false, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): self
+		public function attributeMatches(string $name, string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$browser = $this->window->browser();
-			$actual = 'not observed';
-			$passed = $browser->evaluate(function () use ($browser, $visible, $invert, &$actual) {
-				// A stale frame during context restoration is not proof that this node is stale.
-				$browser->activate($this->window, $this->frames);
-				try {
-					if ($visible):
-						$condition = $this->displayed();
-						$actual = $condition ? 'visible' : 'hidden';
-					else:
-						$this->tag();
-						$condition = true;
-						$actual = 'present';
-					endif;
-					return $invert ? !$condition : $condition;
-				} catch (\RuntimeException $error) {
-					if (!$invert || !preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
-						throw $error;
-					endif;
-					$actual = 'stale';
-					return true;
-				}
-			}, true, $timeout);
-			$expected = $invert ? ($visible ? 'hidden or stale' : 'stale') : ($visible ? 'visible' : 'present');
-			$message = $this->description() . ': expected ' . $expected . ', got ' . $actual . '.';
-			if ($assert || $verify):
-				$browser->reportAssertion($passed, $message, $verify, ['expected' => $expected, 'actual' => $actual]);
-			endif;
-			if (!$passed && !$verify):
-				throw new \RuntimeException('WebDriver wait timed out. ' . $message);
-			endif;
-			return $this;
-		}
-
-		/**
-		 * Assert displayedness, waiting by default and re-finding retained lookups.
-		 * $invert accepts hiddenness, missing matches, or stale original nodes.
-		 * Return this element for chaining; use displayed() for immediate boolean logic.
-		 * Visibility does not guarantee clickability.
-		 */
-		public function visible(bool $invert = false, bool $wait = true, ?float $timeout = null, bool $verify = false): self
-		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->displayed(), fn($actual) => $actual === !$invert,
-				'visibility: expected ' . ($invert ? 'false or stale' : 'true'), $wait, $timeout, $verify, !$invert, $invert);
-		}
-
-		/** Assert strict equality with the live DOM value property, not the HTML attribute. Return this element. */
-		public function valueEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
-		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->property('value'), fn($actual) => $actual === $expected,
-				'value: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
-		}
-
-		/** Assert strict equality with rendered text, waiting by default; return this element. */
-		public function textEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
-		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => $actual === $expected,
-				'text: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
-		}
-
-		/** Assert a case-sensitive substring of rendered text, waiting by default; return this element. */
-		public function textContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
-		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => str_contains($actual, $expected),
-				'text: expected to contain ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
-		}
-
-		/** Assert strict attribute equality, waiting by default; null expects absence. Return this element. */
-		public function attributeEquals(string $name, ?string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
-		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual === $expected,
-				'attribute ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
-		}
-
-		/**
-		 * Assert an attribute matches a delimited PHP regex, waiting by default; absence never matches.
-		 * Invalid patterns throw. Return this element.
-		 */
-		public function attributeMatches(string $name, string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
-		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			// Validate before polling, even when no element can currently be found.
 			Browser::matches($pattern, '');
-			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => Browser::matches($pattern, $actual),
-				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout, $verify, $pattern, invert: $invert);
+			return $this->condition(fn($element) => $element->attribute($name), fn($actual) => Browser::matches($pattern, $actual),
+				'attribute ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $pattern, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert a substring of the live value, waiting by default; return this element. */
-		public function valueContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a case-sensitive substring of the live value. */
+		public function valueContains(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->property('value'), fn($actual) => is_string($actual) && str_contains($actual, $expected),
-				'value: expected to contain ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->property('value'), fn($actual) => is_string($actual) && str_contains($actual, $expected),
+				'value: expected to contain ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert rendered text matches a delimited PHP regex; invalid patterns throw before polling. */
-		public function textMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check rendered text against a delimited PHP regex; invalid patterns throw before polling. */
+		public function textMatches(string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			Browser::matches($pattern, '');
-			return $this->assertObservation(fn($element) => $element->text(), fn($actual) => Browser::matches($pattern, $actual),
-				'text: expected a match for ' . var_export($pattern, true), $wait, $timeout, $verify, $pattern, invert: $invert);
+			return $this->condition(fn($element) => $element->text(), fn($actual) => Browser::matches($pattern, $actual),
+				'text: expected a match for ' . var_export($pattern, true), $pattern, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert an attribute contains a case-sensitive substring; a missing attribute does not contain it. */
-		public function attributeContains(string $name, string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a case-sensitive attribute substring; a missing attribute does not contain it. */
+		public function attributeContains(string $name, string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual !== null && str_contains($actual, $expected),
-				'attribute ' . var_export($name, true) . ': expected to contain ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->attribute($name), fn($actual) => $actual !== null && str_contains($actual, $expected),
+				'attribute ' . var_export($name, true) . ': expected to contain ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert strict equality with a JSON-decoded DOM property; no string/number or boolean coercion. */
-		public function propertyEquals(string $name, mixed $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Compare a JSON-decoded DOM property without string/number or boolean coercion. */
+		public function propertyEquals(string $name, mixed $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->property($name), fn($actual) => $actual === $expected,
-				'property ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->property($name), fn($actual) => $actual === $expected,
+				'property ' . var_export($name, true) . ': expected ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert a string substring or every requested array member using strict membership; other types do not match. */
-		public function propertyContains(string $name, string|array $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a string substring or every requested array member using strict membership; other types do not match. */
+		public function propertyContains(string $name, string|array $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->property($name), static function ($actual) use ($expected) {
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->property($name), static function ($actual) use ($expected) {
 				if (is_string($actual) && is_string($expected)) return str_contains($actual, $expected);
 				if (!is_array($actual)) return false;
 				foreach ((array)$expected as $value):
@@ -524,54 +461,54 @@
 				endforeach;
 				return true;
 			}, 'property ' . var_export($name, true) . ': expected to contain ' . var_export($expected, true),
-				$wait, $timeout, $verify, $expected, invert: $invert);
+				$expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert a string DOM property matches a delimited PHP regex; null and non-strings do not match. */
-		public function propertyMatches(string $name, string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a string DOM property against a delimited PHP regex; null and non-strings do not match. */
+		public function propertyMatches(string $name, string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			Browser::matches($pattern, '');
-			return $this->assertObservation(fn($element) => $element->property($name), fn($actual) => is_string($actual) && Browser::matches($pattern, $actual),
-				'property ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $wait, $timeout, $verify, $pattern, invert: $invert);
+			return $this->condition(fn($element) => $element->property($name), fn($actual) => is_string($actual) && Browser::matches($pattern, $actual),
+				'property ' . var_export($name, true) . ': expected a match for ' . var_export($pattern, true), $pattern, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert strict equality with resolved CSS, using the driver's serialization of colors, lengths, and other values. */
-		public function cssEquals(string $name, string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Compare resolved CSS using the driver's serialization of colors, lengths, and other values. */
+		public function cssEquals(string $name, string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->css($name), fn($actual) => $actual === $expected,
-				'CSS ' . var_export($name, true) . ': expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->css($name), fn($actual) => $actual === $expected,
+				'CSS ' . var_export($name, true) . ': expected ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert enabled state; enabled() remains an immediate query. */
-		public function enabledEquals(bool $expected = true, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check enabled state according to WebDriver's form-control rules. */
+		public function enabled(bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->enabled(), fn($actual) => $actual === $expected,
-				'enabled: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->request('GET', '/enabled'), fn($actual) => $actual,
+				'enabled: expected true', true, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert selected state of options, checkboxes, or radios; selected() remains an immediate query. */
-		public function selectedEquals(bool $expected = true, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check selected state for options, checkboxes, and radio buttons. */
+		public function selected(bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->selected(), fn($actual) => $actual === $expected,
-				'selected: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->request('GET', '/selected'), fn($actual) => $actual,
+				'selected: expected true', true, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert attribute presence, including empty and boolean attributes; $invert requires absence on an existing node. */
-		public function hasAttribute(string $name, bool $invert = false, bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		/** Check attribute presence, including empty and boolean attributes, on an existing node. */
+		public function hasAttribute(string $name, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->attribute($name), fn($actual) => $actual !== null,
-				'attribute ' . var_export($name, true) . ': expected present', $wait, $timeout, $verify, 'present', invert: $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->attribute($name), fn($actual) => $actual !== null,
+				'attribute ' . var_export($name, true) . ': expected present', 'present', $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert all CSS class tokens, supplied as a whitespace-separated string or list; inversion means not all are present. */
-		public function hasClass(string|array $expected, bool $invert = false, bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		/** Check all CSS class tokens, supplied as a whitespace-separated string or list; $is=false means not all are present. */
+		public function hasClass(string|array $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			$classes = is_string($expected) ? preg_split('/[\x09\x0A\x0C\x0D\x20]+/', $expected, -1, PREG_SPLIT_NO_EMPTY) : $expected;
 			if ($classes === []) throw new \InvalidArgumentException('Expected at least one CSS class token.');
 			foreach ($classes as $class):
@@ -579,30 +516,18 @@
 					throw new \InvalidArgumentException('CSS class tokens must be nonempty strings without whitespace.');
 				endif;
 			endforeach;
-			return $this->assertObservation(fn($element) => $element->attribute('class'), static function ($actual) use ($classes) {
+			return $this->condition(fn($element) => $element->attribute('class'), static function ($actual) use ($classes) {
 				$actual = preg_split('/[\x09\x0A\x0C\x0D\x20]+/', $actual ?? '', -1, PREG_SPLIT_NO_EMPTY);
 				return array_diff($classes, $actual) === [];
-			}, 'classes: expected ' . var_export($expected, true), $wait, $timeout, $verify, $expected, invert: $invert);
+			}, 'classes: expected ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert at least one descendant element; text and comments do not count. Inversion requires an existing empty node. */
-		public function hasDescendants(bool $invert = false, bool $wait = true, ?float $timeout = null, bool $verify = false): self
+		/** Check for at least one descendant element; text and comments do not count. */
+		public function hasDescendants(bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertObservation(fn($element) => $element->findAll('*')->count(), fn($actual) => $actual > 0,
-				'descendants: expected at least one', $wait, $timeout, $verify, '> 0', invert: $invert);
-		}
-
-		/** Return enabled state according to WebDriver's form-control rules. */
-		public function enabled(): bool
-		{
-			return $this->request('GET', '/enabled');
-		}
-
-		/** Return selected state for options, checkboxes, and radio buttons. */
-		public function selected(): bool
-		{
-			return $this->request('GET', '/selected');
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->condition(fn($element) => $element->findAll('*')->count(), fn($actual) => $actual > 0,
+				'descendants: expected at least one', '> 0', $is, $assert, $stop, $wait, $timeout);
 		}
 
 		/** Capture the visible rectangle immediately; use ->data() for PNG bytes or ->save('element.png'). */
@@ -615,22 +540,28 @@
 		 * Return the W3C reference for low-level protocol integration. Internal callers
 		 * supply a context to reject elements belonging to another session/window/frame.
 		 */
-		public function reference(?Window $window = null, ?array $frames = null): array
+		public function reference(?Window $window = null, ?array $frames = null, bool $wait = true): array
+		{
+			$this->assertContext($window, $frames);
+			return [self::REFERENCE => $this->resolve($wait)->id];
+		}
+
+		/** Reject cross-context references before target acquisition or input cleanup. */
+		private function assertContext(?Window $window, ?array $frames): void
 		{
 			if (($window !== null && $window !== $this->window) || ($frames !== null && $frames !== $this->frames)):
 				throw new \InvalidArgumentException('Element belongs to another browser session or browsing context.');
 			endif;
-			return [self::REFERENCE => $this->id];
 		}
 
 		/** @internal Validate references consistently for searches, focus, and script results. */
-		public static function fromReference(Window $window, array $frames, mixed $reference, ?Lookup $lookup = null): self
+		public static function fromReference(Window $window, array $frames, mixed $reference): self
 		{
 			$id = is_array($reference) ? ($reference[self::REFERENCE] ?? null) : null;
 			if (!is_string($id) || $id === ''):
 				throw new \RuntimeException('WebDriver did not return an element ID.');
 			endif;
-			return new self($window, $id, $frames, $lookup);
+			return new self($window, $id, $frames);
 		}
 
 		/** @internal Whether this node and all its search ancestors can be re-found. */
@@ -639,48 +570,54 @@
 			return $this->lookup !== null && $this->lookup->canRefresh();
 		}
 
-		/** @internal Resolve a search ancestor without changing the original node's identity. */
-		public function resolve(): ?self
+		/** Return an exact node, waiting for presence by default. Timeout is milliseconds, null for waitTimeout. */
+		public function resolve(bool $wait = true, ?float $timeout = null): self
 		{
-			return $this->lookup === null ? $this : $this->lookup->element();
+			if ($this->lookup === null) return $this;
+			$element = null;
+			$error = null;
+			$passed = $this->window->browser()->evaluate(function () use ($wait, &$element, &$error) {
+				$this->lookup->activate();
+				try {
+					$element = $this->lookup->element();
+					return true;
+				} catch (\RuntimeException $failure) {
+					if (!$wait || !$this->lookup->retryable($failure)) throw $failure;
+					$error = $failure;
+					return false;
+				}
+			}, $wait, $timeout);
+			if (!$passed) throw new \RuntimeException('WebDriver wait timed out. ' . $this->description(), 0, $error);
+			return $element;
 		}
 
 		/**
-		 * Try the captured node first, then recover stale lookups within one polling deadline.
+		 * Resolve each attempt within one polling deadline; compound actions pin that attempt's exact node.
 		 * Operations return null on success, or a reason/exception to retry a known pre-input condition.
 		 * Only pre-input protocol errors are retryable; lost responses and context failures propagate.
 		 */
 		private function action(string $name, callable $operation, bool $wait, ?float $timeout, array $errors): self
 		{
 			$browser = $this->window->browser();
-			$element = $this;
-			$refresh = false;
 			$lastError = null;
-			$passed = $browser->evaluate(function () use ($browser, $operation, $wait, $errors, &$element, &$refresh, &$lastError) {
+			$passed = $browser->evaluate(function () use ($browser, $operation, $wait, $errors, &$lastError) {
 				// A stale captured frame is a context failure, not a reason to re-find an action target.
 				$browser->activate($this->window, $this->frames);
 				try {
-					if ($refresh):
-						$element = $this->lookup->element();
-						if ($element === null):
-							$lastError = new \RuntimeException('No matching element.');
-							return false;
-						endif;
-						$refresh = false;
-					endif;
+					$element = $this->resolve(wait: false);
 					$reason = $operation($element);
 					if ($reason !== null):
 						$lastError = $reason instanceof \RuntimeException ? $reason : new \RuntimeException($reason);
 						if (!$wait) throw $lastError;
 						return false;
 					endif;
-					$this->id = $element->id;
 					return true;
 				} catch (\RuntimeException $error) {
 					if (!$wait || !preg_match('/^WebDriver HTTP [45][0-9]{2} ([^:]+): /', $error->getMessage(), $match)) throw $error;
 					if (in_array($match[1], ['stale element reference', 'no such element', 'detached shadow root', 'no such shadow root'], true)):
-						if (!$this->canRefresh()) throw $error;
-						$refresh = true;
+						if ($this->lookup === null || !$this->lookup->retryable($error)):
+							throw $error;
+						endif;
 					elseif (!in_array($match[1], $errors, true)):
 						throw $error;
 					endif;
@@ -694,50 +631,40 @@
 			return $this;
 		}
 
-		/** Poll observations and report once; only successful retries replace this element's reference. */
-		private function assertObservation(callable $observe, callable $matches, string $expectation, bool $wait, ?float $timeout, bool $verify, mixed $expected, bool $absencePasses = false, bool $invert = false): self
+		/** Resolve once per attempt; only assertion mode records the final comparison. */
+		private function condition(callable $observe, callable $matches, string $expectation, mixed $expected, bool $is, bool $assert, bool $stop, ?bool $wait, ?float $timeout, bool $absence = false): bool|self
 		{
 			$browser = $this->window->browser();
-			$refresh = $wait && $this->lookup !== null;
+			$wait ??= $assert;
 			$actual = 'no observation';
 			$value = null;
-			$passed = $browser->evaluate(function () use ($browser, $observe, $matches, $refresh, $absencePasses, $invert, &$actual, &$value) {
+			$passed = $browser->evaluate(function () use ($browser, $observe, $matches, $wait, $absence, $is, &$actual, &$value) {
 				$value = null;
+				// Failed frame restoration cannot establish that the target is absent.
 				$browser->activate($this->window, $this->frames);
 				try {
-					$element = $refresh ? $this->lookup->element() : $this;
-					if ($element === null):
-						$actual = 'no matching element';
-						return $absencePasses;
-					endif;
+					$element = $this->resolve(wait: false);
 					$value = $observe($element);
 					$actual = var_export($value, true);
-					if ((bool)$matches($value) === $invert):
-						return false;
-					endif;
-					$this->id = $element->id;
-					return true;
+					return (bool)$matches($value) === $is;
 				} catch (\RuntimeException $error) {
-					if (!$refresh && $absencePasses && preg_match('/^WebDriver HTTP [45][0-9]{2} stale element reference: /', $error->getMessage())):
-						$actual = 'stale';
-						return true;
-					endif;
-					if (!$refresh || !$this->lookup->retryable($error)):
-						throw $error;
-					endif;
+					$missing = (bool)preg_match('/^WebDriver HTTP [45][0-9]{2} (no such element|stale element reference|detached shadow root|no such shadow root): /', $error->getMessage());
+					if (!$missing || (!$absence && !$wait)) throw $error;
 					$actual = $error->getMessage();
-					return $absencePasses && (bool)preg_match('/^WebDriver HTTP [45][0-9]{2} no such element: /', $actual);
+					if ($absence) $value = false;
+					return $absence && !$is;
 				}
 			}, $wait, $timeout, assertion: true);
-			$browser->reportAssertion($passed, $this->description() . ' ' . ($invert ? 'not (' . $expectation . ')' : $expectation) . ', got ' . $actual . '.', $verify,
-				['expected' => $expected, 'actual' => $value, 'observation' => $actual] + ($invert ? ['invert' => true] : []));
+			if (!$assert) return $passed;
+			$browser->reportAssertion($passed, $this->description() . ' ' . (!$is ? 'not (' . $expectation . ')' : $expectation) . ', got ' . $actual . '.', !$stop,
+				['expected' => $expected, 'actual' => $value, 'observation' => $actual] + (!$is ? ['invert' => true] : []));
 			return $this;
 		}
 
 		/** Route an element-relative command through its captured context. */
 		private function request(string $method, string $path, ?array $body = null): mixed
 		{
-			return $this->window->request($method, '/element/' . rawurlencode($this->id) . $path, $body, $this->frames);
+			return $this->window->request($method, '/element/' . rawurlencode($this->resolve()->id) . $path, $body, $this->frames);
 		}
 
 		/** Restore captured context before encoding arguments; the first argument is this element. */
@@ -752,7 +679,7 @@
 		/** Build hover or click actions at the in-view center. */
 		private function pointer(int $button, int $clicks): void
 		{
-			$actions = [['type' => 'pointerMove', 'duration' => 0, 'origin' => $this->reference(), 'x' => 0, 'y' => 0]];
+			$actions = [['type' => 'pointerMove', 'duration' => 0, 'origin' => $this, 'x' => 0, 'y' => 0]];
 			for ($i = 0; $i < $clicks; $i++):
 				$actions[] = ['type' => 'pointerDown', 'button' => $button];
 				$actions[] = ['type' => 'pointerUp', 'button' => $button];
@@ -764,7 +691,7 @@
 		private function drag(array $destination): void
 		{
 			$this->pointerActions([
-				['type' => 'pointerMove', 'duration' => 0, 'origin' => $this->reference(), 'x' => 0, 'y' => 0],
+				['type' => 'pointerMove', 'duration' => 0, 'origin' => $this, 'x' => 0, 'y' => 0],
 				['type' => 'pointerDown', 'button' => 0],
 				['type' => 'pointerMove', 'duration' => 250] + $destination,
 				['type' => 'pointerUp', 'button' => 0],

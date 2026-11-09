@@ -94,9 +94,9 @@ Settings::$data['test']['screenshots']['suites'] = 'always';
         #[Test('Successful body')]
         public function first(): void
         {
-            $element = $this->browser->find('#name', wait: false);
+            $element = $this->browser->find('#name');
             reportHelper($element);
-            $element->valueEquals('Jane </script><script>window.injected=true</script>', wait: false);
+            $element->valueEquals('Jane </script><script>window.injected=true</script>', assert: true, wait: false);
             $element->property('value');
             $element->value();
             $element->value(null);
@@ -107,12 +107,12 @@ Settings::$data['test']['screenshots']['suites'] = 'always';
         #[Test('Continuing failure')]
         public function second(): void
         {
-            $element = $this->browser->find('#name', wait: false);
-            $element->textEquals('Expected', wait: false, verify: true);
+            $element = $this->browser->find('#name');
+            $element->textEquals('Expected', assert: true, stop: false, wait: false);
             $this->browser->liveConsole = ob_get_contents();
             $this->browser->trace[] = ['continued after verification'];
             $this->browser->wait(fn () => $this->browser->sleep(0), timeout: 1);
-            $this->browser->find('#name', wait: false)->click();
+            $this->browser->find('#name')->click();
         }
         #[Test('Skipped after failure')]
         public function third(): void { throw new LogicException('Should be skipped'); }
@@ -136,29 +136,29 @@ $first = $suite['cases'][0]['attempts'][0];
 $second = $suite['cases'][1]['attempts'][0];
 check($record['environment']['browserVersion'] === '123.4' && $record['environment']['platform'] === 'test-platform'
     && $suite['session']['sessionId'] === 'session-1', 'Session capabilities were lost.');
-check(array_column($first['steps'], 'label') === ['assert', 'find', 'value', 'valueEquals', 'sleep', 'assert'],
+check(array_column($first['steps'], 'label') === ['assert', 'value', 'valueEquals', 'sleep', 'assert'],
     'Nested actions or observations became steps: ' . json_encode(array_column($first['steps'], 'label')));
-check(array_column($second['steps'], 'label') === ['assert', 'find', 'textEquals', 'wait', 'find', 'click', 'assert'],
+check(array_column($second['steps'], 'label') === ['assert', 'textEquals', 'wait', 'click', 'assert'],
     'Callback/internal steps were not suppressed or the guard leaked after failure.');
 check(array_column($suite['steps'], 'phase') === ['suite-setup', 'suite-teardown'], 'Suite hook steps collided.');
 check($first['steps'][0]['phase'] === 'case-setup' && end($first['steps'])['phase'] === 'case-teardown', 'Case phase attribution failed.');
-check($first['steps'][2]['phase'] === 'test' && $second['steps'][2]['phase'] === 'test', 'Test phase was not renamed.');
+check($first['steps'][1]['phase'] === 'test' && $second['steps'][1]['phase'] === 'test', 'Test phase was not renamed.');
 check($first['browserNetwork'][0]['phase'] === 'case-setup' && $second['browserNetwork'][0]['phase'] === 'case-setup'
     && end($suite['browserNetwork'])['phase'] === 'suite-teardown', 'Network boundary observation inherited the previous attempt phase.');
 check(array_any($first['browserNetwork'], fn ($entry) => $entry['phase'] === 'case-teardown' && $entry['hook'] === 'CaseAfter clean'), 'Case teardown lost its observation context.');
 check($record['environment']['root'] === realpath(PATH_ROOT)
-    && $first['steps'][2]['location']['file'] === 'test/test-report.php'
-    && $record['environment']['root'] . '/' . $first['steps'][2]['location']['file'] === __FILE__
-    && $first['steps'][2]['location']['line'] === (new ReflectionFunction('reportHelper'))->getStartLine() + 2,
-    'Helper location was not retained: ' . json_encode($first['steps'][2]['location']));
-check($first['steps'][2]['values']['value'] === 'Jane </script><script>window.injected=true</script>', 'Input was redacted or altered.');
-check($second['steps'][2]['assertions'][0]['expected'] === 'Expected'
-    && $second['steps'][2]['assertions'][0]['actual'] === 'Actual', 'Structured comparison lost its values.');
+    && $first['steps'][1]['location']['file'] === 'test/test-report.php'
+    && $record['environment']['root'] . '/' . $first['steps'][1]['location']['file'] === __FILE__
+    && $first['steps'][1]['location']['line'] === (new ReflectionFunction('reportHelper'))->getStartLine() + 2,
+    'Helper location was not retained: ' . json_encode($first['steps'][1]['location']));
+check($first['steps'][1]['values']['value'] === 'Jane </script><script>window.injected=true</script>', 'Input was redacted or altered.');
+check($second['steps'][1]['assertions'][0]['expected'] === 'Expected'
+    && $second['steps'][1]['assertions'][0]['actual'] === 'Actual', 'Structured comparison lost its values.');
 check(!array_key_exists('expected', $first['steps'][0]['assertions'][0]), 'Plain assertion invented a comparison.');
-check($second['steps'][2]['error'] === null
-    && $second['steps'][2]['assertions'][0]['class'] === 'AssertionFailure'
-    && $second['steps'][2]['assertions'][0]['location'] === $second['steps'][2]['location']
-    && !isset($second['steps'][2]['assertions'][0]['stack']), 'Assertion retained duplicate or framework diagnostics.');
+check($second['steps'][1]['error'] === null
+    && $second['steps'][1]['assertions'][0]['class'] === 'AssertionFailure'
+    && $second['steps'][1]['assertions'][0]['location'] === $second['steps'][1]['location']
+    && !isset($second['steps'][1]['assertions'][0]['stack']), 'Assertion retained duplicate or framework diagnostics.');
 check($record['totals']['assertionsPassed'] === 7 && $record['totals']['assertionsFailed'] === 1
     && $record['totals']['casesSkipped'] === 1, 'Actions changed assertion counts: ' . json_encode($record['totals']));
 check($suite['cases'][2]['attempts'] === [], 'Skipped case had an attempt.');
@@ -169,7 +169,7 @@ $teardown = array_search('suite teardown', $trace, true);
 check($browser->trace[$body + 1][1] === '/screenshot' && $trace[$body + 2] === 'case teardown', 'Success capture did not precede CaseAfter.');
 check($browser->trace[$continued - 1][1] === '/screenshot', 'Verification capture was delayed until after continuation.');
 check($browser->trace[$teardown - 1][1] === '/screenshot', 'Suite capture did not precede SuiteAfter.');
-check($second['screenshots'][0]['path'] === $second['steps'][5]['screenshots'][0]['path'], 'Propagating action/case failure captured twice.');
+check($second['screenshots'][0]['path'] === $second['steps'][3]['screenshots'][0]['path'], 'Propagating action/case failure captured twice.');
 $reportFile = glob($runner->saved . '/*/report.json')[0];
 $directory = dirname($reportFile);
 $images = iterator_to_array(new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory . '/screenshots', FilesystemIterator::SKIP_DOTS)));
@@ -195,7 +195,7 @@ check(substr_count($browser->liveConsole, 'AssertionFailure: ') === 1
     'Live assertion output duplicated its message/source or exposed instrumentation.');
 check(!str_contains($console, 'PASS  STEP') && substr_count($console, 'FAIL  STEP') === 2
     && substr_count($console, 'Execution error: RuntimeException: click failed') === 1
-    && substr_count($console, 'Screenshot: ' . realpath($directory) . '/' . $second['steps'][5]['screenshots'][0]['path']) === 1,
+    && substr_count($console, 'Screenshot: ' . realpath($directory) . '/' . $second['steps'][3]['screenshots'][0]['path']) === 1,
     'Compact output replayed successful steps or duplicated failure diagnostics.');
 echo "PASS: canonical steps, source attribution, comparisons, captures, capability metadata and HTML encoding\n";
 
@@ -455,16 +455,16 @@ foreach ([false, true] as $exhausted) {
         $browser->find('#button')->click(timeout: $exhausted ? 20 : 2000);
     }]);
     $steps = $record['suites'][0]['attempts'][0]['steps'];
-    check($status === (int)$exhausted && array_column($steps, 'label') === ['find', 'click']
-        && $steps[1]['status'] === ($exhausted ? 'FAIL' : 'PASS')
+    check($status === (int)$exhausted && array_column($steps, 'label') === ['click']
+        && $steps[0]['status'] === ($exhausted ? 'FAIL' : 'PASS')
         && $record['totals']['assertionsPassed'] === 0 && $record['totals']['assertionsFailed'] === 0,
         'Action retries created extra steps or assertions.');
-    check($steps[1]['location']['file'] === 'test/test-report.php'
-        && count($steps[1]['screenshots']) === (int)$exhausted
+    check($steps[0]['location']['file'] === 'test/test-report.php'
+        && count($steps[0]['screenshots']) === (int)$exhausted
         && count(array_filter($browser->trace, fn ($entry) => $entry[1] === '/screenshot')) === (int)$exhausted,
         'Retry screenshots or author location were not final-operation diagnostics.');
     check(substr_count($console, 'FAIL  STEP') === (int)$exhausted
-        && ($exhausted ? str_contains($steps[1]['error']['previous']['message'], 'covered') : $browser->clicks === 3),
+        && ($exhausted ? str_contains($steps[0]['error']['previous']['message'], 'covered') : $browser->clicks === 3),
         'Action retry output or final exception was lost.');
 }
 echo "PASS: action retries retain one step, final-only captures, author source and original timeout diagnostics\n";
@@ -487,9 +487,9 @@ foreach (['find', 'wait'] as $operation) {
                 $test->browserSession(['capabilities' => []], fn () => $browser->screenshot());
                 $line = __LINE__ + 2;
                 $result = $operation === 'find'
-                    ? $browser->find('#notice', visible: true, timeout: 1100, verify: true)
-                    : (new Element($browser->window(), 'input'))->wait(visible: true, timeout: 1100, verify: true);
-                check(($result === null) === ($operation === 'find' && $browser->exhausted), 'Wrong verification return value.');
+                    ? $browser->find('#notice')->visible(assert: true, stop: false, timeout: 1100)
+                    : (new Element($browser->window(), 'input'))->visible(assert: true, stop: false, timeout: 1100);
+                check($result instanceof Element, 'Wrong verification return value.');
                 $browser->trace[] = ['continued', null];
             };
         }]);
@@ -534,8 +534,8 @@ foreach (require __DIR__ . '/fixtures/webdriver-assertions.php' as $method => [$
         $target = match ($scope) { 'browser' => $browser, 'window' => $browser->window(), default => new Element($browser->window(), 'input') };
         [$status, $console, $record] = runChecks(['suite' => fn (Runner $test) => function () use ($test, $browser, $target, $method, $arguments) {
             $test->browserSession(['capabilities' => []], fn () => $browser->screenshot());
-            check($target->$method(...[...$arguments, 'timeout' => 1100]) === $target, 'Passing assertion lost receiver.');
-            check($target->$method(...[...$arguments, 'timeout' => 1, 'invert' => true, 'verify' => true]) === $target, 'Verification lost receiver.');
+            check($target->$method(...[...$arguments, 'assert' => true, 'timeout' => 1100]) === $target, 'Passing assertion lost receiver.');
+            check($target->$method(...[...$arguments, 'assert' => true, 'timeout' => 1, 'is' => false, 'stop' => false]) === $target, 'Verification lost receiver.');
             $browser->trace[] = ['continued', null];
         }]);
         $steps = $record['suites'][0]['attempts'][0]['steps'];
@@ -544,7 +544,7 @@ foreach (require __DIR__ . '/fixtures/webdriver-assertions.php' as $method => [$
             && array_column($steps, 'error') === [null, null]
             && $record['totals']['assertionsPassed'] === 1 && $record['totals']['assertionsFailed'] === 1,
             "$scope $method recorded intermediate results or nested steps.");
-        check(($method === 'visible' ? $steps[1]['assertions'][0]['expected'] === false : $steps[1]['assertions'][0]['invert'] === true)
+        check($steps[1]['assertions'][0]['invert'] === true
             && $steps[1]['assertions'][0]['location'] === $steps[1]['location']
             && $steps[1]['location']['file'] === 'test/test-report.php'
             && count($steps[0]['screenshots']) === 0 && count($steps[1]['screenshots']) === 1

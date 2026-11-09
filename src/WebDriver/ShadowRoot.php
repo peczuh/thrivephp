@@ -21,33 +21,25 @@
 			return $this->id;
 		}
 
-		/**
-		 * Find within this root using Browser::find() conditions and millisecond timeouts.
-		 * Waiting defaults to true and re-finds the host when it has a lookup;
-		 * $wait=false checks once. Positive success returns an Element; inverted success
-		 * null. $verify reports once and returns null on an unmet condition through an
-		 * active Test. Supported strategies depend on the driver.
-		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?Element
+		/** Describe a search within this root. Host-backed roots follow the host search on each operation. */
+		public function find(string $selector, string $using = 'css selector'): Element
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->find($visible, $wait, $invert, $assert, $timeout, $verify);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->target();
 		}
 
-		/** Return matching descendants in document order, possibly empty. */
+		/** Describe a collection search within this root. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->all(false);
+			return (new Lookup($this->window, $this->frames, $selector, $using, $this))->collection();
 		}
 
 		/** Return the W3C reference, optionally checking its destination context. */
-		public function reference(?Window $window = null, ?array $frames = null): array
+		public function reference(?Window $window = null, ?array $frames = null, bool $wait = true): array
 		{
 			if (($window !== null && $window !== $this->window) || ($frames !== null && $frames !== $this->frames)):
 				throw new \InvalidArgumentException('Shadow root belongs to another browser session or browsing context.');
 			endif;
-			return [self::REFERENCE => $this->id];
+			return [self::REFERENCE => $this->resolve($wait)->id];
 		}
 
 		/** @internal Validate a protocol shadow-root reference before exposing it. */
@@ -67,8 +59,14 @@
 		}
 
 		/** @internal Reacquire the root from its host; script-returned roots keep their original reference. */
-		public function resolve(): ?self
+		public function resolve(bool $wait = true, ?float $timeout = null): self
 		{
-			return $this->host === null ? $this : $this->host->resolve()?->shadowRoot();
+			return $this->host === null ? $this : $this->host->resolve($wait, $timeout)->shadowRoot();
+		}
+
+		/** Describe the scope without resolving a host search. */
+		public function description(): string
+		{
+			return $this->host === null ? 'shadow ' . $this->id : 'shadow of ' . $this->host->description();
 		}
 	}

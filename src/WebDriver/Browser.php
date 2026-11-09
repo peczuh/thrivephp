@@ -21,7 +21,7 @@
 	 *     $driver->resize(1440, 900)->navigate('data:text/html,<title>Example</title><input id="name">');
 	 *     $input = $driver->wait(function ($driver) {
 	 *         $element = $driver->find('#name');
-	 *         return $element->displayed() && $element->enabled() ? $element : false;
+	 *         return $element->visible() && $element->enabled() ? $element : false;
 	 *     }, timeout: 10000);
 	 *     $input->clear()->type('Hello')->key(\ThriveData\ThrivePHP\WebDriver\Browser::TAB);
 	 *     $value = $driver->script('return arguments[0].value;', arguments: [$input]);
@@ -81,7 +81,7 @@
 		 * $timeout is positive seconds: a total HTTP transfer budget and a BiDi command/
 		 * event wait limit. Failed BiDi setup attempts to delete the new HTTP session.
 		 * Assertions report automatically to the active Test and stop on failure by default.
-		 * Comparison methods accept $verify to record a failed result and continue instead.
+		 * Conditions query by default; $assert=true records a result, and $stop=false continues after mismatches.
 		 * Outside Test::run(), failures throw RuntimeException. Assertions retry by default;
 		 * $wait=false checks once.
 		 * $waitTimeout, $assertionTimeout and $pollInterval are positive, finite milliseconds.
@@ -184,31 +184,20 @@
 		}
 
 		/**
-		 * Find in the current window/frame. Presence is the default; $visible requires
-		 * the first match to be displayed. $invert instead requires no matches, or no
-		 * displayed matches when $visible is true. Positive success returns an Element;
-		 * inverted success returns null. Unmet conditions throw unless $verify records
-		 * a failed assertion and returns null through an active Test.
-		 * By default, repeat at pollInterval; $wait=false checks once. $timeout is
-		 * positive, finite milliseconds, defaulting to waitTimeout; ignored
-		 * without $wait. In-flight commands retain their own timeouts.
-		 * $assert or $verify reports one final result through the recorder, never one per poll.
-		 * $verify takes precedence over $assert; failures still throw outside an active Test.
-		 * Invalid selectors and unrelated driver errors propagate without assertion reports.
-		 * Returned elements retain this lookup for waiting assertions; see Window::find().
+		 * Describe a target in the current window/frame without searching the DOM.
+		 * Each operation resolves current matches; resolve() returns an exact node instead.
+		 * Use present()/visible() to query or assert presence/visibility with optional waiting.
 		 * $using defaults to 'css selector'; other W3C strategies are 'xpath', 'tag name',
 		 * 'link text', and 'partial link text'. For scoped XPath, use a relative expression.
 		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?Element
+		public function find(string $selector, string $using = 'css selector'): Element
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->window()->find($selector, $using, $visible, $wait, $invert, $assert, $timeout, $verify);
+			return $this->window()->find($selector, $using);
 		}
 
-		/** Return a snapshot of matching elements in document order, possibly empty. */
+		/** Describe a collection search; counting searches once and iteration materializes exact nodes. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			return $this->window()->findAll($selector, $using);
 		}
 
@@ -425,58 +414,58 @@
 		}
 
 		/**
-		 * Assert that the current window URL matches a delimited PHP regex.
-		 * Poll by default; $wait=false checks once.
-		 * $timeout is positive milliseconds or null for assertionTimeout, ignored without waiting.
-		 * Return this browser. Invalid patterns throw. Results report to the active Test;
-		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
-		 * $invert negates the match. All URL/title comparisons share these polling and reporting rules.
+		 * Check the current URL against a delimited PHP regex. Return bool by default;
+		 * $assert records once and returns this browser. $is=false negates the predicate.
+		 * Null $wait checks queries once and polls assertions. Timeout is positive milliseconds
+		 * or null for assertionTimeout, ignored without waiting. $stop=false continues assertion
+		 * mismatches under an active Test; outside Test they throw. Invalid patterns and driver
+		 * errors propagate. All URL/title comparisons share these options.
 		 */
-		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		public function urlMatches(string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->urlMatches($pattern, $wait, $timeout, $verify, $invert);
-			return $this;
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$result = $this->window()->urlMatches($pattern, $is, $assert, $stop, $wait, $timeout);
+			return $assert ? $this : $result;
 		}
 
-		/** Assert exact current URL equality; use urlMatches() polling, verification, and millisecond timeout semantics. */
-		public function urlEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Compare the exact current URL, with urlMatches() condition options. */
+		public function urlEquals(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->urlEquals($expected, $wait, $timeout, $verify, $invert);
-			return $this;
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$result = $this->window()->urlEquals($expected, $is, $assert, $stop, $wait, $timeout);
+			return $assert ? $this : $result;
 		}
 
-		/** Assert a case-sensitive URL substring, polling by default; return this browser. */
-		public function urlContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a case-sensitive URL substring, with urlMatches() condition options. */
+		public function urlContains(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->urlContains($expected, $wait, $timeout, $verify, $invert);
-			return $this;
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$result = $this->window()->urlContains($expected, $is, $assert, $stop, $wait, $timeout);
+			return $assert ? $this : $result;
 		}
 
-		/** Assert the current top-level title; use urlMatches() polling, verification, and millisecond timeout semantics. */
-		public function titleEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Compare the exact top-level title, with urlMatches() condition options. */
+		public function titleEquals(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->titleEquals($expected, $wait, $timeout, $verify, $invert);
-			return $this;
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$result = $this->window()->titleEquals($expected, $is, $assert, $stop, $wait, $timeout);
+			return $assert ? $this : $result;
 		}
 
-		/** Assert a case-sensitive title substring, polling by default; return this browser. */
-		public function titleContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a case-sensitive title substring, with urlMatches() condition options. */
+		public function titleContains(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->titleContains($expected, $wait, $timeout, $verify, $invert);
-			return $this;
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$result = $this->window()->titleContains($expected, $is, $assert, $stop, $wait, $timeout);
+			return $assert ? $this : $result;
 		}
 
-		/** Assert a title matches a delimited PHP regex; invalid patterns throw before polling. */
-		public function titleMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check the title against a delimited PHP regex; invalid patterns throw before polling. */
+		public function titleMatches(string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			$this->window()->titleMatches($pattern, $wait, $timeout, $verify, $invert);
-			return $this;
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			$result = $this->window()->titleMatches($pattern, $is, $assert, $stop, $wait, $timeout);
+			return $assert ? $this : $result;
 		}
 
 		/** @internal Report once; $verify continues only when an active Test records the result. */
@@ -735,7 +724,7 @@
 			return $this;
 		}
 
-		/** Set element-search retries in seconds; these also lengthen find() calls inside wait(). */
+		/** Set driver-side element-search retries in seconds; these also lengthen target resolution inside waits. */
 		public function implicitTimeout(float $seconds): self
 		{
 			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());

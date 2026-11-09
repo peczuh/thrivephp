@@ -39,12 +39,12 @@ return new class($test) extends SuiteBrowser {
     #[Test('Retry a body', retry: 1)]
     public function retry_body(): void {
         $this->browser->find('#name')->value('Jane </script>');
-        $this->browser->find('#name')->valueEquals('Jane </script>');
+        $this->browser->find('#name')->valueEquals('Jane </script>', assert: true);
         $this->test->assert(++$this->attempt === 2, 'second attempt passes');
     }
     #[Test('Capture before continuing')]
     public function failure_body(): void {
-        $this->browser->find('#status')->textEquals('Different', wait: false, verify: true);
+        $this->browser->find('#status')->textEquals('Different', assert: true, wait: false, stop: false);
         $this->browser->script('document.body.style.background = "lightblue";');
     }
     #[Test('Skipped body')]
@@ -96,7 +96,7 @@ foreach ($record['suites'] as $suite) {
 check(count(array_unique($sessionIds)) === 2, 'Suites shared a session.');
 $images = iterator_to_array(new RecursiveIteratorIterator(new RecursiveDirectoryIterator(dirname($file) . '/screenshots', FilesystemIterator::SKIP_DOTS)));
 check(count($paths) === 10 && count($images) === 10, 'Capture paths collided or images were lost.');
-check(isset($paths['screenshots/one_case/failure_body/a1__a1__s2__fail.png'])
+check(isset($paths['screenshots/one_case/failure_body/a1__a1__s1__fail.png'])
     && isset($paths['screenshots/one_case/retry_body/a1__a2__case.png'])
     && isset($paths['screenshots/one_case/a1__suite.png']), 'Screenshot filenames are not readable or lost attempt/step identity.');
 echo 'PASS: native ' . ($argv[1] ?? 'chrome') . ' reporting, workers=' . ($argv[2] ?? 2) . PHP_EOL;

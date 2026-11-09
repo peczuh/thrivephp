@@ -38,16 +38,16 @@ try {
     [$status, $console, $record] = runChecks(['suite' => fn ($test) => function () use ($test, $browser, $checkbox) {
         $test->browserSession($browser->session(), fn () => $browser->screenshot());
         $browser->script("setTimeout(() => document.title = 'Saved 42', 100)");
-        $browser->titleMatches('~^Saved [0-9]+$~')->titleContains('Saved')->titleEquals('Pending', invert: true);
-        $browser->urlContains('data:text/html,')->urlEquals('https://example.test/', invert: true);
+        $browser->titleMatches('~^Saved [0-9]+$~', assert: true)->titleContains('Saved', assert: true)->titleEquals('Pending', is: false, assert: true);
+        $browser->urlContains('data:text/html,', assert: true)->urlEquals('https://example.test/', is: false, assert: true);
 
         $input = $browser->find('#name');
         $browser->script("setTimeout(() => document.querySelector('#name').disabled = false, 100)");
-        $input->value('Saved 42')->enabledEquals()->valueContains('Saved')->propertyMatches('value', '~42$~');
+        $input->value('Saved 42')->enabled(assert: true)->valueContains('Saved', assert: true)->propertyMatches('value', '~42$~', assert: true);
         $browser->script("setTimeout(() => document.querySelector('#check').disabled = false, 100)");
-        $checkbox->check()->selectedEquals()->uncheck()->selectedEquals(false);
+        $checkbox->check()->selected(assert: true)->uncheck()->selected(is: false, assert: true);
         $browser->script("setTimeout(() => document.querySelector('#select').insertAdjacentHTML('beforeend', '<option value=ready>Ready</option>'), 100)");
-        $browser->find('#select')->select('ready')->valueEquals('ready');
+        $browser->find('#select')->select('ready')->valueEquals('ready', assert: true);
 
         $element = $browser->find('#status');
         $old = $element->id();
@@ -57,11 +57,11 @@ try {
                 document.querySelector('#status').items = ['a', 'b', 'c'];
             }, 100);
             JS);
-        $element->hasClass(['ready', 'saved'])->textMatches('~^Saved 42~')->cssEquals('display', 'block')
-            ->hasAttribute('data-state')->attributeContains('data-state', 'Saved')->hasDescendants()
-            ->propertyContains('items', ['a', 'b'])->propertyEquals('items', ['a', 'b', 'c']);
-        check($element->id() !== $old, 'Successful comparison did not adopt the replacement node.');
-        $browser->find('#empty')->hasDescendants(invert: true)->hasClass('absent', invert: true)->hasAttribute('absent', invert: true);
+        $element->hasClass(['ready', 'saved'], assert: true)->textMatches('~^Saved 42~', assert: true)->cssEquals('display', 'block', assert: true)
+            ->hasAttribute('data-state', assert: true)->attributeContains('data-state', 'Saved', assert: true)->hasDescendants(assert: true)
+            ->propertyContains('items', ['a', 'b'], assert: true)->propertyEquals('items', ['a', 'b', 'c'], assert: true);
+        check($element->id() !== $old, 'Selector did not follow the replacement node.');
+        $browser->find('#empty')->hasDescendants(is: false, assert: true)->hasClass('absent', is: false, assert: true)->hasAttribute('absent', is: false, assert: true);
 
         $shadowChild = $browser->find('#host')->shadowRoot()->find('span');
         $browser->script(<<<'JS'
@@ -70,13 +70,13 @@ try {
                 document.querySelector('#host').attachShadow({mode:'open'}).innerHTML = '<span class="ready">Saved</span>';
             }, 100);
             JS);
-        $shadowChild->hasClass('ready')->textEquals('Saved');
+        $shadowChild->hasClass('ready', assert: true)->textEquals('Saved', assert: true);
 
         $browser->switchFrame($browser->find('#frame'));
         $inside = $browser->find('#inside');
         $browser->script("setTimeout(() => document.querySelector('#inside').outerHTML = '<div id=inside class=ready>Saved</div>', 100)");
         $browser->defaultFrame();
-        $inside->hasClass('ready')->textEquals('Saved');
+        $inside->hasClass('ready', assert: true)->textEquals('Saved', assert: true);
         $browser->defaultFrame();
 
         $button = $browser->find('#button');
@@ -89,17 +89,18 @@ try {
         $button->click();
         check($browser->script('return window.clicks') === 1, 'Native action was replayed after success.');
 
-        $old = $element->id();
+        $original = $element->resolve();
+        $old = $original->id();
         $browser->script("setTimeout(() => document.querySelector('#status').remove(), 100)");
-        check($element->wait(invert: true, assert: true) === $element && $element->id() === $old, 'Original-node wait changed identity.');
-        raises(fn() => $element->wait(verify: true), 'stale element reference');
+        check($original->present(is: false, assert: true) === $original && $original->id() === $old, 'Original-node condition changed identity.');
+        raises(fn() => $original->textEquals('Saved'), 'stale element reference');
         raises(fn() => $browser->wait(fn() => false, timeout: 10), 'wait timed out');
-        check($browser->find('#missing', timeout: 10, verify: true) === null, 'Failed verified lookup returned an element.');
+        $browser->find('#missing')->present(assert: true, stop: false, timeout: 10);
         $browser->script("document.querySelector('#empty').hidden = true");
         $hidden = $browser->find('#empty');
-        check($hidden->wait(visible: true, timeout: 10, verify: true) === $hidden, 'Verified wait lost receiver.');
-        $input->valueEquals('Different', timeout: 10, verify: true);
-        $browser->titleEquals('Saved 42', wait: false);
+        check($hidden->visible(assert: true, stop: false, timeout: 10) === $hidden, 'Verified condition lost receiver.');
+        $input->valueEquals('Different', assert: true, stop: false, timeout: 10);
+        $browser->titleEquals('Saved 42', assert: true, wait: false);
     }]);
     check($status === 1 && $record['totals']['assertionsFailed'] === 3, $console);
     $steps = $record['suites'][0]['attempts'][0]['steps'];

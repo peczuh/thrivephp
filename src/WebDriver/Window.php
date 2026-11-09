@@ -62,73 +62,74 @@
 		}
 
 		/**
-		 * Assert this window's top-level URL matches a delimited PHP regex. Poll at the
-		 * configured interval; $wait=false checks once. $timeout is positive milliseconds
-		 * or null for assertionTimeout, ignored without waiting. Report once after success or expiry.
-		 * Return this window. Invalid patterns throw. Results report to the active Test;
-		 * $verify records mismatches and continues. Outside Test::run(), failures always throw.
-		 * $invert negates the match. All URL/title comparisons share these polling and reporting rules.
+		 * Check the top-level URL against a delimited PHP regex. Query mode returns bool;
+		 * $assert records one result and returns this window. $is=false negates the predicate.
+		 * Null $wait checks queries once and polls assertions; explicit $wait overrides this.
+		 * Timeout is positive milliseconds or null for assertionTimeout, ignored without waiting.
+		 * $stop=false continues assertion mismatches under an active Test; outside Test they throw.
+		 * Invalid patterns and driver errors propagate. All URL/title conditions share these options.
 		 */
-		public function urlMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		public function urlMatches(string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			Browser::matches($pattern, '');
-			return $this->assertDocument('url', fn($actual) => Browser::matches($pattern, $actual),
-				'a match for ' . var_export($pattern, true), $pattern, $wait, $timeout, $verify, $invert);
+			return $this->documentCondition('url', fn($actual) => Browser::matches($pattern, $actual),
+				'a match for ' . var_export($pattern, true), $pattern, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert exact top-level URL equality, polling with assertionTimeout; $invert negates, $verify continues on mismatch. */
-		public function urlEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Compare the exact top-level URL, with urlMatches() condition options. */
+		public function urlEquals(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertDocument('url', fn($actual) => $actual === $expected,
-				var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->documentCondition('url', fn($actual) => $actual === $expected,
+				var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert a case-sensitive top-level URL substring, with urlEquals() polling and reporting semantics. */
-		public function urlContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a case-sensitive top-level URL substring, with urlMatches() condition options. */
+		public function urlContains(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertDocument('url', fn($actual) => str_contains($actual, $expected),
-				'to contain ' . var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->documentCondition('url', fn($actual) => str_contains($actual, $expected),
+				'to contain ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert the top-level document title, polling with assertionTimeout; $invert negates, $verify continues on mismatch. */
-		public function titleEquals(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Compare the exact top-level title, with urlMatches() condition options. */
+		public function titleEquals(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertDocument('title', fn($actual) => $actual === $expected,
-				var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->documentCondition('title', fn($actual) => $actual === $expected,
+				var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert a case-sensitive title substring, with titleEquals() polling and reporting semantics. */
-		public function titleContains(string $expected, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check a case-sensitive title substring, with urlMatches() condition options. */
+		public function titleContains(string $expected, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return $this->assertDocument('title', fn($actual) => str_contains($actual, $expected),
-				'to contain ' . var_export($expected, true), $expected, $wait, $timeout, $verify, $invert);
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			return $this->documentCondition('title', fn($actual) => str_contains($actual, $expected),
+				'to contain ' . var_export($expected, true), $expected, $is, $assert, $stop, $wait, $timeout);
 		}
 
-		/** Assert a title matches a delimited PHP regex; invalid patterns throw before polling. */
-		public function titleMatches(string $pattern, bool $wait = true, ?float $timeout = null, bool $verify = false, bool $invert = false): self
+		/** Check the title against a delimited PHP regex; invalid patterns throw before polling. */
+		public function titleMatches(string $pattern, bool $is = true, bool $assert = false, bool $stop = true, ?bool $wait = null, ?float $timeout = null): bool|self
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
+			if ($assert && ($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
 			Browser::matches($pattern, '');
-			return $this->assertDocument('title', fn($actual) => Browser::matches($pattern, $actual),
-				'a match for ' . var_export($pattern, true), $pattern, $wait, $timeout, $verify, $invert);
+			return $this->documentCondition('title', fn($actual) => Browser::matches($pattern, $actual),
+				'a match for ' . var_export($pattern, true), $pattern, $is, $assert, $stop, $wait, $timeout);
 		}
 
 		/** Poll top-level observations once per attempt and report only the final comparison. */
-		private function assertDocument(string $property, callable $matches, string $expectation, string $expected, bool $wait, ?float $timeout, bool $verify, bool $invert): self
+		private function documentCondition(string $property, callable $matches, string $expectation, string $expected, bool $is, bool $assert, bool $stop, ?bool $wait, ?float $timeout): bool|self
 		{
 			$actual = null;
-			$passed = $this->browser->evaluate(function () use ($property, $matches, $invert, &$actual) {
+			$passed = $this->browser->evaluate(function () use ($property, $matches, $is, &$actual) {
 				$actual = $this->$property();
-				return (bool)$matches($actual) !== $invert;
-			}, $wait, $timeout, assertion: true);
+				return (bool)$matches($actual) === $is;
+			}, $wait ?? $assert, $timeout, assertion: true);
+			if (!$assert) return $passed;
 			$this->browser->reportAssertion($passed, 'Window ' . var_export($this->handle, true) . ' ' . ($property === 'url' ? 'URL' : 'title')
-				. ': expected ' . ($invert ? 'not ' : '') . $expectation . ', got ' . var_export($actual, true) . '.', $verify,
-				['expected' => $expected, 'actual' => $actual] + ($invert ? ['invert' => true] : []));
+				. ': expected ' . (!$is ? 'not ' : '') . $expectation . ', got ' . var_export($actual, true) . '.', !$stop,
+				['expected' => $expected, 'actual' => $actual] + (!$is ? ['invert' => true] : []));
 			return $this;
 		}
 
@@ -159,29 +160,16 @@
 			return $this;
 		}
 
-		/**
-		 * Find in this window's captured frame using Browser::find() conditions and strategies.
-		 * $visible requires the first match to be displayed. $invert requires no matches,
-		 * or no displayed matches with $visible. Positive success returns an Element;
-		 * inverted success returns null. Unmet conditions throw, after reporting if $assert.
-		 * $verify reports once and returns null on failure through an active Test.
-		 * Repeat the search at pollInterval by default, including replacement nodes.
-		 * $wait=false checks once. $timeout is positive, finite milliseconds or null for
-		 * waitTimeout; ignored without waiting.
-		 * Commands retain their own timeouts. Driver/context errors propagate; only missing
-		 * matches and recoverable stale references are retried. The result retains its lookup.
-		 */
-		public function find(string $selector, string $using = 'css selector', bool $visible = false, bool $wait = true, bool $invert = false, bool $assert = false, ?float $timeout = null, bool $verify = false): ?Element
+		/** Describe a target in the current frame without searching. See Browser::find() for strategies. */
+		public function find(string $selector, string $using = 'css selector'): Element
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this, $this->frames, $selector, $using))->find($visible, $wait, $invert, $assert, $timeout, $verify);
+			return (new Lookup($this, $this->frames, $selector, $using))->target();
 		}
 
-		/** Return a snapshot in document order, including an empty set when nothing matches. */
+		/** Describe a collection search; count()/all() query current matches when called. */
 		public function findAll(string $selector, string $using = 'css selector'): ElementSet
 		{
-			if (($test = Step::recorder()) !== null) return Step::run($test, $this, __FUNCTION__, func_get_args());
-			return (new Lookup($this, $this->frames, $selector, $using))->all(false);
+			return (new Lookup($this, $this->frames, $selector, $using))->collection();
 		}
 
 		/** Return the focused element in the selected frame. */
@@ -625,20 +613,42 @@
 			return $bytes;
 		}
 
-		/** Convert references, bounding traversal so cycles and excessive nesting throw safely. */
-		private function encode(mixed $value, int $depth = 0): mixed
+		/** Acquire all argument targets within one budget, before dispatching any script or input. */
+		private function encode(mixed $value): mixed
+		{
+			$result = null;
+			$error = null;
+			$passed = $this->browser->evaluate(function () use ($value, &$result, &$error) {
+				$this->browser->activate($this, $this->frames);
+				$references = new \SplObjectStorage();
+				try {
+					$result = $this->encodeValue($value, $references);
+					return true;
+				} catch (\RuntimeException $failure) {
+					if (!preg_match('/^WebDriver HTTP [45][0-9]{2} (no such element|stale element reference|detached shadow root|no such shadow root): /', $failure->getMessage())) throw $failure;
+					$error = $failure;
+					return false;
+				}
+			}, true, null);
+			if (!$passed) throw new \RuntimeException('WebDriver wait timed out resolving command arguments.', 0, $error);
+			return $result;
+		}
+
+		/** Repeated target objects use one node per command. Bound traversal to reject cycles. */
+		private function encodeValue(mixed $value, \SplObjectStorage $references, int $depth = 0): mixed
 		{
 			if ($depth > 64):
 				throw new \InvalidArgumentException('Recursive or excessively nested WebDriver arguments (maximum 64 levels).');
 			endif;
 			if ($value instanceof Element || $value instanceof ShadowRoot):
-				return $value->reference($this, $this->frames);
+				if (!isset($references[$value])) $references[$value] = $value->reference($this, $this->frames, wait: false);
+				return $references[$value];
 			endif;
 			if (is_array($value)):
-				return array_map(fn($item) => $this->encode($item, $depth + 1), $value);
+				return array_map(fn($item) => $this->encodeValue($item, $references, $depth + 1), $value);
 			endif;
 			if ($value instanceof \stdClass):
-				return (object)array_map(fn($item) => $this->encode($item, $depth + 1), get_object_vars($value));
+				return (object)array_map(fn($item) => $this->encodeValue($item, $references, $depth + 1), get_object_vars($value));
 			endif;
 			return $value;
 		}

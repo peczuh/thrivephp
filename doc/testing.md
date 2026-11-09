@@ -166,20 +166,19 @@ It loads no remote assets. Screenshots use paths relative to the run folder.
 
 ### Steps and screenshots
 
-Browser actions, comparisons, waits, `find()`, `findAll()`, `script()` and `sleep()`
-record steps automatically. Pure observations such as `text()`, `property()` getters
-and `displayed()` do not. Inputs are recorded without redaction.
+Browser actions, asserted conditions, callback waits, `script()` and `sleep()`
+record steps automatically. Target construction, boolean conditions and value
+readers do not. Inputs are recorded without redaction.
 
 ```php
 $this->browser->find('#name')->value('Jane');
-// Two steps: find, then value. Internal clear/type calls do not add steps.
+// One value step. Target construction and internal clear/type calls add no steps.
 ```
 
 The recorder suppresses nested operations across browser objects, including calls
 inside wait callbacks. Each outer operation preserves its return value and errors.
 Standalone WebDriver usage records nothing. Actions do not increment assertions;
-`find()`/element waits with `assert: true` or `verify: true`, and comparison methods,
-record one final assertion.
+conditions with `assert: true` record one final assertion.
 
 | Setting | Default | Allowed values |
 | --- | --- | --- |
@@ -717,8 +716,7 @@ return new class($test) extends SuiteBrowser {
     #[Test('The page displays its greeting')]
     public function greeting(): void
     {
-        $this->browser->find('#greeting', wait: true)
-            ->textEquals('Hello', wait: true);
+        $this->browser->find('#greeting')->textEquals('Hello', assert: true);
     }
 };
 ```
@@ -729,8 +727,8 @@ and calls `configure()` once per suite attempt before suite hooks. Defaults are:
 | Property | Default | Meaning |
 | --- | --- | --- |
 | `timeout` | `10` | Seconds for HTTP/BiDi commands, passed to `WebDriver::browser()`. |
-| `waitTimeout` | `5000` | Milliseconds for lookups, explicit waits, and action retries. |
-| `assertionTimeout` | `5000` | Milliseconds for comparison-assertion retries. |
+| `waitTimeout` | `5000` | Milliseconds for target acquisition, callback waits, and action retries. |
+| `assertionTimeout` | `5000` | Milliseconds for waiting conditions, in query or assertion mode. |
 | `pollInterval` | `500` | Milliseconds between polling attempts. |
 | `capabilities` | `[]` | Browser capabilities passed to the session factory. |
 | `idleTimeout` | `null` | Seconds without worker progress; null disables it. |
@@ -743,69 +741,72 @@ affect other suites. No reference parameter is needed to change object propertie
 `waitTimeout`, `assertionTimeout`, and `pollInterval` must be positive and finite.
 They are also named arguments on `WebDriver::browser()` and direct `Browser`
 construction. A per-call `timeout:` overrides the applicable retry budget;
-`wait: false` checks once and ignores the timeout. `find(assert: true)` and
-`Element::wait(assert: true)` still use `waitTimeout`, as do their `verify: true`
-forms. Assertion recording does not change the operation's polling category.
+`wait: false` checks once and ignores the timeout. Conditions use
+`assertionTimeout` whether returning a boolean or recording an assertion.
 Each in-flight command retains
 its own I/O timeout; polling deadlines are checked between attempts.
 
-Browser assertions automatically report to the current case or suite phase and
-stop it on failure by default. Comparison methods accept `verify: true` to record
-a failed result and continue, returning their usual receiver for chaining:
+Conditions return booleans by default. Pass `assert: true` to report to the current
+case or suite phase and return the receiver for chaining. Add `stop: false` to
+record a failed result and continue:
 
 ```php
 $this->browser->find('#greeting')
-    ->textEquals('Hello', timeout: 5000, verify: true);
-$this->browser->findAll('.row')->countEquals(3, verify: true);
+    ->textEquals('Hello', assert: true, stop: false, timeout: 5000);
+$this->browser->findAll('.row')->countEquals(3, assert: true, stop: false);
 ```
 
 This option is available on every comparison method. It applies only to that call.
-A failed verification still fails the case or suite phase overall. Without an
-active `Test`, failed comparisons throw even with `verify: true`.
+A failed assertion still fails the case or suite phase overall. Without an
+active `Test`, failed assertions throw even with `stop: false`.
 
-Element comparisons include `visible`, `valueEquals`, `valueContains`, `textEquals`,
+Element conditions include `present`, `visible`, `valueEquals`, `valueContains`, `textEquals`,
 `textContains`, `textMatches`, `attributeEquals`, `attributeContains`,
 `attributeMatches`, `propertyEquals`, `propertyContains`, `propertyMatches`,
-`cssEquals`, `enabledEquals`, `selectedEquals`, `hasAttribute`, `hasClass`, and
+`cssEquals`, `enabled`, `selected`, `hasAttribute`, `hasClass`, and
 `hasDescendants`. Collections provide `countEquals`. Browsers and windows provide
 `urlEquals`, `urlContains`, `urlMatches`, `titleEquals`, `titleContains`, and
-`titleMatches`. All accept `invert: true` for negation. Immediate `enabled()` and
-`selected()` queries do not assert or wait.
+`titleMatches`. All accept `is: false` for negation. Their common options are
+`is`, `assert`, `stop`, `wait`, and `timeout`, after any required domain arguments.
 
 The [complete browser contract](webdriver-contract.md) lists every public operation,
 its wait/retry and failure behavior, identity rules, and Nightwatch assertion mapping.
 
-Lookup and comparison methods that expose `wait` default to `true`, retrying before
-the final result is recorded once. Pass `wait: false` for a single check. `countEquals()`
-refreshes retained searches by default; explicit `ElementSet` snapshots without
-a retained search require `wait: false`.
-Explicit wait timeouts are milliseconds, distinct from the command timeout's
-seconds. Invalid patterns and driver errors still propagate. Direct
-`$this->test->verify(...)` is also available for boolean conditions.
+Null `wait` means a one-shot query or a waiting assertion. Explicit `wait: true`
+or `wait: false` overrides either default. A waiting query returns false on expiry.
+One budget covers lookup and evaluation. Direct `$this->test->verify(...)` remains
+available for computed PHP conditions.
 
-`find()` on a browser, window, element, or shadow root and `Element::wait()`
-are stopping prerequisites by default. They do not count as assertions unless
-`assert: true` or `verify: true` is supplied. Either flag records exactly one final
-result after success or expiry, regardless of the number of polling attempts.
-`assert: true` stops on failure; `verify: true` records the failure and continues
-under an active `Test`. If both flags are true, verification takes precedence.
+`find()` on a browser, window, element, or shadow root creates a selector-backed
+target without a DOM search. Each operation resolves it afresh, so it follows
+replacement nodes. Ordinary value readers wait for presence, then read once.
+`resolve(wait: true, timeout: null)` returns an exact-node element and leaves the
+original target unchanged. Script-returned nodes and traversal results are exact
+nodes too; they cannot find replacements.
 
 ```php
-$optional = $this->browser->find('#notice', visible: true, verify: true);
-if ($optional !== null) {
-    $optional->textContains('Saved');
+$optional = $this->browser->find('#notice');
+if ($optional->visible()) {
+    $optional->textContains('Saved', assert: true);
 }
-$element->wait(visible: true, timeout: 1000, verify: true);
+$optional->visible(assert: true, stop: false, timeout: 1000);
+$original = $optional->resolve();
+$original->present(is: false, assert: true); // Wait for that exact node's removal.
 ```
 
-A failed verified `find()` returns null. Positive success returns the matching
-element; inverted success also returns null. A verified `Element::wait()` returns
-the original element on success or an unmet condition, without replacing its node
-or making it usable. Positive original-node waits still throw on staleness;
-inverted waits accept a stale node as absent. Without an active `Test`, failed
-verifications throw. Invalid selectors, session errors, and context-restoration
-errors remain exceptions rather than failed assertions. Browser/window callback
-`wait()` remains a throwing utility and has no assertion or verification flags.
+`present()` and `visible()` are false for missing/stale nodes; their `is: false`
+forms succeed on absence. Other one-shot conditions require a node and throw if it
+is missing/stale. Waiting forms remain unsatisfied on absence in either direction.
+Invalid selectors, session errors, and context-restoration errors always propagate.
+`Element::wait()` has been replaced by conditions. Browser/window callback `wait()`
+remains a throwing utility without assertion flags.
+
+`findAll()` creates a collection search. `count()` queries current matches once;
+`countEquals()` supports the same condition options. `first()`/`get()` create
+positional targets, while `all()` and iteration materialize exact-node snapshots.
+Explicit `new ElementSet(...)` snapshots retain fixed membership and require
+`wait: false` for count assertions. An empty explicit snapshot's `first()` is null;
+a search-backed `first()` always describes a target. Use `count()` to check emptiness.
 
 Application cleanup must tolerate incomplete setup. `SuiteBrowser` keeps a
 nullable driver reference so its own cleanup also works after configuration or
@@ -820,11 +821,10 @@ or `timeout: 5000` for a five-second retry budget. Null timeout uses `waitTimeou
 Polling uses `pollInterval`; in-flight commands retain their own
 timeouts. Compound operations share one polling deadline.
 
-Actions try the captured node first. A stale node is re-found only when its
-retained selector and ancestor lookups are recoverable, in the original window
-and frame. A successful action adopts the replacement for subsequent chained
-calls. Selectorless nodes cannot recover from staleness. Context restoration
-failures propagate immediately.
+Actions resolve selector-backed targets on every attempt, in the captured window
+and frame. Compound actions pin one exact node per attempt. Exact references cannot
+find replacements. Context restoration failures propagate immediately; replaced
+frames are not automatically recovered.
 
 Native clicks retry interception and non-interactability; text entry retries
 non-interactability, and clearing also retries invalid element state. These
@@ -841,16 +841,14 @@ Internal retries remain one reported step, with screenshots only for the final
 outcome. They do not increment assertion counts. Script operations and compound
 pointer sequences such as dragging and double-clicking still execute once.
 
-`visible()` asserts visibility and returns the element. It waits by default and
-re-finds retained lookups. `visible(invert: true)` asserts hiddenness, accepting
-missing matches or stale original nodes. It replaces `isVisible()` and
-`isNotVisible()`. Use `displayed()` for an immediate boolean query in conditional
-logic. Neither method guarantees that a click is unobstructed.
+`visible()` queries visibility. `visible(assert: true)` waits and asserts, returning
+the element. `is: false` tests hiddenness or absence. `visible()` replaces the
+separate `displayed()` reader. Visibility does not guarantee an unobstructed click.
 
 ```php
-$element->visible()->click();
-$element->visible(invert: true, wait: false);
-if ($element->displayed()) {
+$element->visible(assert: true)->click();
+$element->visible(is: false, assert: true, wait: false);
+if ($element->visible()) {
     $element->click();
 }
 

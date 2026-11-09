@@ -16,8 +16,7 @@
 		public static function run(Test $test, object $receiver, string $method, array $arguments): mixed
 		{
 			$target = match (true) {
-				$receiver instanceof Element, $receiver instanceof ElementSet => $receiver->description(),
-				$receiver instanceof ShadowRoot => 'shadow ' . $receiver->id(),
+				$receiver instanceof Element, $receiver instanceof ElementSet, $receiver instanceof ShadowRoot => $receiver->description(),
 				$receiver instanceof Window => 'window ' . $receiver->handle(),
 				default => 'browser',
 			};
@@ -40,7 +39,7 @@
 				return ['type' => 'float', 'value' => is_nan($value) ? 'NAN' : ($value > 0 ? 'INF' : '-INF')];
 			endif;
 			if ($value instanceof Element || $value instanceof ShadowRoot):
-				return $value->reference();
+				return ['target' => $value->description()];
 			endif;
 			if ($value instanceof Window):
 				return ['window' => $value->handle()];
