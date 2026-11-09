@@ -4,6 +4,15 @@ Requires PHP 8.5 or later. `ThriveData\ThrivePHP\Test` runs PHP files below `<pr
 file receives the runner as `$test` and returns either a `Test\Suite` or an
 existing callable check. A file's relative path, without `.php`, is its name.
 
+The [framework CLI](cli.md) runs these suites with positional selectors:
+
+```sh
+php vendor/peczuh/thrivephp/bin/cli.php --root . test 'folder1/suite1::caseA'
+```
+
+Omit selectors for a complete run. Omit `--root` when a discoverable
+`settings.json` contains the project's top-level `root` path.
+
 ```php
 require __DIR__ . '/../vendor/autoload.php';
 
@@ -1015,6 +1024,7 @@ php test/test-selectors.php
 php test/test-parallel.php
 php test/settings.php
 php test/test-configuration.php
+php test/test-cli.php
 php test/webdriver.php
 php test/webdriver-runtime.php
 ```
