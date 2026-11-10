@@ -12,8 +12,13 @@ final class Report
     private array $shownImages = [];
     private array $announced = [];
 
-    public function __construct(private string $directory, array $environment, private bool $steps = false)
+    /** Screenshot columns affect terminal placement only; null retains the image's natural display size. */
+    public function __construct(private string $directory, array $environment, private bool $steps = false,
+        private ?int $screenshotColumns = null)
     {
+        if ($screenshotColumns !== null && $screenshotColumns < 1) {
+            throw new \InvalidArgumentException('test.console.screenshots.columns must be a positive integer or null.');
+        }
         $this->record = new Record($environment);
         $this->diagnostic = new Diagnostic($environment['root']);
     }
@@ -242,7 +247,8 @@ final class Report
             }
             $chunks = str_split(base64_encode($bytes), 4096);
             foreach ($chunks as $index => $chunk) {
-                echo "\033_G" . ($index === 0 ? 'a=T,f=100,t=d,q=2,' : '')
+                echo "\033_G" . ($index === 0 ? 'a=T,f=100,t=d,q=2,'
+                    . ($this->screenshotColumns !== null ? 'c=' . $this->screenshotColumns . ',' : '') : '')
                     . 'm=' . ($index < count($chunks) - 1 ? '1' : '0') . ';' . $chunk . "\033\\";
             }
             echo PHP_EOL;

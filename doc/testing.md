@@ -119,6 +119,12 @@ source, screenshot, and report paths within the project are displayed relative
 to `environment.root`. JSON and HTML screenshot paths remain run-relative so
 the report directory can be moved with its images.
 
+Set `test.console.screenshots.columns` to a positive integer to choose the inline
+display width in terminal columns. The terminal preserves the image's aspect
+ratio. Omit the setting or use null for the existing natural-size display.
+This changes only the Kitty placement width: the transmitted PNG, saved image
+and recorded pixel dimensions stay unchanged.
+
 ### JSON and HTML
 
 Both files use the same event-built record. `report.json` is pretty-printed with
@@ -216,7 +222,7 @@ Capture failures produce a diagnostic in the report
 without replacing the test's result.
 
 Reporting regression checks are `php test/test-report.php`,
-`php test/test-report-paths.php`, `php test/test-report-startup.php`, `php test/test-names.php`, and
+`php test/test-report-paths.php`, `php test/test-report-startup.php`, `php test/test-report-inline.php`, `php test/test-names.php`, and
 `php test/test-parallel.php`. For installed-browser coverage, run
 `php test/test-report-browser.php chrome 2` or
 `php test/test-report-browser.php firefox 1`. These use isolated `data:` pages,
@@ -497,6 +503,33 @@ uses its existing default. `acceptInsecureCerts` controls certificates for pages
 and requests made by the browser. It does not change PHP HTTP or WebDriver/BiDi
 transport TLS verification. Negotiated capabilities remain in session reports.
 Browser/executable selection restrictions and explicit BiDi selection still apply.
+
+### Browser window size
+
+Set `test.browser.window` to an object with integer `width` and `height` values.
+Every managed browser is resized after session creation, before child suite setup
+or navigation. These are outer-window CSS pixels, including browser chrome;
+the captured page viewport can be smaller. Omit the setting or use null to leave
+the driver's initial size unchanged. Suites can still resize the browser later.
+The existing settings snapshot carries the size to parallel workers.
+
+For a large browser window and a smaller terminal preview:
+
+```json
+{
+  "test": {
+    "browser": {
+      "window": { "width": 1900, "height": 1280 }
+    },
+    "console": {
+      "screenshots": { "columns": 80 }
+    }
+  }
+}
+```
+
+These settings can also be overridden through CLI `--set`, independently of
+browser capabilities. Terminal display scaling does not resample screenshot files.
 
 ### Browser availability
 

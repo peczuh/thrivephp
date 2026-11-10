@@ -34,7 +34,9 @@ return new class($test) extends SuiteBrowser {
     private int $attempt = 0;
     #[SuiteBefore]
     public function page(): void {
-        $this->browser->resize(640, 480)->navigate('data:text/html,' . rawurlencode('<!doctype html><title>Reporting</title><input id="name"><p id="status">Ready</p>'));
+        $rect = $this->browser->rect();
+        if ($rect['width'] !== 1900 || $rect['height'] !== 1280) throw new RuntimeException('Configured window size was not applied before child setup.');
+        $this->browser->navigate('data:text/html,' . rawurlencode('<!doctype html><title>Reporting</title><input id="name"><p id="status">Ready</p>'));
     }
     #[Test('Retry a body', retry: 1)]
     public function retry_body(): void {
@@ -55,7 +57,9 @@ return new class($test) extends SuiteBrowser {
 PHP;
 file_put_contents($root . '/test/cases/folder/one_case.php', $suite);
 file_put_contents($root . '/test/cases/folder/two_case.php', $suite);
-Settings::set('', ['test' => ['screenshots' => ['suites' => 'always']]]);
+Settings::set('', ['test' => ['screenshots' => ['suites' => 'always'],
+    'browser' => ['window' => ['width' => 1900, 'height' => 1280]],
+    'console' => ['screenshots' => ['columns' => 80]]]]);
 $runner = new Test($root);
 $status = $runner->run(workers: (int)($argv[2] ?? 2), browser: $argv[1] ?? 'chrome', headless: true);
 $file = glob($root . '/test/runs/*/report.json')[0] ?? null;
@@ -88,7 +92,8 @@ foreach ($record['suites'] as $suite) {
         foreach ($images as $image) {
             check(!isset($image['diagnostic']), 'Capture failed: ' . json_encode($image));
             $path = dirname($file) . '/' . $image['path'];
-            check(is_file($path) && getimagesize($path)[0] === $image['width'] && $image['height'] > 0, 'PNG metadata/path mismatch.');
+            check(is_file($path) && getimagesize($path)[0] === $image['width'] && $image['width'] >= 1900
+                && $image['height'] > 1000, 'PNG dimensions were reduced or metadata/path mismatched.');
             $paths[$image['path']] = true;
         }
     }

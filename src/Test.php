@@ -804,7 +804,8 @@ class Test
             'root' => $root, 'project' => null, 'php' => PHP_VERSION, 'os' => php_uname(),
             'workers' => null, 'browser' => null, 'headless' => false, 'url' => null,
             'browserVersion' => null, 'platform' => null,
-        ], class_exists(Settings::class, false) && (bool) Settings::fetch('test.console.steps'));
+        ], class_exists(Settings::class, false) && (bool) Settings::fetch('test.console.steps'),
+            class_exists(Settings::class, false) ? Settings::fetch('test.console.screenshots.columns') : null);
     }
 
     /** Managed suites use the concrete run-level selection, never a new automatic choice in a worker. */

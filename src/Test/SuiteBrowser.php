@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ThriveData\ThrivePHP\Test;
 
+use ThriveData\ThrivePHP\Settings;
 use ThriveData\ThrivePHP\WebDriver\Browser;
 use ThriveData\ThrivePHP\WebDriver\WebDriver;
 
@@ -30,6 +31,9 @@ abstract class SuiteBrowser extends Suite
             pollInterval: $config->pollInterval,
         );
         $this->test->browserSession($this->browser->session(), fn () => $this->browser->screenshot());
+        if (($window = Settings::fetch('test.browser.window')) !== null) {
+            $this->browser->resize($window['width'], $window['height']);
+        }
         if ($config->browserLogs) $this->browser->startLogCapture();
         if ($config->browserNetwork) $this->browser->network()->startCapture();
     }
