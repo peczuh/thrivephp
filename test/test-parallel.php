@@ -78,6 +78,21 @@ function runParallel(array $modes, array $options = [], array $environment = [],
 }
 
 try {
+    foreach ([1, 2] as $workers) {
+        [$code, $out, $err, , $record] = runParallel(['a' => 'value-comparisons'], ['workers' => $workers],
+            environment: ['TEST_CONSOLE_STEPS' => '1']);
+        check($code === 1 && $err === '' && $record['totals']['assertionsFailed'] === 2
+            && $record['totals']['casesPassed'] === 2 && $record['totals']['casesFailed'] === 1, $out . $err);
+        $steps = $record['suites'][0]['attempts'][0]['cases'][1]['attempts'][0]['steps'];
+        check(array_column($steps, 'label') === ['equal', 'same', 'same', 'assert']
+            && $steps[0]['assertions'][0]['actual'] === ['type' => 'float', 'value' => 'INF']
+            && $steps[1]['assertions'][0]['expected']['rows'] === [[1, 2]]
+            && $steps[1]['assertions'][0]['actual']['rows'] === [[1, '2']], $out . $err);
+        check(str_contains($out, 'worker strict mismatch') && str_contains($out, 'worker structural mismatch')
+            && str_contains($out, 'Expected:') && str_contains($out, 'Actual:'), $out);
+    }
+    echo "PASS: serial/parallel value comparisons retain typed diagnostics, single steps and continuation\n";
+
     [$code, $out, $err, , , $liveStep] = runParallel(['a' => 'concurrent', 'b' => 'concurrent'], environment: ['TEST_CONSOLE_STEPS' => '1']);
     check($code === 0 && $err === '' && $liveStep
         && substr_count($out, 'PASS  STEP  a > first > assert') === 1

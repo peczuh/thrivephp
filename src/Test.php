@@ -154,6 +154,81 @@ class Test
         return $condition;
     }
 
+    /**
+     * Compare supplied values with PHP ===, including array key order and object identity.
+     * Queries return a silent boolean. Assertion mode records once and returns this Test;
+     * stop: false records through verify() and continues. is: false negates the result.
+     * Values are compared immediately, without polling. message overrides the default label.
+     */
+    public function equal(mixed $actual, mixed $expected, bool $is = true, bool $assert = false,
+        bool $stop = true, ?string $message = null): bool|self
+    {
+        if ($assert && $this->canRecordStep()) {
+            return $this->recordStep('equal', null, ['actual' => WebDriver\Step::value($actual),
+                'expected' => WebDriver\Step::value($expected), 'is' => $is],
+                fn () => $this->equal($actual, $expected, $is, $assert, $stop, $message));
+        }
+        $passed = ($actual === $expected) === $is;
+        if (!$assert) return $passed;
+        return $this->comparison($passed, $actual, $expected, $is, $stop, $message ?? ($is
+            ? 'Values are strictly equal.' : 'Values are not strictly equal.'));
+    }
+
+    /**
+     * Compare structure recursively with strict scalar types, ordered lists and unordered maps.
+     * stdClass and user-defined objects require the same class and stored instance properties;
+     * getters are not invoked. Other internal objects retain identity semantics.
+     * Traversal beyond 64 levels, including distinct cyclic structures, throws InvalidArgumentException.
+     * Query/assertion, is, stop and message options have the same meaning as equal().
+     */
+    public function same(mixed $actual, mixed $expected, bool $is = true, bool $assert = false,
+        bool $stop = true, ?string $message = null): bool|self
+    {
+        if ($assert && $this->canRecordStep()) {
+            return $this->recordStep('same', null, ['actual' => WebDriver\Step::value($actual),
+                'expected' => WebDriver\Step::value($expected), 'is' => $is],
+                fn () => $this->same($actual, $expected, $is, $assert, $stop, $message));
+        }
+        $passed = self::sameStructure($actual, $expected) === $is;
+        if (!$assert) return $passed;
+        return $this->comparison($passed, $actual, $expected, $is, $stop, $message ?? ($is
+            ? 'Values have the same structure.' : 'Values do not have the same structure.'));
+    }
+
+    /** Use existing assertion events and JSON-safe value descriptions for all report formats. */
+    private function comparison(bool $passed, mixed $actual, mixed $expected, bool $is, bool $stop, string $message): self
+    {
+        $comparison = ['expected' => WebDriver\Step::value($expected), 'actual' => WebDriver\Step::value($actual)]
+            + (!$is ? ['invert' => true] : []);
+        if ($stop) $this->assert($passed, $message, $comparison);
+        else $this->verify($passed, $message, $comparison);
+        return $this;
+    }
+
+    /** Read stored data only; opaque internal state cannot be inferred from an object's properties. */
+    private static function sameStructure(mixed $actual, mixed $expected, int $depth = 0): bool
+    {
+        if ($depth > 64) throw new \InvalidArgumentException('Recursive or excessively nested comparison (maximum 64 levels).');
+        if (is_object($actual) && is_object($expected)) {
+            if ($actual === $expected) return true;
+            if (get_class($actual) !== get_class($expected)) return false;
+            for ($class = new \ReflectionClass($actual); $class !== false; $class = $class->getParentClass()) {
+                if ($class->isInternal() && $class->getName() !== \stdClass::class) return false;
+            }
+            $actual = get_mangled_object_vars($actual);
+            $expected = get_mangled_object_vars($expected);
+        } elseif (is_array($actual) && is_array($expected)) {
+            if (array_is_list($actual) !== array_is_list($expected)) return false;
+        } else {
+            return $actual === $expected;
+        }
+        if (count($actual) !== count($expected)) return false;
+        foreach ($actual as $key => $value) {
+            if (!array_key_exists($key, $expected) || !self::sameStructure($value, $expected[$key], $depth + 1)) return false;
+        }
+        return true;
+    }
+
     /** One recorder-wide guard covers nested calls across all browser objects. */
     public function canRecordStep(): bool
     {

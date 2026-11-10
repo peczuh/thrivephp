@@ -752,6 +752,69 @@ protected function configure(SuiteConfig $config): void
 Put required cleanup in `SuiteAfter` hooks rather than a final case, since a case
 can be skipped after an earlier failure.
 
+### Comparing PHP values
+
+`equal()` uses PHP's `===`. `same()` compares structures recursively. Both take
+the actual value first and the expected value second:
+
+```php
+$test->equal($actual, $expected); // Silent boolean query.
+$test->equal($actual, $expected, assert: true, message: 'Saved customer ID');
+$test->same($actualRows, $expectedRows, assert: true, message: 'Quantities retain their part order');
+$test->same($actualRows, $expectedRows, is: false, assert: true);
+$test->equal($actual, $expected, assert: true, stop: false); // Record failure and continue.
+```
+
+Both signatures are:
+
+```php
+equal(mixed $actual, mixed $expected, bool $is = true, bool $assert = false,
+    bool $stop = true, ?string $message = null): bool|self
+same(mixed $actual, mixed $expected, bool $is = true, bool $assert = false,
+    bool $stop = true, ?string $message = null): bool|self
+```
+
+Queries create no steps or assertions. Assertion mode returns the `Test` instance
+and records one `equal` or `same` step, including the message and expected/actual
+values. `is: false` negates the comparison. `stop: false` uses `verify()` semantics;
+the failure still counts. Existing enclosing steps retain their assertions without
+opening nested comparison steps. Supplied values are compared immediately; these
+methods have no `wait` or `timeout` options.
+
+| Values | `equal()` | `same()` |
+| --- | --- | --- |
+| Scalars and null | Strict PHP value/type equality | Strict PHP value/type equality |
+| Lists | Strict keys, order, values and types | Compare each position recursively |
+| Associative arrays | Key order must also match | Key order ignored; keys and recursively compared values must match |
+| `stdClass` and user-defined objects | Same instance required | Same class and recursively matching stored properties |
+| Other internal objects and their subclasses | Same instance required | Same instance required |
+
+Lists and associative arrays are distinct structures. Arrays and objects are also
+distinct, including `[]` versus `(object) []`. Object properties are unordered;
+public, protected and private instance properties participate. Property getters,
+virtual properties and serialization callbacks are not invoked. Uninitialized
+properties remain distinct from initialized null properties. Internal objects
+such as `DateTimeImmutable` and `Closure` retain identity semantics because stored
+PHP properties do not describe all their state.
+
+```php
+$a = (object) ['name' => 'Example'];
+$b = (object) ['name' => 'Example'];
+$test->equal($a, $b); // false: different instances.
+$test->same($a, $b);  // true: matching class and contents.
+```
+
+`same()` traversal beyond 64 levels throws `InvalidArgumentException`, including
+distinct cyclic structures that require traversal. Identical object references
+match immediately. `equal()` retains PHP's behavior, including its error when
+comparing distinct recursive arrays.
+
+Reports use the existing JSON-safe value descriptions. Non-finite numbers retain
+tagged values; resources show their type; arbitrary class instances show their
+class rather than private state. Thus two different instances may have identical
+report descriptions even when `equal()` or `same()` fails. Continue using
+`assert()` and `verify()` for arbitrary boolean predicates.
+
 ## Browser suites
 
 Extend `SuiteBrowser` to receive a fresh browser session per suite. Its inherited

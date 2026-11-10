@@ -99,3 +99,129 @@ try {
 check($status === 1 && str_contains($output, 'recorded failure') && str_contains($output, 'Assertions: 0 passed, 1 failed')
 	&& str_contains($output, 'Execution error: RuntimeException: cleanup failure'), $output);
 echo "PASS: assertion exceptions carry diagnostics and cleanup errors remain visible\n";
+
+class ComparisonParent
+{
+	public function __construct(private mixed $parent) {}
+}
+
+class ComparisonValue extends ComparisonParent implements JsonSerializable
+{
+	public function __construct(private mixed $value, mixed $parent = null) { parent::__construct($parent); }
+	public int $virtual { get { throw new LogicException('Comparison invoked a property hook.'); } }
+	public function jsonSerialize(): mixed { throw new LogicException('Comparison invoked serialization.'); }
+}
+
+class ComparisonNullable
+{
+	public ?string $value;
+}
+
+$object = (object)['name' => 'Example'];
+$uninitialized = new ComparisonNullable();
+$initialized = new ComparisonNullable();
+$initialized->value = null;
+$date = new DateTimeImmutable('2026-01-01');
+$internalChild = new class('2026-01-01') extends DateTimeImmutable {};
+foreach ([
+	[1, 1, true, true],
+	[1, '1', false, false],
+	[1, 1.0, false, false],
+	[null, null, true, true],
+	[false, 0, false, false],
+	[NAN, NAN, false, false],
+	[INF, INF, true, true],
+	[[1, '2'], [1, '2'], true, true],
+	[[1, 2], [2, 1], false, false],
+	[['a' => 1, 'b' => null], ['b' => null, 'a' => 1], false, true],
+	[['a' => null], ['b' => null], false, false],
+	[[0 => 'a', 1 => 'b'], [1 => 'b', 0 => 'a'], false, false],
+	[['rows' => [[1, '2']]], ['rows' => [[1, 2]]], false, false],
+	[$object, $object, true, true],
+	[$object, (object)['name' => 'Example'], false, true],
+	[(object)['a' => 1, 'b' => [2]], (object)['b' => [2], 'a' => 1], false, true],
+	[(object)['0' => 'a', '1' => 'b'], (object)['1' => 'b', '0' => 'a'], false, true],
+	[(object)[], [], false, false],
+	[(object)['a' => null], (object)[], false, false],
+	[new ComparisonValue(['nested' => $object]), new ComparisonValue(['nested' => clone $object]), false, true],
+	[new ComparisonValue(1), new ComparisonValue('1'), false, false],
+	[new ComparisonValue(1, 'parent'), new ComparisonValue(1, 'different'), false, false],
+	[new ComparisonValue(null), new ComparisonParent(null), false, false],
+	[$uninitialized, $initialized, false, false],
+	[$date, clone $date, false, false],
+	[$date, $date, true, true],
+	[$internalChild, clone $internalChild, false, false],
+] as [$actual, $expected, $equal, $same]) {
+	foreach (['equal' => $equal, 'same' => $same] as $method => $matches) {
+		check($test->$method($actual, $expected) === $matches, $method . ' comparison semantics changed.');
+		check($test->$method($actual, $expected, is: false) === !$matches, $method . ' negation changed.');
+	}
+}
+$cycle = [];
+$cycle['self'] = &$cycle;
+$otherCycle = [];
+$otherCycle['self'] = &$otherCycle;
+try {
+	$test->equal($cycle, $otherCycle);
+	throw new LogicException('equal suppressed PHP recursive-array behavior.');
+} catch (Error) {}
+foreach ([[$cycle, $otherCycle], [(object)['child' => &$cycle], (object)['child' => &$otherCycle]]] as [$actual, $expected]) {
+	try {
+		$test->same($actual, $expected);
+		throw new LogicException('same accepted a recursive structure.');
+	} catch (InvalidArgumentException $error) {
+		check(str_contains($error->getMessage(), 'maximum 64 levels'), $error->getMessage());
+	}
+}
+echo "PASS: equal uses PHP identity; same compares typed lists, maps and stored object properties\n";
+
+[$status, $output, $record] = runChecks(['check' => function (Test $test) {
+	check($test->equal(1, 1) === true && $test->equal(1, '1') === false, 'equal query changed.');
+	check($test->same((object)['x' => [1]], (object)['x' => [1]]) === true, 'same query changed.');
+	check($test->same([1], ['1'], is: false, stop: false) === true, 'Negated query changed.');
+}]);
+check($status === 0 && $record['totals']['assertionsPassed'] === 0 && $record['totals']['assertionsFailed'] === 0
+	&& $record['suites'][0]['attempts'][0]['steps'] === [], $output);
+echo "PASS: value comparison queries create no steps or assertions\n";
+
+foreach (['equal', 'same'] as $method) {
+	$continued = false;
+	[$status, $output, $record] = runChecks(['check' => function (Test $test) use ($method, &$continued) {
+		check($test->$method(1, 1, assert: true, message: 'matching value') === $test, 'Assertion lost fluent return.');
+		check($test->$method(1, '1', assert: true, stop: false, message: 'typed mismatch') === $test, 'Continuing comparison lost fluent return.');
+		$test->$method(1, '1', is: false, assert: true, message: 'negated match');
+		$test->$method(1, 1, is: false, assert: true, message: 'negated mismatch');
+		$continued = true;
+	}]);
+	$steps = $record['suites'][0]['attempts'][0]['steps'];
+	check($status === 1 && !$continued && $record['totals']['assertionsPassed'] === 2 && $record['totals']['assertionsFailed'] === 2
+		&& count($steps) === 4 && array_column($steps, 'label') === array_fill(0, 4, $method), $output);
+	foreach ($steps as $step) check(count($step['assertions']) === 1 && $step['location']['file'] === 'test/test.php', 'Comparison recorded twice or lost author location.');
+	check($steps[1]['assertions'][0]['expected'] === '1' && $steps[1]['assertions'][0]['actual'] === 1
+		&& $steps[1]['assertions'][0]['message'] === 'typed mismatch' && $steps[3]['assertions'][0]['invert'] === true, 'Comparison details were lost.');
+}
+echo "PASS: comparison assertions record once, retain values/messages, negate and stop or continue\n";
+
+[$status, $output, $record] = runChecks(['check' => function (Test $test) {
+	$resource = fopen('php://memory', 'r+');
+	try {
+		$test->equal(INF, 0, assert: true, stop: false);
+		$test->same(['number' => NAN], ['number' => null], assert: true, stop: false);
+		$test->equal($resource, null, assert: true, stop: false);
+		$test->same(new ComparisonValue(1), new ComparisonValue(2), assert: true, stop: false);
+		$test->recordStep('outer', null, [], fn () => $test->same([1], [1], assert: true));
+	} finally {
+		fclose($resource);
+	}
+	$test->equal($resource, null, assert: true, stop: false);
+}]);
+$steps = $record['suites'][0]['attempts'][0]['steps'];
+check($status === 1 && count($steps) === 6 && $record['totals']['assertionsFailed'] === 5
+	&& $record['totals']['assertionsPassed'] === 1, $output);
+check($steps[0]['assertions'][0]['actual'] === ['type' => 'float', 'value' => 'INF']
+	&& $steps[1]['assertions'][0]['actual']['number']['value'] === 'NAN'
+	&& $steps[2]['assertions'][0]['actual'] === 'stream'
+	&& $steps[3]['assertions'][0]['actual'] === ['class' => ComparisonValue::class]
+	&& $steps[4]['label'] === 'outer' && $steps[5]['assertions'][0]['actual'] === 'resource (closed)',
+	'Comparison serialization or nested recording changed.');
+echo "PASS: comparisons preserve JSON-safe diagnostics and nested operation recording\n";

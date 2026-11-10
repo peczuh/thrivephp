@@ -38,6 +38,7 @@
 			if (is_float($value) && !is_finite($value)):
 				return ['type' => 'float', 'value' => is_nan($value) ? 'NAN' : ($value > 0 ? 'INF' : '-INF')];
 			endif;
+			if (gettype($value) === 'resource (closed)') return 'resource (closed)';
 			if ($value instanceof Element || $value instanceof ShadowRoot):
 				return ['target' => $value->description()];
 			endif;

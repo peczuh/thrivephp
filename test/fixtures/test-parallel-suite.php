@@ -39,6 +39,12 @@ $suite = new class($test) extends Suite {
     public function body(): void
     {
         switch ($this->mode) {
+            case 'value-comparisons':
+                $this->test->equal(INF, 0, assert: true, stop: false, message: 'worker strict mismatch');
+                $this->test->same((object)['rows' => [[1, '2']]], (object)['rows' => [[1, 2]]],
+                    assert: true, stop: false, message: 'worker structural mismatch');
+                $this->test->same((object)['a' => 1, 'b' => 2], (object)['b' => 2, 'a' => 1], assert: true);
+                break;
             case 'live-failure':
                 $this->test->verify(false, 'reported before the case returns');
                 usleep(200000);
