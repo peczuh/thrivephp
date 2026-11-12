@@ -111,9 +111,11 @@ attempt as `attempt X/Y`, where Y is the configured maximum, including the initi
 attempt. Case and suite retry contexts and results use the same numbering.
 Completed steps are not replayed at retries or in final results.
 
-Failure screenshots render inline on a Ghostty TTY through the Kitty graphics
-protocol. Redirected output and other terminals show the relative image path.
-Successful screenshots always appear as paths. The final summary includes
+Failure screenshots render inline on a Ghostty or Rex TTY through the Kitty graphics
+protocol. Screenshot paths on a TTY are OSC 8 hyperlinks to the original PNG's
+absolute `file://` URL, with blue, underlined relative path labels. Redirected output stays plain
+text. Successful screenshots appear as linked paths without inline images.
+The final summary includes
 environment information, totals, duration, and the output directory. Console
 source, screenshot, and report paths within the project are displayed relative
 to `environment.root`. JSON and HTML screenshot paths remain run-relative so

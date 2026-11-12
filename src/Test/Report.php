@@ -146,7 +146,21 @@ final class Report
 
     private function line(string $status, string $kind, string $message): void
     {
-        echo sprintf('%-5s %-5s %s', $status, $kind, $message) . PHP_EOL;
+        echo sprintf('%s %-5s %s', $this->statusLabel($status, 5), $kind, $message) . PHP_EOL;
+    }
+
+    /** Pad before adding terminal colors so status columns remain aligned. */
+    private function statusLabel(string $status, int $width = 0): string
+    {
+        $label = str_pad($status, $width);
+        $color = match ($status) {
+            'FAIL' => 31,
+            'PASS' => 32,
+            'SKIP' => 33,
+            'RUN' => 34,
+            default => null,
+        };
+        return stream_isatty(STDOUT) && $color !== null ? "\033[{$color}m" . $label . "\033[39m" : $label;
     }
 
     private function suiteResult(array $suite, array $attempt, array $counts): void
@@ -236,9 +250,17 @@ final class Report
             }
             if (isset($this->shownImages[$image['path']])) continue;
             $this->shownImages[$image['path']] = true;
-            echo '  Screenshot: ' . $this->diagnostic->path($this->directory . '/' . $image['path']) . PHP_EOL;
+            $path = $this->directory . '/' . $image['path'];
+            $label = $this->diagnostic->path($path);
+            if (stream_isatty(STDOUT) && ($absolute = realpath($path)) !== false) {
+                $urlPath = str_replace(['%2F', '%3A'], ['/', ':'], rawurlencode(str_replace(DIRECTORY_SEPARATOR, '/', $absolute)));
+                $url = str_starts_with($urlPath, '//') ? 'file:' . $urlPath
+                    : 'file://' . (str_starts_with($urlPath, '/') ? '' : '/') . $urlPath;
+                $label = "\033]8;;" . $url . "\033\\\033[34;4m" . $label . "\033[39;24m\033]8;;\033\\";
+            }
+            echo '  Screenshot: ' . $label . PHP_EOL;
             if (!$failure || $image['status'] !== 'FAIL' || !stream_isatty(STDOUT)
-                || getenv('TERM_PROGRAM') !== 'ghostty') {
+                || !in_array(getenv('TERM_PROGRAM'), ['ghostty', 'rex'], true)) {
                 continue;
             }
             $bytes = @file_get_contents($this->directory . '/' . $image['path']);
@@ -268,7 +290,7 @@ final class Report
             }
         }
         $t = $run['totals'];
-        if ($run['errors']) echo PHP_EOL . 'Run: FAIL (' . count($run['errors']) . ' run error(s))' . PHP_EOL;
+        if ($run['errors']) echo PHP_EOL . 'Run: ' . $this->statusLabel('FAIL') . ' (' . count($run['errors']) . ' run error(s))' . PHP_EOL;
         echo PHP_EOL . "Suites: {$t['checksPassed']} passed, {$t['checksFailed']} failed, {$t['checksSkipped']} skipped" . PHP_EOL;
         if (array_any($run['suites'], fn ($suite) => array_any($suite['attempts'], fn ($attempt) => $attempt['cases'] !== []))) {
             echo "Cases: {$t['casesPassed']} passed, {$t['casesFailed']} failed, {$t['casesSkipped']} skipped" . PHP_EOL;

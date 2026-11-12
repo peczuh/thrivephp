@@ -11,7 +11,7 @@ function check(bool $condition, string $message): void
     if (!$condition) throw new RuntimeException($message);
 }
 
-$root = sys_get_temp_dir() . '/thrive-inline-' . bin2hex(random_bytes(6));
+$root = sys_get_temp_dir() . '/thrive-inline-' . bin2hex(random_bytes(6)) . ' space # % café';
 mkdir($root, 0700, true);
 $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
 // A valid ancillary chunk makes the original PNG span multiple transport packets.
@@ -20,7 +20,8 @@ $chunk = 'tEXt' . $text;
 $png = substr($png, 0, -12) . pack('N', strlen($text)) . $chunk . pack('N', crc32($chunk)) . substr($png, -12);
 try {
     foreach ([[true, 'ghostty', '80'], [true, 'ghostty', '40'], [true, 'ghostty', 'default'],
-        [false, 'ghostty', '80'], [true, 'xterm', '80']] as $index => [$tty, $terminal, $columns]) {
+        [true, 'rex', '80'], [true, 'rex', '40'], [true, 'rex', 'default'],
+        [false, 'ghostty', '80'], [false, 'rex', '80'], [true, 'xterm', '80']] as $index => [$tty, $terminal, $columns]) {
         $project = $root . '/' . $index;
         mkdir($project . '/test/cases', 0700, true);
         file_put_contents($project . '/source.png', $png);
@@ -29,6 +30,7 @@ try {
             return function ($test) {
                 $test->browserSession(['sessionId' => 'inline', 'capabilities' => ['browserName' => 'fixture']],
                     fn () => new \ThriveData\ThrivePHP\WebDriver\Screenshot(file_get_contents(dirname(__DIR__, 2) . '/source.png')));
+                $test->assert(true, 'Successful screenshot path is also linked');
                 $test->assert(false, 'Intentional failure for inline screenshot rendering');
             };
             PHP);
@@ -43,11 +45,26 @@ try {
         $reports = glob($project . '/test/runs/*/report.json');
         check(count($reports) === 1, 'Report missing.');
         $record = json_decode(file_get_contents($reports[0]), true, flags: JSON_THROW_ON_ERROR);
-        $image = $record['suites'][0]['attempts'][0]['steps'][0]['screenshots'][0];
-        check($image['width'] === 1 && $image['height'] === 1 && file_get_contents(dirname($reports[0]) . '/' . $image['path']) === $png,
-            'Saved screenshot or recorded dimensions were changed.');
+        $steps = $record['suites'][0]['attempts'][0]['steps'];
+        preg_match_all('/\x1b\]8;;([^\x1b]*)\x1b\\\\\x1b\[34;4m([^\x1b]*)\x1b\[39;24m\x1b\]8;;\x1b\\\\/', $out, $links, PREG_SET_ORDER);
+        check(count($links) === ($tty ? 2 : 0), 'Screenshot links were missing or leaked into redirected output.');
+        if (!$tty) check(!str_contains($out, "\033[34;4m") && !str_contains($out, "\033]8;"), 'Link styling leaked into redirected output.');
+        foreach ($steps as $number => $step) {
+            $image = $step['screenshots'][0];
+            $path = realpath(dirname($reports[0]) . '/' . $image['path']);
+            check($image['width'] === 1 && $image['height'] === 1 && file_get_contents($path) === $png,
+                'Saved screenshot or recorded dimensions were changed.');
+            if ($tty) {
+                check(str_starts_with($links[$number][1], 'file:///')
+                    && rawurldecode(parse_url($links[$number][1], PHP_URL_PATH)) === $path
+                    && str_contains($links[$number][1], '%23') && str_contains($links[$number][1], '%25')
+                    && !str_contains($links[$number][1], ' ') && !str_contains($links[$number][1], '#'),
+                    'Screenshot URL was not an encoded absolute file URL.');
+                check($links[$number][2] === substr($path, strlen(realpath($project)) + 1), 'Screenshot link lost its relative label.');
+            }
+        }
         preg_match_all('/\x1b_G([^;]*);([A-Za-z0-9+\/=]*)\x1b\\\\/', $out, $packets, PREG_SET_ORDER);
-        if (!$tty || $terminal !== 'ghostty') {
+        if (!$tty || $terminal === 'xterm') {
             check($packets === [] && str_contains($out, 'Screenshot:'), 'Inline data escaped its terminal gate.');
             continue;
         }
@@ -65,7 +82,7 @@ try {
         }
         check(base64_decode($payload, true) === $png, 'Inline image bytes were resized, cropped, or re-encoded.');
     }
-    echo "PASS: terminal-only column scaling preserves original PNG bytes, aspect ratio, chunking and saved dimensions\n";
+    echo "PASS: terminal screenshot links target original files; column scaling preserves PNG bytes, aspect ratio and dimensions\n";
 } finally {
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $entry) {
         $entry->isDir() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());
