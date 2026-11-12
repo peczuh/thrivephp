@@ -31,12 +31,16 @@ return new class($test) extends SuiteBrowser {
     #[SuiteBefore]
     public function setup(): void {
         $this->browser->navigate('data:text/html,' . rawurlencode('<!doctype html><title>Logs</title><script>console.log("suite-setup")</script>'));
+        // Keep asynchronous delivery inside the hook whose observation context is being checked.
+        $this->browser->wait(fn ($browser) => array_any($browser->logs(), fn ($entry) => ($entry['text'] ?? '') === 'suite-setup'));
     }
     #[Test('Browser errors remain diagnostic', retry: 1)]
     public function retry_case(): void {
         $before = count($this->browser->logs('javascript'));
-        $this->browser->script('console.error("case-entry", {answer: 42}); setTimeout(() => {throw new Error("case-exception")}, 0)');
-        $this->browser->wait(function ($browser) use ($before) { return count($browser->logs('javascript')) > $before; });
+        $this->test->recordStep('browser_messages', null, [], function () use ($before) {
+            $this->browser->script('console.error("case-entry", {answer: 42}); setTimeout(() => {throw new Error("case-exception")}, 0)');
+            $this->browser->wait(function ($browser) use ($before) { return count($browser->logs('javascript')) > $before; });
+        });
         $this->test->assert(++$this->attempt === 2, 'second attempt passes');
     }
     #[CaseAfter]
