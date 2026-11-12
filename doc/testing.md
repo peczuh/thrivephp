@@ -210,8 +210,8 @@ conditions with `assert: true` record one final assertion.
 `SuiteBrowser` supplies the screenshot source; ordinary `Suite` does not create
 browser captures. A failure capture happens before another operation proceeds,
 including after a continuing verification failure. Successful case captures occur
-after the body and before `CaseAfter`. Case teardown failures retain an additional
-capture. Enabled suite captures occur after cases and before `SuiteAfter`.
+after the body and before `After(case: true)`. Case teardown failures retain an additional
+capture. Enabled suite captures occur after cases and before suite-level `After` hooks.
 Skipped cases and suites capture nothing. Retried attempts retain their images.
 An action failure and its case can reference the same PNG.
 
@@ -648,12 +648,12 @@ public `$test` property; individual suites do not need their own constructors.
 ```php
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\Test;
-use ThriveData\ThrivePHP\Test\CaseBefore;
+use ThriveData\ThrivePHP\Test\Before;
 
 return new class($test) extends Suite {
     private array $items = [];
 
-    #[CaseBefore]
+    #[Before(case: true)]
     public function prepare(): void
     {
         $this->items = ['first'];
@@ -719,7 +719,7 @@ are omitted rather than reported as skipped.
 ### Retries
 
 `retry: 1` permits two attempts. Stop retrying after the first successful attempt.
-A method-level retry repeats `CaseBefore`, the case body, and `CaseAfter`, retaining
+A method-level retry repeats `Before(case: true)`, the case body, and `After(case: true)`, retaining
 the suite object and browser session. Each attempt gets its own case-body deadline.
 Failed assertions and verifications, exceptions, hook failures, and exceeded
 deadlines can all cause a retry. Case hooks must prepare the state needed by each
@@ -748,15 +748,30 @@ but do not make a later successful attempt fail the run.
 
 ## Hooks and ordering
 
-The marker attributes are `SuiteBefore`, `SuiteAfter`, `CaseBefore`, and
-`CaseAfter`, all in `ThriveData\ThrivePHP\Test`. Each phase may have multiple
-annotated methods.
+The hook attributes are `Before` and `After`, in `ThriveData\ThrivePHP\Test`.
+Both accept `case: false` by default, running once per suite attempt. Set
+`case: true` to run before or after each case attempt, including retries.
+Each phase may have multiple annotated methods.
+
+```php
+#[Before]                  // Suite setup; equivalent to Before(case: false).
+public function setupSuite(): void {}
+
+#[Before(case: true)]      // Setup for each case attempt.
+public function setupCase(): void {}
+
+#[After(case: true)]       // Cleanup for each case attempt.
+public function cleanupCase(): void {}
+
+#[After]                   // Suite cleanup; equivalent to After(case: false).
+public function cleanupSuite(): void {}
+```
 
 Execution order:
 
-1. All `SuiteBefore` hooks.
-2. For each case: `CaseBefore` hooks, the case body, then `CaseAfter` hooks.
-3. All `SuiteAfter` hooks.
+1. All suite-level `Before` hooks.
+2. For each case attempt: `Before(case: true)` hooks, the case body, then `After(case: true)` hooks.
+3. All suite-level `After` hooks.
 
 Before hooks and cases run base class first, then child class. After hooks run
 child class first, then base class. Within each class, directly declared methods
@@ -803,7 +818,7 @@ Each file also has an overall result. `Suites` counts file results; `Cases` coun
 suite cases, including cases skipped after suite setup fails; `Assertions` counts
 all recorded results, including hooks and legacy checks.
 
-`skipRemainingOnFailure` takes effect after the case's retries and `CaseAfter`
+`skipRemainingOnFailure` takes effect after the case's retries and `After(case: true)`
 hooks finish. Failed assertions, continuing verifications, exceptions in the body
 or case hooks, and case deadline failures all count. A successful retry allows
 later cases to run. Skipped cases run no case hooks and report
@@ -820,7 +835,7 @@ protected function configure(SuiteConfig $config): void
 }
 ```
 
-Put required cleanup in `SuiteAfter` hooks rather than a final case, since a case
+Put required cleanup in suite-level `After` hooks rather than a final case, since a case
 can be skipped after an earlier failure.
 
 ### Comparing PHP values
@@ -897,7 +912,7 @@ hooks, not constructors, so the runner can report failures and arrange cleanup.
 ```php
 use ThriveData\ThrivePHP\Test\SuiteBrowser;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
+use ThriveData\ThrivePHP\Test\Before;
 use ThriveData\ThrivePHP\Test\Test;
 
 return new class($test) extends SuiteBrowser {
@@ -906,7 +921,7 @@ return new class($test) extends SuiteBrowser {
         $config->timeout = 15;
     }
 
-    #[SuiteBefore]
+    #[Before]
     public function openApplication(): void
     {
         $this->browser->navigate('https://example.test/');

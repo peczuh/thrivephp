@@ -1055,7 +1055,7 @@ class Test
                 'cases' => array_column($cases, 'name'), 'definitions' => $definitions, 'location' => $location,
                 'maxAttempts' => $metadata->retry + 1]);
             if ($ready) {
-                $ready = $this->runHooks($suite, $methods[Test\SuiteBefore::class], 'SuiteBefore');
+                $ready = $this->runHooks($suite, $methods['suite-setup'], 'suite-setup');
             }
             $suiteState = [$this->passed, $this->failed, $this->failures];
             $suiteOrdinal = $this->ordinal;
@@ -1084,7 +1084,7 @@ class Test
                     $this->passed = $this->failed = 0;
                     $this->failures = [];
                     try {
-                        if ($this->runHooks($suite, $methods[Test\CaseBefore::class], 'CaseBefore')) {
+                        if ($this->runHooks($suite, $methods['case-setup'], 'case-setup')) {
                             $this->phase = 'test';
                             $this->event(['type' => 'activity', 'activity' => 'case test: ' . $case['name']]);
                             $bodyStarted = hrtime(true);
@@ -1098,7 +1098,7 @@ class Test
                     } finally {
                         $this->captureCompletion('cases');
                         $beforeCleanup = count($this->failures);
-                        $this->runHooks($suite, $methods[Test\CaseAfter::class], 'CaseAfter', teardown: true);
+                        $this->runHooks($suite, $methods['case-teardown'], 'case-teardown', teardown: true);
                         if (count($this->failures) > $beforeCleanup) {
                             $this->captureCompletion('cases');
                         }
@@ -1135,7 +1135,7 @@ class Test
             $this->failureCapture = null;
             [$this->passed, $this->failed, $this->failures] = $suiteState;
             $this->captureCompletion('suites', $casesFailed > 0);
-            $this->runHooks($suite, $methods[Test\SuiteAfter::class], 'SuiteAfter', teardown: true);
+            $this->runHooks($suite, $methods['suite-teardown'], 'suite-teardown', teardown: true);
             $this->passed += $assertionsPassed;
             $this->failed += $assertionsFailed;
         }
@@ -1147,23 +1147,24 @@ class Test
     {
         $this->collectBrowserLogs();
         $this->collectBrowserNetwork();
-        $this->phase = match ($phase) {
-            'SuiteBefore' => 'suite-setup', 'CaseBefore' => 'case-setup',
-            'CaseAfter' => 'case-teardown', 'SuiteAfter' => 'suite-teardown',
+        $this->phase = $phase;
+        $label = match ($phase) {
+            'suite-setup' => 'Before', 'case-setup' => 'Before(case: true)',
+            'case-teardown' => 'After(case: true)', 'suite-teardown' => 'After',
         };
         foreach ($hooks as $hook) {
-            $this->hook = $phase . ' ' . $hook['name'];
+            $this->hook = $label . ' ' . $hook['name'];
             $start = count($this->failures);
             $started = hrtime(true);
-            $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name']]);
+            $this->event(['type' => 'activity', 'activity' => $label . ' ' . $hook['name']]);
             $completed = $this->invokeSuiteMethod($suite, $hook['method']);
             $this->collectBrowserLogs();
             $this->collectBrowserNetwork();
             $this->hook = null;
-            $this->event(['type' => 'activity', 'activity' => $phase . ' ' . $hook['name'] . ' finished',
+            $this->event(['type' => 'activity', 'activity' => $label . ' ' . $hook['name'] . ' finished',
                 'duration' => (hrtime(true) - $started) / 1e9]);
             for ($index = $start; $index < count($this->failures); $index++) {
-                $this->failures[$index] = $phase . ' ' . $hook['name'] . ': ' . $this->failures[$index];
+                $this->failures[$index] = $label . ' ' . $hook['name'] . ': ' . $this->failures[$index];
             }
             if (!$completed && !$teardown) {
                 return false;

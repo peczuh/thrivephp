@@ -7,7 +7,7 @@ namespace ThriveData\ThrivePHP\Test;
 /** @internal Discovers effective annotated methods and orders their lifecycle phases. */
 final class SuiteMethods
 {
-    /** @return array<class-string, list<array{method: \ReflectionMethod, name: string, deadline: ?float, retry: int, tags: array, skip: bool, order: array}>> */
+    /** @return array<string, list<array{method: \ReflectionMethod, name: string, deadline: ?float, retry: int, tags: array, skip: bool, order: array}>> */
     public static function discover(Suite $suite): array
     {
         $class = new \ReflectionObject($suite);
@@ -16,7 +16,7 @@ final class SuiteMethods
             $depths[$ancestor->getName()] = count($depths);
         }
 
-        $attributes = [SuiteBefore::class, SuiteAfter::class, CaseBefore::class, CaseAfter::class, Test::class];
+        $attributes = [Before::class, After::class, Test::class];
         $methods = [];
         foreach ($class->getMethods(\ReflectionMethod::IS_PUBLIC) as $method) {
             $annotated = false;
@@ -38,16 +38,17 @@ final class SuiteMethods
             }
         }
 
-        $phases = [];
+        $phases = ['suite-setup' => [], 'suite-teardown' => [], 'case-setup' => [], 'case-teardown' => [], Test::class => []];
         foreach ($attributes as $attribute) {
-            $selected = [];
             foreach ($methods as ['method' => $method, 'origin' => $origin]) {
                 foreach ($method->getAttributes($attribute) as $metadata) {
                     if ($attribute === Test::class) Name::validate($method->getName(), 'case');
                     $instance = $metadata->newInstance();
+                    $phase = $attribute === Test::class ? Test::class
+                        : ($instance->case ? 'case' : 'suite') . ($attribute === Before::class ? '-setup' : '-teardown');
                     $depth = $depths[$method->getDeclaringClass()->getName()];
                     $trait = $origin->getDeclaringClass()->isTrait();
-                    $selected[] = [
+                    $phases[$phase][] = [
                         'method' => $method,
                         'name' => $instance instanceof Test ? $instance->description : $method->getName(),
                         'deadline' => $instance instanceof Test ? $instance->deadline : null,
@@ -55,7 +56,7 @@ final class SuiteMethods
                         'tags' => $instance instanceof Test ? $instance->tags : [],
                         'skip' => $instance instanceof Test && $instance->skip,
                         'order' => [
-                            in_array($attribute, [SuiteAfter::class, CaseAfter::class], true) ? $depth : -$depth,
+                            $attribute === After::class ? $depth : -$depth,
                             $trait ? 1 : 0,
                             $trait ? $origin->getDeclaringClass()->getName() : '',
                             $origin->getStartLine(),
@@ -64,8 +65,9 @@ final class SuiteMethods
                     ];
                 }
             }
+        }
+        foreach ($phases as &$selected) {
             usort($selected, static fn (array $a, array $b) => $a['order'] <=> $b['order']);
-            $phases[$attribute] = $selected;
         }
         return $phases;
     }

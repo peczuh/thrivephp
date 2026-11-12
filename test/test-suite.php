@@ -7,10 +7,8 @@ use ThriveData\ThrivePHP\Test as TestRunner;
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
 use ThriveData\ThrivePHP\Test\Test;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\SuiteAfter;
-use ThriveData\ThrivePHP\Test\CaseBefore;
-use ThriveData\ThrivePHP\Test\CaseAfter;
+use ThriveData\ThrivePHP\Test\Before;
+use ThriveData\ThrivePHP\Test\After;
 
 function check(bool $condition, string $message): void
 {
@@ -19,13 +17,13 @@ function check(bool $condition, string $message): void
 
 trait ZuluHooks
 {
-    #[SuiteBefore]
+    #[Before]
     public function traitZulu(): void { $this->trace[] = 'trait zulu'; }
 }
 
 trait AlphaHooks
 {
-    #[SuiteBefore]
+    #[Before]
     public function traitAlpha(): void { $this->trace[] = 'trait alpha'; }
 }
 
@@ -33,16 +31,16 @@ abstract class BaseSuite extends Suite
 {
     public array $trace = [];
 
-    #[SuiteBefore]
+    #[Before(case: false)]
     public function baseStart(): void { $this->trace[] = 'base start'; }
 
-    #[SuiteAfter]
+    #[After(case: false)]
     public function baseStop(): void { $this->trace[] = 'base stop'; }
 
-    #[CaseBefore]
+    #[Before(case: true)]
     public function basePrepare(): void { $this->trace[] = 'base prepare'; }
 
-    #[CaseAfter]
+    #[After(case: true)]
     public function baseClean(): void { $this->trace[] = 'base clean'; }
 
     #[Test('Inherited case')]
@@ -60,19 +58,19 @@ $suite = null;
     return $suite = new class($test) extends BaseSuite {
         use ZuluHooks, AlphaHooks;
 
-        #[SuiteBefore]
+        #[Before]
         public function zStart(): void { $this->trace[] = 'child start z'; }
 
-        #[SuiteBefore]
+        #[Before]
         public function aStart(): void { $this->trace[] = 'child start a'; }
 
-        #[SuiteAfter]
+        #[After]
         public function childStop(): void { $this->trace[] = 'child stop'; }
 
-        #[CaseBefore]
+        #[Before(case: true)]
         public function childPrepare(): void { $this->trace[] = 'child prepare'; }
 
-        #[CaseAfter]
+        #[After(case: true)]
         public function childClean(): void { $this->trace[] = 'child clean'; }
 
         public function removed(): void { throw new RuntimeException('unannotated override ran'); }
@@ -174,10 +172,10 @@ echo "PASS: overlapping annotated declarations are rejected while unannotated he
 
 trait AliasedHooks
 {
-    #[SuiteBefore]
+    #[Before]
     public function originalHook(): void { $this->test->verify(false, 'original hook once'); }
 
-    #[SuiteBefore]
+    #[Before]
     protected function protectedHook(): void { $this->test->verify(false, 'public alias once'); }
 }
 
@@ -194,8 +192,8 @@ trait AliasedHooks
     };
 }]);
 check($status === 1 && str_contains($output, 'PASS  CASE  suite > body: Case after verifying setup')
-    && str_contains($output, "Hook: SuiteBefore originalHook\n    AssertionFailure: original hook once")
-    && str_contains($output, "Hook: SuiteBefore aPublicAlias\n    AssertionFailure: public alias once")
+    && str_contains($output, "Hook: Before originalHook\n    AssertionFailure: original hook once")
+    && str_contains($output, "Hook: Before aPublicAlias\n    AssertionFailure: public alias once")
     && str_contains($output, 'Assertions: 1 passed, 2 failed'), $output);
 echo "PASS: alias deduplication prefers an eligible original, otherwise the first public alias by name\n";
 
@@ -217,31 +215,31 @@ foreach ([...$failureModes, ...array_map(fn ($mode) => 'stop ' . $mode, $failure
                     if ($this->stop) $config->skipRemainingOnFailure = true;
                 }
 
-                #[SuiteBefore]
+                #[Before]
                 public function setup(): void
                 {
                     $this->trace[] = 'suite setup';
                     if ($this->mode === 'suite setup') $this->test->assert(false, 'setup failed');
                 }
 
-                #[SuiteBefore]
+                #[Before]
                 public function laterSetup(): void { $this->trace[] = 'later setup'; }
 
-                #[CaseBefore]
+                #[Before(case: true)]
                 public function prepare(): void
                 {
                     $this->trace[] = 'prepare ' . ++$this->case;
                     if ($this->mode === 'case setup' && $this->case === 1) throw new RuntimeException('prepare failed');
                 }
 
-                #[CaseAfter]
+                #[After(case: true)]
                 public function clean(): void
                 {
                     $this->trace[] = 'clean ' . $this->case;
                     if ($this->mode === 'case cleanup' && $this->case === 1) $this->test->assert(false, 'cleanup failed');
                 }
 
-                #[CaseAfter]
+                #[After(case: true)]
                 public function laterClean(): void { $this->trace[] = 'later clean ' . $this->case; }
 
                 #[Test('First case', deadline: 0.02)]
@@ -260,14 +258,14 @@ foreach ([...$failureModes, ...array_map(fn ($mode) => 'stop ' . $mode, $failure
                 #[Test('Second case')]
                 public function second(): void { $this->trace[] = 'second'; $this->test->assert(true, 'second passed'); }
 
-                #[SuiteAfter]
+                #[After]
                 public function stop(): void
                 {
                     $this->trace[] = 'suite cleanup';
                     if ($this->mode === 'suite cleanup') throw new RuntimeException('stop failed');
                 }
 
-                #[SuiteAfter]
+                #[After]
                 public function laterStop(): void { $this->trace[] = 'later stop'; }
             };
             $suite->mode = $mode;
@@ -301,25 +299,25 @@ echo "PASS: optional skipping after assertions, verification, errors, hooks and 
 
 [$status, $output] = runChecks(['suite' => function (TestRunner $test) {
     return new class($test) extends Suite {
-        #[SuiteBefore]
+        #[Before]
         public function start(): void { $this->test->verify(false, 'suite verification'); }
 
-        #[CaseBefore]
+        #[Before(case: true)]
         public function prepare(): void { $this->test->assert(true, 'case hook assertion'); }
 
         #[Test('Case uses its hook assertion')]
         public function body(): void {}
 
-        #[CaseAfter]
+        #[After(case: true)]
         public function clean(): void { $this->test->assert(false, 'case cleanup assertion'); }
 
-        #[CaseAfter]
+        #[After(case: true)]
         public function laterClean(): void { throw new RuntimeException('additional case cleanup error'); }
 
-        #[SuiteAfter]
+        #[After]
         public function stop(): void { $this->test->assert(false, 'suite cleanup assertion'); }
 
-        #[SuiteAfter]
+        #[After]
         public function laterStop(): void { $this->test->assert(true, 'later suite cleanup'); }
     };
 }]);
@@ -327,7 +325,7 @@ check($status === 1 && str_contains($output, 'Assertions: 2 passed, 3 failed'), 
 foreach (['suite verification', 'case cleanup assertion', 'additional case cleanup error', 'suite cleanup assertion'] as $message) {
     check(str_contains($output, $message), $output);
 }
-check(str_contains($output, 'Hook: SuiteBefore start') && str_contains($output, 'Hook: SuiteAfter stop') && str_contains($output, 'Hook: CaseAfter clean'), $output);
+check(str_contains($output, 'Hook: Before start') && str_contains($output, 'Hook: After stop') && str_contains($output, 'Hook: After(case: true) clean'), $output);
 echo "PASS: suite and case hook assertions are attributed separately and cleanup errors accumulate\n";
 
 [$status, $output] = runChecks(['suite' => function (TestRunner $test) {
@@ -377,10 +375,10 @@ $trace = [];
     return new class($test, $trace) extends Suite {
         public function __construct(TestRunner $test, private array &$trace) { parent::__construct($test); }
 
-        #[CaseBefore]
+        #[Before(case: true)]
         public function prepare(): void { usleep(30000); }
 
-        #[CaseAfter]
+        #[After(case: true)]
         public function cleanup(): void { $this->trace[] = 'cleanup'; }
 
         #[Test('hooks excluded', deadline: 0.02)]

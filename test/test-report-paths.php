@@ -29,14 +29,14 @@ $fixture = <<<'PHP'
 <?php
 use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\Test\Suite;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
+use ThriveData\ThrivePHP\Test\Before;
 use ThriveData\ThrivePHP\WebDriver\Screenshot;
 $GLOBALS['attempts'][__FILE__] = ($GLOBALS['attempts'][__FILE__] ?? 0) + 1;
 return new #[Test('Capture paths', retry: 1)] class($test, __FILE__, $GLOBALS['attempts'][__FILE__]) extends Suite {
     private int $captures = 0;
     private int $cases = 0;
     public function __construct($test, private string $file, private int $attempt) { parent::__construct($test); }
-    #[SuiteBefore]
+    #[Before]
     public function capture(): void {
         $this->test->browserSession(['capabilities' => []], fn () => new Screenshot(base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j3ioAAAAASUVORK5CYII=') . $this->file . '|' . ++$this->captures));
     }

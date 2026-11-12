@@ -3,8 +3,8 @@
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
 use ThriveData\ThrivePHP\Test\Test;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\SuiteAfter;
+use ThriveData\ThrivePHP\Test\Before;
+use ThriveData\ThrivePHP\Test\After;
 
 $suite = new class($test) extends Suite {
     public string $mode;
@@ -17,7 +17,7 @@ $suite = new class($test) extends Suite {
         if (in_array($this->mode, ['timeout', 'step-timeout', 'progress', 'descendants'], true)) $config->idleTimeout = 0.6;
     }
 
-    #[SuiteBefore]
+    #[Before]
     public function start(): void
     {
         $this->log('start');
@@ -127,7 +127,7 @@ $suite = new class($test) extends Suite {
         $this->test->assert(true, 'remaining case runs');
     }
 
-    #[SuiteAfter]
+    #[After]
     public function finish(): void { $this->log('finish'); }
 
     private function log(string $event): void

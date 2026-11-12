@@ -3,21 +3,19 @@
 use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\SuiteAfter;
-use ThriveData\ThrivePHP\Test\CaseBefore;
-use ThriveData\ThrivePHP\Test\CaseAfter;
+use ThriveData\ThrivePHP\Test\Before;
+use ThriveData\ThrivePHP\Test\After;
 
 if ($mode === 'attribute-load-error') throw new RuntimeException('Excluded file loaded.');
 
 if ($mode === 'attribute-skip') {
     return new #[Test('Skipped suite', retry: 3, tags: ['suite'], skip: true)] class($test) extends Suite {
         protected function configure(SuiteConfig $config): void { throw new RuntimeException('Skipped configuration ran.'); }
-        #[SuiteBefore]
+        #[Before]
         public function setup(): void { throw new RuntimeException('Skipped setup ran.'); }
         #[Test('skipped body')]
         public function body(): void { throw new RuntimeException('Skipped body ran.'); }
-        #[SuiteAfter]
+        #[After]
         public function cleanup(): void { throw new RuntimeException('Skipped cleanup ran.'); }
     };
 }
@@ -38,7 +36,7 @@ $suite = new #[Test('Attribute suite', deadline: 0.5, retry: 1, tags: ['suite'])
         if ($this->mode === 'attribute-retry-timeout') $config->idleTimeout = 0.2;
     }
 
-    #[SuiteBefore]
+    #[Before]
     public function setup(): void
     {
         $this->log('setup');
@@ -46,7 +44,7 @@ $suite = new #[Test('Attribute suite', deadline: 0.5, retry: 1, tags: ['suite'])
         $this->test->assert($this->mode !== 'attribute-suite-before' || $this->attempt > 1, 'suite setup');
     }
 
-    #[CaseBefore]
+    #[Before(case: true)]
     public function prepare(): void
     {
         $this->prepared++;
@@ -79,14 +77,14 @@ $suite = new #[Test('Attribute suite', deadline: 0.5, retry: 1, tags: ['suite'])
     #[Test('skipped', retry: 5, tags: ['skip'], skip: true)]
     public function skipped(): void { throw new RuntimeException('Skipped case ran.'); }
 
-    #[CaseAfter]
+    #[After(case: true)]
     public function clean(): void
     {
         $this->log('clean');
         if ($this->mode === 'attribute-case-after' && $this->prepared === 1) throw new RuntimeException('case cleanup failed');
     }
 
-    #[SuiteAfter]
+    #[After]
     public function cleanup(): void
     {
         $this->log('cleanup');

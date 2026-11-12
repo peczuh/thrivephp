@@ -21,8 +21,8 @@ use ThriveData\ThrivePHP\WebDriver\PDF;
 use ThriveData\ThrivePHP\WebDriver\NetworkDecision;
 use ThriveData\ThrivePHP\Test;
 use ThriveData\ThrivePHP\Test\Suite;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\SuiteAfter;
+use ThriveData\ThrivePHP\Test\Before;
+use ThriveData\ThrivePHP\Test\After;
 use ThriveData\ThrivePHP\Test\Test as TestCase;
 
 /** Observe protocol assertion results independently of the runner's stopping behavior. */
@@ -2137,14 +2137,14 @@ scenario('network reports preserve actual observation attempts across a case ret
 		return new class($test, $browser) extends Suite {
 			private int $attempt = 0;
 			public function __construct($test, private Browser $browser) { parent::__construct($test); }
-			#[SuiteBefore]
+			#[Before]
 			public function setup(): void { $this->browser->network()->startCapture(); }
 			#[TestCase('Retry with an unfinished request', retry: 1)]
 			public function body(): void {
 				$this->browser->command('fixture.attempt');
 				$this->test->assert(++$this->attempt === 2, 'second attempt passes');
 			}
-			#[SuiteAfter]
+			#[After]
 			public function cleanup(): void { $this->browser->command('fixture.cleanup'); $this->browser->quit(); }
 		};
 	}]);
@@ -2158,7 +2158,7 @@ scenario('network reports preserve actual observation attempts across a case ret
 		verify($entry['event'] === networkEvent($index ? 'responseCompleted' : 'beforeRequestSent', 'spanning', extra: $index ? ['response' => ['status' => 404, 'headers' => []]] : []), 'Raw headers, byte values or event envelope changed in report.');
 	endforeach;
 	verify(count($suite['browserNetwork']) === 1 && $suite['browserNetwork'][0]['phase'] === 'suite-teardown'
-		&& $suite['browserNetwork'][0]['hook'] === 'SuiteAfter cleanup', 'Cleanup event lost suite attribution.');
+		&& $suite['browserNetwork'][0]['hook'] === 'After cleanup', 'Cleanup event lost suite attribution.');
 	verify(str_contains($output, 'NETWORK') && str_contains($output, 'HTTP 404') && str_contains($output, 'diagnostic only'), 'Console omitted network diagnostics.');
 	verify(count($network->requests()[0]['events']) === 2 && $network->captureError() === null, 'Reporting consumed retained history or failed capture.');
 });
@@ -2185,7 +2185,7 @@ foreach (['propagated', 'swallowed', 'stop'] as $mode):
 			return new class($test, $browser, $mode) extends Suite {
 				private int $attempt = 0;
 				public function __construct($test, private Browser $browser, private string $mode) { parent::__construct($test); }
-				#[SuiteBefore]
+				#[Before]
 				public function setup(): void { $this->browser->network()->startCapture(); }
 				#[TestCase('Persistent capture failure', retry: 1)]
 				public function body(): void {
@@ -2194,7 +2194,7 @@ foreach (['propagated', 'swallowed', 'stop'] as $mode):
 					try { $this->browser->command('fixture.failure'); }
 					catch (Throwable $error) { if ($this->mode !== 'swallowed') throw $error; }
 				}
-				#[SuiteAfter]
+				#[After]
 				public function cleanup(): void { $this->browser->quit(); }
 			};
 		}]);
@@ -2900,7 +2900,7 @@ scenario('interception reports repeated exception objects and retains each failu
 		return new class($test, $browser, $phase) extends Suite {
 			private int $attempt = 0;
 			public function __construct($test, private Browser $browser, private string $phase) { parent::__construct($test); }
-			#[SuiteBefore]
+			#[Before]
 			public function setup(): void {
 				$shared = new RuntimeException('shared handler failure');
 				$this->browser->network()->intercept(fn ($event) => throw ($event['request']['request'] === 'request-5'
@@ -2908,7 +2908,7 @@ scenario('interception reports repeated exception objects and retains each failu
 			}
 			#[TestCase('Retained interception failures', retry: 1)]
 			public function body(): void { if (++$this->attempt === 1) $this->browser->command('fixture.failures'); }
-			#[SuiteAfter]
+			#[After]
 			public function cleanup(): void { $this->browser->quit(); }
 		};
 	}]);

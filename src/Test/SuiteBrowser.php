@@ -16,7 +16,7 @@ abstract class SuiteBrowser extends Suite
     private ?WebDriver $driver = null;
 
     /** Start the run-level browser before child setup hooks, using this suite's session settings. */
-    #[SuiteBefore]
+    #[Before]
     public function startBrowser(): void
     {
         $config = $this->configuration();
@@ -45,7 +45,7 @@ abstract class SuiteBrowser extends Suite
     }
 
     /** A nullable driver permits cleanup when configuration or startup failed. */
-    #[SuiteAfter]
+    #[After]
     public function stopBrowser(): void
     {
         $this->driver?->stop();

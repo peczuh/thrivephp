@@ -42,7 +42,7 @@ try {
     });');
     $suite = <<<'PHP'
 <?php
-use ThriveData\ThrivePHP\Test\{SuiteBrowser, SuiteConfig, SuiteBefore, SuiteAfter, CaseAfter, Test};
+use ThriveData\ThrivePHP\Test\{SuiteBrowser, SuiteConfig, Before, After, Test};
 return new class($test) extends SuiteBrowser {
     private int $attempt = 0;
     protected function configure(SuiteConfig $config): void {
@@ -55,16 +55,16 @@ return new class($test) extends SuiteBrowser {
         $this->browser->wait(fn () => array_any($this->browser->network()->requests(), fn ($hop) => $hop['request']['url'] === $url
             && array_any($hop['events'], fn ($event) => $event['method'] === 'network.responseCompleted')));
     }
-    #[SuiteBefore]
+    #[Before]
     public function setup(): void { $this->visit('/setup'); }
     #[Test('Network retry', retry: 1)]
     public function body(): void {
         $this->visit('/case-' . ++$this->attempt);
         $this->test->assert($this->attempt === 2, 'second attempt passes');
     }
-    #[CaseAfter]
+    #[After(case: true)]
     public function afterCase(): void { $this->visit('/case-cleanup-' . $this->attempt); }
-    #[SuiteAfter]
+    #[After]
     public function cleanup(): void { $this->visit('/suite-cleanup'); }
 };
 PHP;

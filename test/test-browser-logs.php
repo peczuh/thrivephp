@@ -24,11 +24,11 @@ file_put_contents($root . '/vendor/autoload.php', '<?php spl_autoload_register(s
 });');
 $suite = <<<'PHP'
 <?php
-use ThriveData\ThrivePHP\Test\{SuiteBrowser, SuiteConfig, SuiteBefore, SuiteAfter, CaseAfter, Test};
+use ThriveData\ThrivePHP\Test\{SuiteBrowser, SuiteConfig, Before, After, Test};
 return new class($test) extends SuiteBrowser {
     private int $attempt = 0;
     protected function configure(SuiteConfig $config): void { $config->browserLogs = true; }
-    #[SuiteBefore]
+    #[Before]
     public function setup(): void {
         $this->browser->navigate('data:text/html,' . rawurlencode('<!doctype html><title>Logs</title><script>console.log("suite-setup")</script>'));
         // Keep asynchronous delivery inside the hook whose observation context is being checked.
@@ -43,14 +43,14 @@ return new class($test) extends SuiteBrowser {
         });
         $this->test->assert(++$this->attempt === 2, 'second attempt passes');
     }
-    #[CaseAfter]
+    #[After(case: true)]
     public function afterCase(): void {
         $before = count(array_filter($this->browser->logs(), fn ($entry) => ($entry['text'] ?? '') === 'case-cleanup'));
         $this->browser->script('console.warn("case-cleanup")');
         // Delivery is asynchronous; wait explicitly when testing attribution to this hook.
         $this->browser->wait(fn ($browser) => count(array_filter($browser->logs(), fn ($entry) => ($entry['text'] ?? '') === 'case-cleanup')) > $before);
     }
-    #[SuiteAfter]
+    #[After]
     public function cleanup(): void {
         $this->browser->script('console.log("suite-cleanup")');
         $this->browser->wait(fn ($browser) => array_any($browser->logs(), fn ($entry) => ($entry['text'] ?? '') === 'suite-cleanup'));

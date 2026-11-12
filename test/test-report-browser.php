@@ -27,12 +27,12 @@ file_put_contents($root . '/vendor/autoload.php', '<?php spl_autoload_register(s
 $suite = <<<'PHP'
 <?php
 use ThriveData\ThrivePHP\Test\SuiteBrowser;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\CaseAfter;
+use ThriveData\ThrivePHP\Test\Before;
+use ThriveData\ThrivePHP\Test\After;
 use ThriveData\ThrivePHP\Test\Test;
 return new class($test) extends SuiteBrowser {
     private int $attempt = 0;
-    #[SuiteBefore]
+    #[Before]
     public function page(): void {
         $rect = $this->browser->rect();
         if ($rect['width'] !== 1900 || $rect['height'] !== 1280) throw new RuntimeException('Configured window size was not applied before child setup.');
@@ -51,7 +51,7 @@ return new class($test) extends SuiteBrowser {
     }
     #[Test('Skipped body')]
     public function skipped(): void { throw new LogicException('Skipped body ran'); }
-    #[CaseAfter]
+    #[After(case: true)]
     public function cleanup(): void { $this->browser->script('document.body.style.border = "3px solid red";'); }
 };
 PHP;

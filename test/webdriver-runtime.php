@@ -15,8 +15,8 @@ use ThriveData\ThrivePHP\WebDriver\WebDriver;
 use ThriveData\ThrivePHP\Test as TestRunner;
 use ThriveData\ThrivePHP\Test\SuiteBrowser;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
-use ThriveData\ThrivePHP\Test\SuiteAfter;
+use ThriveData\ThrivePHP\Test\Before;
+use ThriveData\ThrivePHP\Test\After;
 use ThriveData\ThrivePHP\Test\Test;
 
 function check(bool $condition, string $message): void
@@ -435,7 +435,7 @@ try {
 						$config->capabilities = ['acceptInsecureCerts' => false];
 					}
 
-					#[SuiteBefore]
+					#[Before]
 					public function login(): void
 					{
 						$this->original = $this->browser;
@@ -468,7 +468,7 @@ try {
 						$this->trace[] = 'second';
 					}
 
-					#[SuiteAfter]
+					#[After]
 					public function logout(): void
 					{
 						$this->browser->urlMatches('~/fixture$~', assert: true);
@@ -520,7 +520,7 @@ try {
 					#[Test('later browser case')]
 					public function second(): void { $this->trace[] = 'second'; $this->browser->urlMatches('~/fixture$~', assert: true); }
 
-					#[SuiteAfter]
+					#[After]
 					public function cleanup(): void { $this->trace[] = 'cleanup'; }
 				};
 				$suite->skip = $skip;
@@ -542,7 +542,7 @@ try {
 			$suite = new #[Test('Retry browser suite', retry: 1)] class($test) extends FixtureBrowserSuite {
 				public bool $fail;
 				public array $trace = [];
-				#[SuiteBefore]
+				#[Before]
 				public function login(): void { $this->trace[] = 'login'; }
 				#[Test('browser case')]
 				public function body(): void
@@ -552,7 +552,7 @@ try {
 				}
 				#[Test('later browser case')]
 				public function later(): void { $this->trace[] = 'later'; $this->test->assert(true, 'retry restored later cases'); }
-				#[SuiteAfter]
+				#[After]
 				public function logout(): void { $this->trace[] = 'logout'; }
 			};
 			$suite->fail = !$suites;
@@ -612,7 +612,7 @@ try {
 							$this->trace[] = 'continued';
 						}
 
-						#[SuiteAfter]
+						#[After]
 						public function cleanup(): void
 						{
 							$this->trace[] = 'cleanup';

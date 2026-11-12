@@ -68,10 +68,10 @@ $suite = <<<'PHP'
 use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\Test\Suite;
 use ThriveData\ThrivePHP\Test\SuiteConfig;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
+use ThriveData\ThrivePHP\Test\Before;
 return new #[Test('Customer login / résumé')] class($test) extends Suite {
     protected function configure(SuiteConfig $config): void { file_put_contents({{MARKER}}, 'configured'); }
-    #[SuiteBefore]
+    #[Before]
     public function before(): void { file_put_contents({{MARKER}}, 'hook'); }
     #[Test('Save customer / résumé')]
     public function METHOD(): void { file_put_contents({{MARKER}}, 'case'); }

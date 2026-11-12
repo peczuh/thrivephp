@@ -5,10 +5,8 @@ require __DIR__ . '/fixtures/test-runner.php';
 
 use ThriveData\ThrivePHP\Settings;
 use ThriveData\ThrivePHP\Test as Runner;
-use ThriveData\ThrivePHP\Test\CaseAfter;
-use ThriveData\ThrivePHP\Test\CaseBefore;
-use ThriveData\ThrivePHP\Test\SuiteAfter;
-use ThriveData\ThrivePHP\Test\SuiteBefore;
+use ThriveData\ThrivePHP\Test\After;
+use ThriveData\ThrivePHP\Test\Before;
 use ThriveData\ThrivePHP\Test\SuiteBrowser;
 use ThriveData\ThrivePHP\Test\Test;
 use ThriveData\ThrivePHP\WebDriver\Browser;
@@ -79,7 +77,7 @@ Settings::set('test.screenshots.suites', 'always');
 [$status, $console, $record] = runChecks(['suite' => function (Runner $test) use (&$browser) {
     return new class($test, $browser) extends SuiteBrowser {
         public function __construct(Runner $test, private mixed &$reference) { parent::__construct($test); }
-        #[SuiteBefore]
+        #[Before]
         public function startBrowser(): void
         {
             $this->reference = $this->browser = new NetworkBoundaryBrowser();
@@ -89,7 +87,7 @@ Settings::set('test.screenshots.suites', 'always');
             ]], fn () => $this->browser->screenshot());
             $this->test->assert(true, 'suite setup');
         }
-        #[CaseBefore]
+        #[Before(case: true)]
         public function prepare(): void { $this->test->assert(true, 'case setup'); }
         #[Test('Successful body')]
         public function first(): void
@@ -116,13 +114,13 @@ Settings::set('test.screenshots.suites', 'always');
         }
         #[Test('Skipped after failure')]
         public function third(): void { throw new LogicException('Should be skipped'); }
-        #[CaseAfter]
+        #[After(case: true)]
         public function clean(): void
         {
             $this->browser->trace[] = ['case teardown'];
             $this->test->assert(true, 'case teardown');
         }
-        #[SuiteAfter]
+        #[After]
         public function done(): void
         {
             $this->browser->trace[] = ['suite teardown'];
@@ -145,7 +143,7 @@ check($first['steps'][0]['phase'] === 'case-setup' && end($first['steps'])['phas
 check($first['steps'][1]['phase'] === 'test' && $second['steps'][1]['phase'] === 'test', 'Test phase was not renamed.');
 check($first['browserNetwork'][0]['phase'] === 'case-setup' && $second['browserNetwork'][0]['phase'] === 'case-setup'
     && end($suite['browserNetwork'])['phase'] === 'suite-teardown', 'Network boundary observation inherited the previous attempt phase.');
-check(array_any($first['browserNetwork'], fn ($entry) => $entry['phase'] === 'case-teardown' && $entry['hook'] === 'CaseAfter clean'), 'Case teardown lost its observation context.');
+check(array_any($first['browserNetwork'], fn ($entry) => $entry['phase'] === 'case-teardown' && $entry['hook'] === 'After(case: true) clean'), 'Case teardown lost its observation context.');
 check($record['environment']['root'] === realpath(PATH_ROOT)
     && $first['steps'][1]['location']['file'] === 'test/test-report.php'
     && $record['environment']['root'] . '/' . $first['steps'][1]['location']['file'] === __FILE__
@@ -166,9 +164,9 @@ $trace = array_column($browser->trace, 0);
 $body = array_search('body returned', $trace, true);
 $continued = array_search('continued after verification', $trace, true);
 $teardown = array_search('suite teardown', $trace, true);
-check($browser->trace[$body + 1][1] === '/screenshot' && $trace[$body + 2] === 'case teardown', 'Success capture did not precede CaseAfter.');
+check($browser->trace[$body + 1][1] === '/screenshot' && $trace[$body + 2] === 'case teardown', 'Success capture did not precede After(case: true).');
 check($browser->trace[$continued - 1][1] === '/screenshot', 'Verification capture was delayed until after continuation.');
-check($browser->trace[$teardown - 1][1] === '/screenshot', 'Suite capture did not precede SuiteAfter.');
+check($browser->trace[$teardown - 1][1] === '/screenshot', 'Suite capture did not precede After.');
 check($second['screenshots'][0]['path'] === $second['steps'][3]['screenshots'][0]['path'], 'Propagating action/case failure captured twice.');
 $reportFile = glob($runner->saved . '/*/report.json')[0];
 $directory = dirname($reportFile);
@@ -252,11 +250,11 @@ echo "PASS: capture diagnostics preserve results, successful-step capture and st
 
 [$status, $console, $record] = runChecks(['suite' => function (Runner $test) {
     return new class($test) extends \ThriveData\ThrivePHP\Test\Suite {
-        #[SuiteBefore]
+        #[Before]
         public function prepare(): void { $this->test->recordStep('prepare', null, [], static fn () => null); }
         #[Test('live steps')]
         public function run(): void { $this->test->verify(false, 'live failure'); }
-        #[SuiteAfter]
+        #[After]
         public function cleanup(): void { $this->test->recordStep('cleanup', null, [], static fn () => null); }
     };
 }]);
@@ -299,7 +297,7 @@ $attempts = 0;
     return new #[Test('Retry suite', retry: 1)] class($test, $attempts) extends \ThriveData\ThrivePHP\Test\Suite {
         private int $caseAttempt = 0;
         public function __construct(Runner $test, private int $suiteAttempt) { parent::__construct($test); }
-        #[SuiteBefore]
+        #[Before]
         public function observe(): void { $this->test->watchBrowserLogs(new NetworkBoundaryBrowser()); }
         #[Test('Retry case', retry: 1)]
         public function body(): void { $this->test->assert($this->suiteAttempt === 2 && ++$this->caseAttempt === 2, 'retry result'); }
