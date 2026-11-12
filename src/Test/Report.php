@@ -146,13 +146,16 @@ final class Report
 
     private function line(string $status, string $kind, string $message): void
     {
-        echo sprintf('%s %-5s %s', $this->statusLabel($status, 5), $kind, $message) . PHP_EOL;
+        if ($status === 'FAIL') {
+            echo $this->statusText($status, sprintf('%-5s %-5s %s', $status, $kind, $message)) . PHP_EOL;
+        } else {
+            echo sprintf('%s %-5s %s', $this->statusText($status, str_pad($status, 5)), $kind, $message) . PHP_EOL;
+        }
     }
 
-    /** Pad before adding terminal colors so status columns remain aligned. */
-    private function statusLabel(string $status, int $width = 0): string
+    /** Color status text without adding escapes to redirected logs. */
+    private function statusText(string $status, string $text): string
     {
-        $label = str_pad($status, $width);
         $color = match ($status) {
             'FAIL' => 31,
             'PASS' => 32,
@@ -160,7 +163,7 @@ final class Report
             'RUN' => 34,
             default => null,
         };
-        return stream_isatty(STDOUT) && $color !== null ? "\033[{$color}m" . $label . "\033[39m" : $label;
+        return stream_isatty(STDOUT) && $color !== null ? "\033[{$color}m" . $text . "\033[39m" : $text;
     }
 
     private function suiteResult(array $suite, array $attempt, array $counts): void
@@ -290,7 +293,7 @@ final class Report
             }
         }
         $t = $run['totals'];
-        if ($run['errors']) echo PHP_EOL . 'Run: ' . $this->statusLabel('FAIL') . ' (' . count($run['errors']) . ' run error(s))' . PHP_EOL;
+        if ($run['errors']) echo PHP_EOL . $this->statusText('FAIL', 'Run: FAIL (' . count($run['errors']) . ' run error(s))') . PHP_EOL;
         echo PHP_EOL . "Suites: {$t['checksPassed']} passed, {$t['checksFailed']} failed, {$t['checksSkipped']} skipped" . PHP_EOL;
         if (array_any($run['suites'], fn ($suite) => array_any($suite['attempts'], fn ($attempt) => $attempt['cases'] !== []))) {
             echo "Cases: {$t['casesPassed']} passed, {$t['casesFailed']} failed, {$t['casesSkipped']} skipped" . PHP_EOL;
