@@ -17,7 +17,7 @@ mkdir($root . '/checks');
 $source = var_export(dirname(__DIR__) . '/src/', true);
 file_put_contents($root . '/vendor/autoload.php', '<?php
 namespace ThriveData\\ThrivePHP;
-class Application { public static function init() { $GLOBALS["applicationStarted"] = true; } }
+class Application { public static function init() { $GLOBALS["applicationStarted"] = true; Log::init(); } }
 spl_autoload_register(static function ($class) {
     $prefix = "ThriveData\\\\ThrivePHP\\\\";
     if (str_starts_with($class, $prefix)) require ' . $source . ' . str_replace("\\\\", "/", substr($class, strlen($prefix))) . ".php";
@@ -78,6 +78,11 @@ function runParallel(array $modes, array $options = [], array $environment = [],
 }
 
 try {
+    [$code, $out, $err, , $record] = runParallel(['a' => 'concurrent', 'b' => 'concurrent'], environment: ['TEST_BOOTSTRAP' => '1']);
+    check($code === 0 && $err === '' && $record['totals']['checksPassed'] === 2
+        && $record['totals']['casesPassed'] === 6 && !str_contains($out, 'Accept failed'), $out . $err);
+    echo "PASS: parallel connections and process shutdown work with the real application logging handler\n";
+
     foreach ([1, 2] as $workers) {
         [$code, $out, $err, , $record] = runParallel(['a' => 'value-comparisons'], ['workers' => $workers],
             environment: ['TEST_CONSOLE_STEPS' => '1']);

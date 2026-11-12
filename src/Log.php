@@ -167,8 +167,8 @@
 
 		static function errorHandler($severity=null, $message=null, $file=null, $line=null, $context=null)
 		{
-			// the error was suppressed with @-operator
-			if (error_reporting() === 0):
+			// Respect configured severity filtering and PHP's suppression mask.
+			if (!(error_reporting() & $severity)):
 				return false;
 			endif;
 			
@@ -195,7 +195,8 @@
 		static function shutdown()
 		{
 			$error = error_get_last();
-			if ($error !== null):
+			// Suppressed nonfatal warnings can remain in error_get_last() after successful work.
+			if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR], true)):
 				throw new ErrorException($error['message'], 0, $error['type'], $error['file'], $error['line']);
 			endif;
 		}

@@ -191,7 +191,15 @@ final class Parallel
 
     private function acceptConnections(): void
     {
-        while (($socket = @stream_socket_accept($this->listener, 0)) !== false) {
+        while (true) {
+            // Drain only pending connections; an empty zero-timeout accept emits a PHP warning.
+            $read = [$this->listener];
+            $write = $except = null;
+            $ready = stream_select($read, $write, $except, 0, 0);
+            if ($ready === false) throw new \RuntimeException('Could not monitor worker connections.');
+            if ($ready === 0) return;
+            $socket = stream_socket_accept($this->listener, 0);
+            if ($socket === false) throw new \RuntimeException('Could not accept worker connection.');
             stream_set_blocking($socket, false);
             $this->connections[(int) $socket] = ['channel' => new Channel($socket),
                 'token' => null, 'accepted' => hrtime(true) / 1e9];
