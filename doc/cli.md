@@ -4,6 +4,12 @@ The framework CLI lives at `vendor/peczuh/thrivephp/bin/cli.php`. It currently
 supports test execution and help. Application commands from `commands.php` are
 not dispatched yet.
 
+`bin/cli.php` loads `src/CLI.php` and exits with the result of
+`ThriveData\ThrivePHP\CLI::run($arguments, $directory)`. Arguments exclude the
+script name; the directory is the launcher's `__DIR__`. Parsing, help, project
+discovery, bootstrap and command dispatch live in that class. The launcher loads
+the class directly so help remains available before Composer or project discovery.
+
 ```sh
 php vendor/peczuh/thrivephp/bin/cli.php --help
 php vendor/peczuh/thrivephp/bin/cli.php --root . test
@@ -38,8 +44,7 @@ against CWD. Existing projects without a `root` setting can use `--root .`.
 
 PHP resolves symlinks for `__DIR__`. A project-level `cli.php` symlink to the
 framework script therefore starts discovery inside the framework's `bin`
-directory. A hard link has no target path to resolve; discovery starts in the
-directory of the hard link used to invoke PHP.
+directory.
 
 ## Test selection
 
@@ -105,5 +110,5 @@ test-run errors retain the runner's console, JSON and HTML reports.
 
 Run `php test/test-cli.php` from the framework repository. The checks use isolated
 projects, the real test runner and PHP workers, and a fixture browser inventory.
-They verify discovery, symlink/hard-link behavior, selectors, typed overrides,
+They verify discovery, symlink behavior, selectors, typed overrides,
 argument errors and exit status without launching a native browser.

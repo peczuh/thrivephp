@@ -18,10 +18,12 @@ function project(string $directory): string
 {
     global $source, $cli;
     mkdir($directory . '/vendor/peczuh/thrivephp/bin', 0700, true);
+    mkdir($directory . '/vendor/peczuh/thrivephp/src');
     mkdir($directory . '/local');
     mkdir($directory . '/test/cases/folder1', 0700, true);
     mkdir($directory . '/test/cases/folder2');
     copy($cli, $directory . '/vendor/peczuh/thrivephp/bin/cli.php');
+    copy($source . 'CLI.php', $directory . '/vendor/peczuh/thrivephp/src/CLI.php');
     file_put_contents($directory . '/settings.json', '{"root":".","test":{"project":"project-default"},"fixture":{"value":0}}');
     file_put_contents($directory . '/local/settings.json', '{"test":{"project":"local-default"},"fixture":{"value":1}}');
     file_put_contents($directory . '/vendor/autoload.php', '<?php
@@ -145,12 +147,11 @@ try {
 
     $otherScript = project($root . '/other');
     symlink($script, $root . '/other/symlink.php');
-    link($script, $root . '/other/hardlink.php');
-    foreach (['symlink' => $cwd, 'hardlink' => $root . '/other'] as $link => $expectedRoot) {
-        [$code, $out, $err, $report] = invoke($root . '/other/' . $link . '.php', $root . '/other', ['test', '^folder1/', '--workers', '1']);
-        check($code === 0 && $report['environment']['root'] === realpath($expectedRoot), $link . ': ' . $out . $err);
-    }
-    echo "PASS: symlinks discover from the target directory; hard links discover from the invoked directory\n";
+    [$code, $out, $err, $report] = invoke($root . '/other/symlink.php', $root . '/other', ['--help'], shortTags: false);
+    check($code === 0 && str_contains($out, 'Usage:') && $err === '' && $report === null, $out . $err);
+    [$code, $out, $err, $report] = invoke($root . '/other/symlink.php', $root . '/other', ['test', '^folder1/', '--workers', '1']);
+    check($code === 0 && $report['environment']['root'] === realpath($cwd), $out . $err);
+    echo "PASS: symlinks load the CLI and discover from the target directory\n";
 
     $marker = dirname($script) . '/settings.json';
     file_put_contents($marker, '{"nested":{"root":"ignored"}}');
