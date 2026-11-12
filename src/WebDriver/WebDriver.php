@@ -21,7 +21,7 @@
 	class WebDriver
 	{
 		/** Automatic selection stops at the first locally ready browser/driver pair. */
-		public const PREFERENCE = ['safaripreview', 'safari', 'chrome', 'chromium', 'firefox'];
+		public const PREFERENCE = ['chrome', 'chromium', 'firefox', 'safaripreview', 'safari'];
 		private ?DriverProcess $process = null;
 		private ?Browser $session = null;
 		/** Selected installation, independent of any earlier bootstrap report. */
@@ -30,7 +30,7 @@
 
 		/**
 		 * Start a local service for chrome, chromium, firefox, safari, or safaripreview.
-		 * Null selects Safari Technology Preview, Safari, Chrome, Chromium, then Firefox;
+		 * Null selects Chrome, Chromium, Firefox, Safari Technology Preview, then Safari;
 		 * a failure after selection never changes
 		 * browser. Discovery uses local executables, not bootstrap reports or downloads.
 		 *
@@ -140,9 +140,8 @@
 
 		/**
 		 * Create the sole active owned session. After quit() or closing its last window,
-		 * another session can be created. $headless adds the browser's headless flag;
-		 * Safari and Preview reject it. Null selection prefers Preview, so headless tests
-		 * should explicitly select Chrome, Chromium, or Firefox in the constructor.
+		 * another session can be created. $headless defaults to true and adds the browser's
+		 * headless flag. Safari and Preview require headless: false.
 		 *
 		 * $timeout is positive seconds for Browser's command I/O, not service startup.
 		 * $waitTimeout, $assertionTimeout and $pollInterval configure polling in positive, finite milliseconds.
@@ -154,7 +153,7 @@
 		 * Conditions query by default; $assert=true records a result, and $stop=false continues after mismatches.
 		 * Outside Test::run(), failures throw. Assertions retry by default; $wait=false checks once.
 		 */
-		public function browser(bool $headless = false, bool $bidi = false, float $timeout = 10, array $capabilities = [],
+		public function browser(bool $headless = true, bool $bidi = false, float $timeout = 10, array $capabilities = [],
 			float $waitTimeout = 5000, float $assertionTimeout = 5000, float $pollInterval = 500): Browser
 		{
 			if ($this->process === null || !$this->process->running()):

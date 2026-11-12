@@ -297,20 +297,25 @@ try {
 		raises(fn() => new FixtureDriver(browser: 'safaripreview'), 'safaridriver was not found in the selected Safari Technology Preview app');
 	});
 
-	scenario('automatic selection uses Preview first and does not create a session at construction', function () use ($log) {
+	scenario('automatic selection uses Chrome first and does not create a session at construction', function () use ($log) {
 		FixtureDriver::$source = installation(['safaripreview', 'safari', 'chrome', 'chromium', 'firefox']);
 		$driver = new FixtureDriver();
 		try {
-			check($driver->name() === 'safaripreview' && FixtureDriver::$source->visited === ['safaripreview'], 'Preference order or targeted discovery changed.');
+			check($driver->name() === 'chrome' && FixtureDriver::$source->visited === ['chrome'], 'Preference order or targeted discovery changed.');
 			check(count(array_filter(events($log), fn($event) => ($event['path'] ?? '') === '/session')) === 0, 'Constructor created a session.');
-			raises(fn() => $driver->browser(headless: true), 'Safari does not support headless', InvalidArgumentException::class);
+			$driver->browser()->quit();
+			$driver->browser(headless: false);
 		} finally {
 			$driver->stop();
 		}
+		$requests = array_values(array_filter(events($log), fn($event) => ($event['path'] ?? '') === '/session'));
+		check($requests[0]['body']['capabilities']['alwaysMatch']['goog:chromeOptions']['args'] === ['--headless'], 'Chrome did not default to headless.');
+		check(!isset($requests[1]['body']['capabilities']['alwaysMatch']['goog:chromeOptions']['args']), 'Explicit headed Chrome received a headless flag.');
 	});
 
-	scenario('automatic selection continues through Safari, Chrome, Chromium and Firefox only for unready pairs', function () {
-		foreach ([['safari', 'chrome', 'chromium', 'firefox'], ['chrome', 'chromium', 'firefox'], ['chromium', 'firefox'], ['firefox']] as $available):
+	scenario('automatic selection tries Chrome, Chromium, Firefox, Preview and Safari in order', function () {
+		foreach ([['chrome', 'chromium', 'firefox', 'safaripreview', 'safari'], ['chromium', 'firefox', 'safaripreview', 'safari'],
+			['firefox', 'safaripreview', 'safari'], ['safaripreview', 'safari'], ['safari']] as $available):
 			FixtureDriver::$source = installation($available);
 			$driver = new FixtureDriver();
 			try {
@@ -332,8 +337,8 @@ try {
 			$driver = new FixtureDriver(browser: $name);
 			try {
 				check($driver->name() === $name && FixtureDriver::$source->visited === [$name], 'Explicit selection was substituted.');
-				raises(fn() => $driver->browser(headless: true), 'Safari does not support headless', InvalidArgumentException::class);
-				$driver->browser(capabilities: ['safari:automaticInspection' => true, 'browserName' => 'chrome']);
+				raises(fn() => $driver->browser(), 'Safari does not support headless', InvalidArgumentException::class);
+				$driver->browser(headless: false, capabilities: ['safari:automaticInspection' => true, 'browserName' => 'chrome']);
 			} finally {
 				$driver->stop();
 			}
@@ -348,13 +353,13 @@ try {
 		$driver = new FixtureDriver(browser: 'firefox');
 		$process = ownedProcess($driver);
 		try {
-			$first = $driver->browser(headless: true, capabilities: ['moz:firefoxOptions' => ['args' => ['-private'], 'prefs' => ['fixture' => true]]]);
+			$first = $driver->browser(capabilities: ['moz:firefoxOptions' => ['args' => ['-private'], 'prefs' => ['fixture' => true]]]);
 			check($first->active(), 'New session was not active.');
 			raises(fn() => $driver->browser(), 'already owns an active', LogicException::class);
 			check($first->title() === 'Fixture', 'Owned session could not issue commands.');
 			$first->quit();
 			check(!$first->active() && $process->running(), 'Quit stopped the service or retained the session.');
-			$second = $driver->browser();
+			$second = $driver->browser(headless: false);
 			$second->close();
 			check(!$second->active(), 'Closing the last window did not end the session.');
 			$third = $driver->browser();
@@ -365,6 +370,7 @@ try {
 		$requests = array_values(array_filter(events($log), fn($event) => ($event['path'] ?? '') === '/session'));
 		$options = $requests[0]['body']['capabilities']['alwaysMatch']['moz:firefoxOptions'];
 		check($options['binary'] === realpath(PHP_BINARY) && $options['args'] === ['-private', '-headless'] && $options['prefs'] === ['fixture' => true], 'Browser options were lost.');
+		check(!isset($requests[1]['body']['capabilities']['alwaysMatch']['moz:firefoxOptions']['args']), 'Explicit headed Firefox received a headless flag.');
 		raises(fn() => $driver->browser(), 'not running', LogicException::class);
 	});
 
@@ -686,7 +692,7 @@ try {
 		FixtureDriver::$source = installation(['safaripreview', 'safari', 'firefox']);
 		putenv('WEBDRIVER_FIXTURE_MODE=exit');
 		raises(fn() => new FixtureDriver(startupTimeout: 1), 'fixture startup failed');
-		check(FixtureDriver::$source->visited === ['safaripreview'], 'Failed Preview startup fell back to another browser.');
+		check(FixtureDriver::$source->visited === ['chrome', 'chromium', 'firefox'], 'Failed Firefox startup fell back to another browser.');
 		putenv('WEBDRIVER_FIXTURE_MODE=notready');
 		$start = microtime(true);
 		raises(fn() => new FixtureDriver(browser: 'firefox', startupTimeout: 0.2), 'Timed out waiting for driver readiness');

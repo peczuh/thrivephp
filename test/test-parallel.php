@@ -276,9 +276,9 @@ try {
     }
     echo "PASS: serial/parallel network records retain large raw payloads and reject malformed envelopes\n";
 
-    [$code, $out, $err] = runParallel(['a' => 'normal'], ['workers' => 2], ['TEST_BROWSER' => 'safari']);
+    [$code, $out, $err] = runParallel(['a' => 'normal'], ['workers' => 2, 'headless' => false], ['TEST_BROWSER' => 'safari']);
     check($code === 1 && str_contains($out, 'does not support parallel') && !str_contains($out, 'RUN   SUITE a'), $out . $err);
-    [$code, $out, $err] = runParallel(['a' => 'normal'], environment: ['TEST_BROWSER' => 'safaripreview']);
+    [$code, $out, $err] = runParallel(['a' => 'normal'], ['headless' => false], environment: ['TEST_BROWSER' => 'safaripreview']);
     check($code === 0 && !str_contains($out, '(worker'), $out . $err);
     [$code, $out, $err] = runParallel(['a' => 'normal'], ['headless' => true], ['TEST_BROWSER' => 'safari']);
     check($code === 1 && str_contains($out, 'does not support headless') && !str_contains($out, 'RUN   SUITE a'), $out . $err);

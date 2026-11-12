@@ -76,8 +76,9 @@ arguments, as in `--workers 2`. `--` ends option parsing.
 | Option | Effect |
 | --- | --- |
 | `--root <dir>` | Select the project without discovery. |
-| `--browser <name>` | Pass the browser selection to the runner. |
+| `--browser <name>` | Select one browser, overriding the `test.browser.driver` preference list. |
 | `--headless` | Enable headless execution. |
+| `--headed` | Show the browser window. |
 | `--workers <count>` | Set a positive worker count; omission retains runner defaults. |
 | `--title <text>` | Set the report title, overriding `test.project`. |
 | `--set <path>=<json>` | Replace a setting after bootstrap; repeatable, in argument order. |
@@ -85,6 +86,17 @@ arguments, as in `--workers 2`. `--` ends option parsing.
 
 No command, or the `help` command, also displays help. Unknown commands and
 options are errors.
+
+Without `--browser`, the runner uses the first ready browser/driver pair from
+`test.browser.driver`, for example `["firefox", "chrome", "chromium"]`. If the
+setting is absent, its built-in preference order applies. The list can also be
+overridden with `--set 'test.browser.driver=["firefox","chrome"]'`.
+
+Headless mode defaults to `true`. Set `test.browser.headless` to `false` in
+project/local settings to use visible windows by default. Explicit `--headless`
+or `--headed` overrides the setting; if both occur, the last flag wins. Safari
+and Safari Preview require headed mode. Invalid non-boolean settings are reported
+unless an explicit flag overrides them.
 
 `--set` requires a nonempty dot-separated settings path and a valid JSON value.
 Strings need JSON quotes; booleans, numbers, objects, lists and null retain

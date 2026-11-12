@@ -10,7 +10,7 @@ final class CLI
     /** Parse before loading the application so help and usage errors need no project. */
     private static function arguments(array $arguments): array
     {
-        $options = ['root' => null, 'browser' => null, 'headless' => false, 'workers' => null,
+        $options = ['root' => null, 'browser' => null, 'headless' => null, 'workers' => null,
             'title' => null, 'sets' => [], 'selectors' => [], 'command' => null, 'help' => false];
         $positional = false;
         for ($index = 0; $index < count($arguments); $index++) {
@@ -23,8 +23,8 @@ final class CLI
                 $options['help'] = true;
                 return $options;
             }
-            if (!$positional && $argument === '--headless') {
-                $options['headless'] = true;
+            if (!$positional && in_array($argument, ['--headless', '--headed'], true)) {
+                $options['headless'] = $argument === '--headless';
                 continue;
             }
             if (!$positional && str_starts_with($argument, '--')) {
@@ -110,6 +110,7 @@ final class CLI
           --root <dir>         Override discovery; relative paths use the working directory.
           --browser <name>     Select the browser.
           --headless           Enable headless browser execution.
+          --headed             Show the browser window instead of running headless.
           --workers <count>    Use a positive number of workers; omitted uses runner defaults.
           --title <text>       Set the report title.
           --set <path>=<json>   Override a setting after bootstrap; repeatable, in order.
@@ -119,6 +120,8 @@ final class CLI
         Discovery starts in the actual script directory and walks upward to a
         settings.json with a top-level "root" key. Relative roots use that file's
         directory. CWD is checked but never crossed when encountered during traversal.
+
+        Without --headless or --headed, test.browser.headless applies and defaults to true.
 
         Examples:
           php cli.php test

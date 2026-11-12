@@ -100,7 +100,7 @@ Construction starts the driver service: `new WebDriver(...)`. There is no
 separate `launch()` step. Runtime discovery is fresh and does not require a
 previous bootstrap report.
 
-- Automatic preference is **Safari Technology Preview → Safari → Chrome → Chromium → Firefox**.
+- Automatic preference is **Chrome → Chromium → Firefox → Safari Technology Preview → Safari**.
 - Honor an explicitly requested browser without substituting another browser.
 - After choosing a ready pair, startup/session failure throws rather than
   silently changing browsers.
@@ -121,9 +121,9 @@ browser name `chrome`, and `safaripreview` to `Safari Technology Preview`.
 Safari variants select their browser through the paired driver and protocol name.
 Preserve caller options without allowing them to replace the selected executable.
 
-Headless belongs to the session factory and defaults to false. Safari and Preview reject
-headless requests. Headless tests should explicitly select Chrome, Chromium, or
-Firefox rather than rely on the Preview-first default.
+Headless belongs to the session factory and defaults to true. Safari and Preview reject
+headless requests and require `headless: false`. Automatic selection prefers Chrome,
+Chromium, then Firefox before either Safari variant.
 
 `Browser::quit()` ends the session and leaves the driver service available for a
 subsequent session. Closing the last window also ends that session. `active()`

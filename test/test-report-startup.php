@@ -55,7 +55,8 @@ foreach ([
     [[], ['screenshots' => ['steps' => 'invalid']], 'test.screenshots.steps'],
     [['browser' => 'broken'], [], 'browser selection failed'],
     [['browser' => 'safari', 'headless' => true], [], 'headless'],
-    [['browser' => 'safari', 'workers' => 2], [], 'parallel sessions'],
+    [['browser' => 'safari', 'workers' => 2, 'headless' => false], [], 'parallel sessions'],
+    [[], ['browser' => ['headless' => 'false']], 'test.browser.headless'],
 ] as $index => [$options, $settings, $message]) {
     $save = $root . '/run-' . $index;
     Settings::set('', ['test' => $settings + ['savepath' => $save]]);

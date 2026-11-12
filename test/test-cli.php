@@ -40,11 +40,14 @@ spl_autoload_register(static function ($class) {
 });
 namespace ThriveData\ThrivePHP\WebDriver;
 class WebDriver {
-    public const PREFERENCE = ["chrome", "firefox"];
+    public const PREFERENCE = ["chrome", "chromium", "firefox", "safaripreview", "safari"];
     public static function bootstrap(): object {
         return (object)["browsers" => (object)[
             "chrome" => (object)["ready" => true, "driver" => (object)["ready" => true]],
             "firefox" => (object)["ready" => true, "driver" => (object)["ready" => true]],
+            "chromium" => (object)["ready" => true, "driver" => (object)["ready" => false]],
+            "safaripreview" => (object)["ready" => true, "driver" => (object)["ready" => true]],
+            "safari" => (object)["ready" => true, "driver" => (object)["ready" => true]],
         ]];
     }
 }');
@@ -111,6 +114,7 @@ try {
     [$code, $out, $err, $report] = invoke($script, $cwd, ['test', '--workers', '1']);
     check($code === 0 && $err === '' && selected($report) === ['suite1::caseA', 'suite1::caseB', 'suite2::caseA', 'suite2::caseB'], $out . $err);
     check($report['environment']['project'] === 'local-default', 'Bootstrap did not load local settings.');
+    check($report['environment']['headless'] === true, 'An omitted headless option did not default to true.');
     [$code, $out, $err, $report] = invoke($script, $cwd, ['--workers', '1', 'test', 'folder1/suite1::caseA', 'folder2/suite2::caseB', 'folder1/suite1::caseA']);
     check($code === 0 && $err === '' && selected($report) === ['suite1::caseA', 'suite2::caseB'], $out . $err);
     [$code, $out, $err, $report] = invoke($script, $cwd, ['test', 'folder1/::caseA##smoke', 'folder2/::caseB#!smoke', '--workers', '1']);
@@ -198,6 +202,96 @@ try {
     [$code, $out, $err] = invoke($otherScript, $root . '/other', ['test', '--workers', '1'], shortTags: false);
     check($code === 1 && str_contains($out . $err, 'Enable short_open_tag'), $out . $err);
     echo "PASS: usage errors, selector diagnostics and failing tests return nonzero status\n";
+
+    $preferenceProject = $root . '/other';
+    foreach (['preference_a', 'preference_b'] as $name) {
+        file_put_contents($preferenceProject . '/test/cases/' . $name . '.php', <<<'PHP'
+            <?php
+            return function ($test) {
+                $test->assert($test->browser() === $test->settings('fixture.expectedBrowser'), 'Resolved browser selection reaches this process');
+            };
+            PHP);
+    }
+    [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+        ['test', '^preference_', '--workers', '2', '--set', 'fixture.expectedBrowser="chrome"']);
+    check($code === 0 && $err === '' && $report['environment']['browser'] === 'chrome', $out . $err);
+    $projectSettings = json_decode(file_get_contents($preferenceProject . '/settings.json'), true, flags: JSON_THROW_ON_ERROR);
+    $projectSettings['test']['browser']['driver'] = ['chrome'];
+    file_put_contents($preferenceProject . '/settings.json', json_encode($projectSettings, JSON_THROW_ON_ERROR));
+    $localSettings = json_decode(file_get_contents($preferenceProject . '/local/settings.json'), true, flags: JSON_THROW_ON_ERROR);
+    $localSettings['test']['browser']['driver'] = ['firefox', 'chrome'];
+    file_put_contents($preferenceProject . '/local/settings.json', json_encode($localSettings, JSON_THROW_ON_ERROR));
+    foreach ([1, 2] as $workers) {
+        foreach ([
+            [[], 'firefox'],
+            [['--set', 'test.browser.driver=["chrome","firefox"]'], 'chrome'],
+            [['--set', 'test.browser.driver=["chromium","firefox"]'], 'firefox'],
+            [['--browser', 'chrome'], 'chrome'],
+            [['--set', 'test.browser.driver="invalid"', '--browser', 'chrome'], 'chrome'],
+        ] as [$options, $expected]) {
+            [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+                ['test', '^preference_', '--workers', (string)$workers,
+                    '--set', 'fixture.expectedBrowser=' . json_encode($expected), ...$options]);
+            check($code === 0 && $err === '' && $report['totals']['assertionsPassed'] === 2, $out . $err);
+            if ($workers === 2) check($report['environment']['browser'] === $expected, $out . $err);
+        }
+    }
+    foreach (['"firefox"', '{"first":"firefox"}', '["unknown"]', '[1]'] as $invalid) {
+        [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+            ['test', '^preference_', '--workers', '2', '--set', 'test.browser.driver=' . $invalid]);
+        check($code === 1 && $err === '' && $report !== null && str_contains($out, 'test.browser.driver must be a list'), $out . $err);
+    }
+    foreach (['[]', '["chromium"]'] as $unavailable) {
+        [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+            ['test', '^preference_', '--workers', '2', '--set', 'test.browser.driver=' . $unavailable]);
+        check($code === 1 && $err === '' && str_contains($out, 'No ready browser/driver pair.')
+            && $report['environment']['browser'] === null, $out . $err);
+    }
+    [$code, $out, $err] = invoke($otherScript, $preferenceProject,
+        ['test', '^preference_', '--workers', '2', '--browser', 'chromium']);
+    check($code === 1 && $err === '' && str_contains($out, 'No ready browser/driver pair for chromium.'), $out . $err);
+    echo "PASS: browser preferences honor defaults, local replacement, order, readiness, explicit overrides and worker selection\n";
+
+    foreach (['headless_a', 'headless_b'] as $name) {
+        file_put_contents($preferenceProject . '/test/cases/' . $name . '.php', <<<'PHP'
+            <?php
+            return function ($test) {
+                $test->assert($test->headless() === $test->settings('fixture.expectedHeadless'), 'Resolved headless mode reaches this process');
+            };
+            PHP);
+    }
+    $projectSettings['test']['browser']['headless'] = true;
+    file_put_contents($preferenceProject . '/settings.json', json_encode($projectSettings, JSON_THROW_ON_ERROR));
+    foreach ([1, 2] as $workers) {
+        foreach ([
+            [false, [], false],
+            [true, [], true],
+            [false, ['--headless'], true],
+            [true, ['--headed'], false],
+            ['invalid', ['--headed'], false],
+            [false, ['--headed', '--headless'], true],
+            [true, ['--headless', '--headed'], false],
+            [true, ['--set', 'test.browser.headless=false'], false],
+        ] as [$setting, $options, $expected]) {
+            $localSettings['test']['browser']['headless'] = $setting;
+            file_put_contents($preferenceProject . '/local/settings.json', json_encode($localSettings, JSON_THROW_ON_ERROR));
+            [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+                ['test', '^headless_', '--workers', (string)$workers,
+                    '--set', 'fixture.expectedHeadless=' . json_encode($expected), ...$options]);
+            check($code === 0 && $err === '' && $report['totals']['assertionsPassed'] === 2
+                && $report['environment']['headless'] === $expected, $out . $err);
+        }
+    }
+    [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+        ['test', '^headless_', '--workers', '1', '--set', 'test.browser.headless="false"']);
+    check($code === 1 && $err === '' && $report !== null && str_contains($out, 'test.browser.headless must be a boolean'), $out . $err);
+    [$code, $out, $err] = invoke($otherScript, $preferenceProject,
+        ['test', '^headless_', '--workers', '1', '--browser', 'safari']);
+    check($code === 1 && $err === '' && str_contains($out, 'Safari does not support headless'), $out . $err);
+    [$code, $out, $err, $report] = invoke($otherScript, $preferenceProject,
+        ['test', '^headless_', '--workers', '1', '--browser', 'safari', '--headed', '--set', 'fixture.expectedHeadless=false']);
+    check($code === 0 && $err === '' && $report['environment']['headless'] === false, $out . $err);
+    echo "PASS: headless defaults, local settings, explicit headed/headless overrides and worker propagation\n";
 } finally {
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $entry) {
         $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());

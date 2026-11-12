@@ -533,12 +533,48 @@ browser capabilities. Terminal display scaling does not resample screenshot file
 
 ### Browser availability
 
+Set `test.browser.driver` to an ordered list of browser names for automatic
+selection:
+
+```json
+{
+  "test": {
+    "browser": {
+      "driver": ["firefox", "chrome", "chromium"]
+    }
+  }
+}
+```
+
+The runner chooses the first entry with both browser and driver ready. The list
+replaces the built-in order; it does not append to it. Omit the setting or use
+null to retain `chrome`, `chromium`, `firefox`, `safaripreview`, `safari`.
+Local settings replace the project's whole list. An empty list selects no browser.
+Values must be a JSON array of supported browser names; invalid values produce
+a configuration error when automatic selection is needed.
+
+An explicit `run(browser: ...)` or CLI `--browser` overrides the list, including
+names omitted from it. Workers use the parent's resolved selection. Session
+startup failures do not cause another browser to be selected.
+
+Headless mode defaults to `true`. `run(headless: null)` or an omitted argument
+uses `test.browser.headless`, then the default. The setting accepts a JSON boolean
+or null. Explicit `run(headless: true/false)` and CLI `--headless`/`--headed`
+override settings. The effective boolean is recorded in reports and passed to
+workers. For a visible browser by default:
+
+```json
+{ "test": { "browser": { "headless": false } } }
+```
+
 Explicit unavailable browsers fail; headless Safari/Preview fails without switching
-browsers. Headless defaults to false. Checks that need no browser can run without
-an installed pair. Managed browser setup then fails if no pair is available.
-In explicit serial mode, automatic browser discovery waits until a managed suite
-needs it. Suites needing a different browser must create and clean up that browser
-themselves.
+browsers. Select `headless: false` or `--headed` for Safari variants. Checks that
+need no browser can run without an installed pair; managed browser setup then
+fails if no pair is available. In serial headed mode without an explicit browser,
+automatic discovery waits until a browser is requested. Suites needing a different
+browser must create and clean up that browser themselves. Direct
+`WebDriver::browser()` calls also default to headless; pass `headless: false` for
+a visible session. Direct factories do not read test settings.
 
 Workers use `PHP_BINARY`, the parent's ini-file loading and effective ini-setting
 overrides, and inherit its environment and working directory. They do not take a

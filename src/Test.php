@@ -38,7 +38,7 @@ class Test
     private bool $bootstrapped = false;
     private ?string $selectedBrowser = null;
     private bool $browserResolved = false;
-    private bool $headless = false;
+    private bool $headless = true;
     /** Settings plus explicit run overrides, copied into each fresh browser suite configuration. */
     private array $browserCapabilities = [];
     /** OR alternatives, matched against file paths first and case methods/tags after discovery. */
@@ -637,6 +637,7 @@ class Test
      * Null workers prefers two parallel processes, falling back to serial for Safari.
      * Explicit workers > 1 requires a parallel-capable selected browser; 1 runs in-process.
      * Browser and headless apply to every managed SuiteBrowser in this run.
+     * Null headless uses test.browser.headless, then true; explicit booleans override settings.
      * Capabilities replace matching test.browser.capabilities keys before suite configure() runs.
      * Title identifies the project; null uses test.project, then the root Composer package name.
      * Selected suite filename stems must be safe names and unique ignoring case across directories.
@@ -644,7 +645,7 @@ class Test
      * @param list<string> $selectors Regex selectors: files!!exclude::cases:!exclude##tags#!exclude.
      * Empty selects all; each alternative combines its supplied conditions with AND.
      */
-    public function run(array $names = [], ?int $workers = null, ?string $browser = null, bool $headless = false,
+    public function run(array $names = [], ?int $workers = null, ?string $browser = null, ?bool $headless = null,
         array $selectors = [], ?string $title = null, array $capabilities = []): int
     {
         $pathError = null;
@@ -659,6 +660,9 @@ class Test
 
         try {
             if ($pathError !== null) throw $pathError;
+            $headless ??= Settings::fetch('test.browser.headless') ?? true;
+            if (!is_bool($headless)) throw new \InvalidArgumentException('test.browser.headless must be a boolean or null.');
+            $this->report->record->environment(['headless' => $headless]);
             $this->browserCapabilities = array_replace(Settings::fetch('test.browser.capabilities') ?? [], $capabilities);
             $root = realpath($this->pathRoot) ?: $this->pathRoot;
             $title ??= Settings::fetch('test.project');
@@ -802,7 +806,7 @@ class Test
         }
         $this->report = new Test\Report($this->runDirectory, $environment + [
             'root' => $root, 'project' => null, 'php' => PHP_VERSION, 'os' => php_uname(),
-            'workers' => null, 'browser' => null, 'headless' => false, 'url' => null,
+            'workers' => null, 'browser' => null, 'headless' => true, 'url' => null,
             'browserVersion' => null, 'platform' => null,
         ], class_exists(Settings::class, false) && (bool) Settings::fetch('test.console.steps'),
             class_exists(Settings::class, false) ? Settings::fetch('test.console.screenshots.columns') : null);
@@ -830,12 +834,20 @@ class Test
         return $this->browserCapabilities;
     }
 
-    /** No ready pair is allowed for non-browser checks; managed browser setup then reports the failure. */
+    /** Settings replace automatic preferences; an explicit browser wins. Non-browser checks may have no ready pair. */
     protected function resolveBrowser(?string $browser): ?string
     {
         $preference = WebDriver\WebDriver::PREFERENCE;
         if ($browser !== null && !in_array($browser, $preference, true)) {
             throw new \InvalidArgumentException('Unknown browser: ' . $browser);
+        }
+        if ($browser === null) {
+            $preference = Settings::fetch('test.browser.driver') ?? $preference;
+            if (!is_array($preference) || !array_is_list($preference)
+                || array_any($preference, fn ($name) => !is_string($name) || !in_array($name, WebDriver\WebDriver::PREFERENCE, true))) {
+                throw new \InvalidArgumentException('test.browser.driver must be a list of supported browser names: '
+                    . implode(', ', WebDriver\WebDriver::PREFERENCE) . '.');
+            }
         }
         $inventory = WebDriver\WebDriver::bootstrap();
         foreach ($browser === null ? $preference : [$browser] as $name) {
