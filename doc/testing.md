@@ -37,8 +37,13 @@ has been removed. Paths resolve when `run()` starts, after application bootstrap
 | Setting | Default | Anchor for relative values |
 | --- | --- | --- |
 | `test.basepath` | `<project root>/test` | Project root |
-| `test.casepath` | `<basepath>/cases` | Test base |
-| `test.savepath` | `<basepath>/runs` | Test base |
+| `test.casepath` | `<basepath>/cases` | Project root |
+| `test.savepath` | `<basepath>/runs` | Project root |
+
+Omitted or null case/save paths follow the test base. Explicit relative paths
+resolve against the project root, whether configured in settings or supplied with
+`--casepath`, `--savepath`, or `--set`. For example, `test.casepath: "samples"`
+selects `<project root>/samples`, not `<basepath>/samples`.
 
 A leading `/` means an absolute path. Subclasses used by fixtures may override
 the protected `basePath()`, `casePath()`, and `savePath()` methods. The parent

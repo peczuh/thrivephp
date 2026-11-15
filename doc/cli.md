@@ -58,6 +58,18 @@ No selectors means a complete run under the configured case root. Defaults are
 `<root>/test` for `test.basepath` and `<test base>/cases` for `test.casepath`.
 Existing skip rules still apply.
 
+Use `--casepath <dir>` to select a different case root and `--savepath <dir>` to
+select the parent directory for timestamped reports without editing settings.
+Explicit relative case/save paths resolve against the project root; absolute
+paths are used directly. This applies to configuration settings and `--set` too.
+Omitted or null values default to `<test base>/cases` and `<test base>/runs`.
+Each dedicated option overrides its project/local setting and `--set` value
+regardless of argument order. Repeating an option uses its last value.
+
+```sh
+php cli.php test '^estimates/' --casepath samples/calibration --savepath calibration-reports
+```
+
 Positional selectors go unchanged to the [runner's selector engine](testing.md).
 They use its regex syntax for files, cases, tags and exclusions. Multiple
 selectors combine with OR, while the constraints inside each selector stay
@@ -76,6 +88,8 @@ arguments, as in `--workers 2`. `--` ends option parsing.
 | Option | Effect |
 | --- | --- |
 | `--root <dir>` | Select the project without discovery. |
+| `--casepath <dir>` | Override `test.casepath`; relative paths use the project root. |
+| `--savepath <dir>` | Override `test.savepath`; relative paths use the project root. |
 | `--browser <name>` | Select one browser, overriding the `test.browser.driver` preference list. |
 | `--headless` | Enable headless execution. |
 | `--headed` | Show the browser window. |

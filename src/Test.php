@@ -468,18 +468,20 @@ class Test
         return str_starts_with($path, '/') ? $path : $this->pathRoot . '/' . $path;
     }
 
-    /** Discovery directory; relative settings resolve against the test base. Overridable by fixtures. */
+    /** Discovery defaults to the test base's cases directory; explicit relative paths use the project root. */
     protected function casePath(): string
     {
-        $path = Settings::fetch('test.casepath') ?? 'cases';
-        return str_starts_with($path, '/') ? $path : $this->basePath() . '/' . $path;
+        $path = Settings::fetch('test.casepath');
+        if ($path === null) return $this->basePath() . '/cases';
+        return str_starts_with($path, '/') ? $path : $this->pathRoot . '/' . $path;
     }
 
-    /** Parent of timestamped runs; relative settings resolve against the test base. */
+    /** Reports default to the test base's runs directory; explicit relative paths use the project root. */
     protected function savePath(): string
     {
-        $path = Settings::fetch('test.savepath') ?? 'runs';
-        return str_starts_with($path, '/') ? $path : $this->basePath() . '/' . $path;
+        $path = Settings::fetch('test.savepath');
+        if ($path === null) return $this->basePath() . '/runs';
+        return str_starts_with($path, '/') ? $path : $this->pathRoot . '/' . $path;
     }
 
     /** Return a required application setting by dot-separated key; missing values throw. */

@@ -50,7 +50,7 @@ foreach ([
     [['selectors' => [42]], [], 'selectors must be strings'],
     [['names' => ['missing']], [], 'Unknown check'],
     [[], ['casepath' => 'absent'], 'absent'],
-    [[], ['casepath' => 'empty'], 'No checks found'],
+    [[], ['casepath' => 'test/empty'], 'No checks found'],
     [[], ['casepath' => []], 'string'],
     [[], ['screenshots' => ['steps' => 'invalid']], 'test.screenshots.steps'],
     [['browser' => 'broken'], [], 'browser selection failed'],

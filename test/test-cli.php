@@ -106,7 +106,8 @@ try {
     $cwd = $root . '/project';
     foreach ([[], ['--help'], ['test', '--help'], ['help']] as $arguments) {
         [$code, $out, $err, $report] = invoke($cli, $root, $arguments, shortTags: false);
-        check($code === 0 && str_contains($out, 'Usage:') && $err === '' && $report === null, $out . $err);
+        check($code === 0 && str_contains($out, 'Usage:') && str_contains($out, '--casepath <dir>') && str_contains($out, '--savepath <dir>')
+            && $err === '' && $report === null, $out . $err);
     }
     check(!file_exists($cwd . '/bootstrapped'), 'Help bootstrapped a project.');
     echo "PASS: help needs no project or enabled short tags\n";
@@ -122,9 +123,42 @@ try {
     [$code, $out, $err, $report] = invoke($script, $cwd, ['test', '--workers', '1', '--', '--help']);
     check($code === 0 && $report !== null && selected($report) === [], 'Option terminator was not honored: ' . $out . $err);
     [$code, $out, $err, $report] = invoke($script, $cwd, ['test', '--workers', '1',
-        '--set', 'test.basepath=' . json_encode($cwd . '/test', JSON_THROW_ON_ERROR), '--set', 'test.casepath="cases/folder1"']);
+        '--set', 'test.basepath=' . json_encode($cwd . '/test', JSON_THROW_ON_ERROR), '--set', 'test.casepath="test/cases/folder1"']);
     check($code === 0 && selected($report) === ['suite1::caseA', 'suite1::caseB'], $out . $err);
     echo "PASS: full runs, positional selector OR, tags/exclusions, deduplication and option placement\n";
+
+    mkdir($cwd . '/calibration samples/estimates', 0700, true);
+    foreach (['sample_a', 'sample_b'] as $name) {
+        copy($cwd . '/test/cases/folder1/suite1.php', $cwd . '/calibration samples/estimates/' . $name . '.php');
+    }
+    foreach ([1, 2] as $workers) {
+        foreach (['calibration samples', $cwd . '/calibration samples'] as $casepath) {
+            [$code, $out, $err, $report] = invoke($script, $root, ['--root', $cwd, '--casepath', 'test/cases/folder2',
+                'test', '^estimates/', '--workers', (string)$workers, '--casepath', $casepath,
+                '--set', 'test.casepath="missing"']);
+            check($code === 0 && $err === ''
+                && selected($report) === ['sample_a::caseA', 'sample_a::caseB', 'sample_b::caseA', 'sample_b::caseB'], $out . $err);
+        }
+    }
+    [$code, $out, $err, $report] = invoke($script, $cwd, ['test', '--casepath', 'missing', '--workers', '1']);
+    check($code === 1 && $err === '' && $report !== null && str_contains($out, 'missing'), $out . $err);
+    echo "PASS: casepath supports relative/absolute paths, spaces, explicit precedence, last value and serial/parallel discovery\n";
+
+    foreach ([1, 2] as $workers) {
+        foreach (['calibration reports/relative-' . $workers, $cwd . '/calibration reports/absolute-' . $workers] as $savepath) {
+            [$code, $out, $err] = invoke($script, $root, ['--root', $cwd, '--savepath', 'ignored',
+                'test', '^folder', '--workers', (string)$workers, '--savepath', $savepath,
+                '--set', 'test.savepath="ignored-setting"']);
+            $directory = str_starts_with($savepath, '/') ? $savepath : $cwd . '/' . $savepath;
+            $reports = glob($directory . '/*/report.json');
+            check($code === 0 && $err === '' && count($reports) === 1, $out . $err);
+            $report = json_decode(file_get_contents($reports[0]), true, flags: JSON_THROW_ON_ERROR);
+            check(selected($report) === ['suite1::caseA', 'suite1::caseB', 'suite2::caseA', 'suite2::caseB']
+                && is_file(dirname($reports[0]) . '/report.html'), $out . $err);
+        }
+    }
+    check(!file_exists($cwd . '/ignored') && !file_exists($cwd . '/ignored-setting'), 'Overridden save paths were used.');
+    echo "PASS: savepath uses root-relative/absolute paths, spaces, explicit precedence and last value in serial/parallel runs\n";
 
     file_put_contents($cwd . '/test/cases/overrides.php', <<<'PHP'
         <?php
@@ -189,6 +223,8 @@ try {
     echo "PASS: discovery markers, relative/absolute roots, CWD boundary, malformed settings and explicit bypass\n";
 
     foreach ([['unknown'], ['test', '--unknown'], ['test', '--root'], ['test', '--workers'],
+        ['test', '--casepath'], ['test', '--casepath', '--workers', '1'],
+        ['test', '--savepath'], ['test', '--savepath', '--workers', '1'],
         ['test', '--workers', '0'], ['test', '--workers', '-1'], ['test', '--workers', '1.5'],
         ['test', '--workers', 'two'], ['test', '--set', 'key=bad'], ['test', '--set', '=true'],
         ['test', '--set', 'key'], ['test', '--title', '--workers', '1']] as $arguments) {

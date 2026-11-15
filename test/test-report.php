@@ -372,9 +372,14 @@ class PathRunner extends Runner
 $root = sys_get_temp_dir() . '/thrive-report-paths-' . bin2hex(random_bytes(8));
 $test = new PathRunner($root);
 check($test->paths() === [$root . '/test', $root . '/test/cases', $root . '/test/runs'], 'Default paths changed.');
+Settings::set('test', ['basepath' => 'spec']);
+check($test->paths() === [$root . '/spec', $root . '/spec/cases', $root . '/spec/runs'], 'Default case/report paths did not follow the test base.');
 Settings::set('test', ['basepath' => 'spec', 'casepath' => 'checks', 'savepath' => 'artifacts']);
-check($test->paths() === [$root . '/spec', $root . '/spec/checks', $root . '/spec/artifacts'], 'Relative path anchors changed.');
+check($test->paths() === [$root . '/spec', $root . '/checks', $root . '/artifacts'], 'Explicit relative paths did not use the project root.');
+Settings::set('test', ['basepath' => 'spec', 'casepath' => null, 'savepath' => null]);
+check($test->paths() === [$root . '/spec', $root . '/spec/cases', $root . '/spec/runs'], 'Null case/report paths did not retain defaults.');
 Settings::set('test', ['basepath' => $root, 'casepath' => $root . '/cases', 'savepath' => $root . '/runs']);
+check($test->paths() === [$root, $root . '/cases', $root . '/runs'], 'Absolute paths changed.');
 mkdir($root . '/cases', 0700, true);
 mkdir($root . '/runs');
 file_put_contents($root . '/cases/check.php', '<?php return static function () {};');

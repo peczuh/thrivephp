@@ -10,7 +10,7 @@ final class CLI
     /** Parse before loading the application so help and usage errors need no project. */
     private static function arguments(array $arguments): array
     {
-        $options = ['root' => null, 'browser' => null, 'headless' => null, 'workers' => null,
+        $options = ['root' => null, 'casepath' => null, 'savepath' => null, 'browser' => null, 'headless' => null, 'workers' => null,
             'title' => null, 'sets' => [], 'console' => [], 'quiet' => false, 'selectors' => [], 'command' => null, 'help' => false];
         $positional = false;
         for ($index = 0; $index < count($arguments); $index++) {
@@ -38,7 +38,7 @@ final class CLI
             }
             if (!$positional && str_starts_with($argument, '--')) {
                 $name = substr($argument, 2);
-                if (!in_array($name, ['root', 'browser', 'workers', 'title', 'set'], true)) {
+                if (!in_array($name, ['root', 'casepath', 'savepath', 'browser', 'workers', 'title', 'set'], true)) {
                     throw new \InvalidArgumentException('Unknown option: ' . $argument);
                 }
                 $value = $arguments[++$index] ?? null;
@@ -117,6 +117,8 @@ final class CLI
 
         Options may appear before or after the command and selectors:
           --root <dir>         Override discovery; relative paths use the working directory.
+          --casepath <dir>     Override test.casepath; relative paths use the project root.
+          --savepath <dir>     Override test.savepath; relative paths use the project root.
           --browser <name>     Select the browser.
           --headless           Enable headless browser execution.
           --headed             Show the browser window instead of running headless.
@@ -170,6 +172,8 @@ final class CLI
         $test = new Test($root, quiet: $options['quiet']);
         $test->bootstrap();
         foreach ($options['sets'] as [$path, $value]) Settings::set($path, $value);
+        if ($options['casepath'] !== null) Settings::set('test.casepath', $options['casepath']);
+        if ($options['savepath'] !== null) Settings::set('test.savepath', $options['savepath']);
         foreach ($options['console'] as $path => $value) Settings::set('test.console.' . $path, $value);
         return $test->run(workers: $options['workers'], browser: $options['browser'], headless: $options['headless'],
             selectors: $options['selectors'], title: $options['title']);
