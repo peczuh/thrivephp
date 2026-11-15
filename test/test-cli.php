@@ -292,6 +292,117 @@ try {
         ['test', '^headless_', '--workers', '1', '--browser', 'safari', '--headed', '--set', 'fixture.expectedHeadless=false']);
     check($code === 0 && $err === '' && $report['environment']['headless'] === false, $out . $err);
     echo "PASS: headless defaults, local settings, explicit headed/headless overrides and worker propagation\n";
+
+    $displayRoot = $root . '/display';
+    $displayScript = project($displayRoot);
+    $displaySuite = <<<'PHP'
+        <?php
+        use ThriveData\ThrivePHP\Test\{Before, Suite, Test};
+        use ThriveData\ThrivePHP\WebDriver\Screenshot;
+        return new class($test) extends Suite {
+            private int $attempt = 0;
+            #[Before]
+            public function capture(): void {
+                $this->test->browserSession(['sessionId' => 'fixture', 'capabilities' => []],
+                    fn () => new Screenshot(base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')));
+            }
+            #[Test('passed')]
+            public function passed(): void {
+                $this->test->assert(true, 'passing detail');
+            }
+
+            #[Test('failed')]
+            public function failed(): void {
+                $this->test->assert(false, 'failing detail');
+            }
+
+            #[Test('retried', retry: 1)]
+            public function retried(): void {
+                $this->test->assert(++$this->attempt === 2, 'retry detail');
+            }
+
+            #[Test('skipped', skip: true)]
+            public function skipped(): void { throw new LogicException('Skipped case ran'); }
+
+            #[Test('error')]
+            public function error(): void {
+                throw new RuntimeException('case execution error');
+            }
+
+            #[Test('step_error')]
+            public function step_error(): void {
+                $this->test->recordStep('broken', 'error target', [], fn () => throw new RuntimeException('step execution error'));
+            }
+
+            #[Test('logs')]
+            public function logs(): void {
+                foreach (['info', 'warn', 'error'] as $level) {
+                    $this->test->browserLog(['sessionId' => 'fixture'], ['type' => 'console', 'level' => $level, 'text' => $level . ' browser message']);
+                }
+                $this->test->browserNetwork('fixture', ['type' => 'event', 'method' => 'network.beforeRequestSent',
+                    'params' => ['request' => ['method' => 'GET', 'url' => 'https://example.test/log']]]);
+            }
+        };
+        PHP;
+    foreach (['display_a', 'display_b'] as $name) file_put_contents($displayRoot . '/test/cases/' . $name . '.php', $displaySuite);
+    $displaySettings = ['test' => ['console' => ['steps' => true], 'screenshots' => ['steps' => 'always', 'suites' => 'always']]];
+    $switches = ['run', 'pass', 'fail', 'skip', 'screenshots'];
+    foreach ([1, 2] as $workers) {
+        foreach (['default', 'config', 'cli', 'override', 'quiet_first', 'quiet_last'] as $mode) {
+            foreach (in_array($mode, ['config', 'cli'], true) ? $switches : [null] as $disabled) {
+                $settings = $displaySettings;
+                $options = [];
+                if ($mode === 'config') {
+                    if ($disabled === 'screenshots') $settings['test']['console']['screenshots']['enabled'] = false;
+                    else $settings['test']['console'][$disabled] = false;
+                } elseif ($mode === 'cli') {
+                    $options = ['--no-' . $disabled];
+                } elseif ($mode === 'override') {
+                    foreach ($switches as $switch) {
+                        $path = $switch === 'screenshots' ? 'screenshots.enabled' : $switch;
+                        $options = [...$options, '--no-' . $switch, '--' . $switch, '--set', 'test.console.' . $path . '=false'];
+                    }
+                } elseif (str_starts_with($mode, 'quiet')) {
+                    $options = ['--run', '--pass', '--no-fail', '--skip', '--screenshots'];
+                    if ($mode === 'quiet_first') array_unshift($options, '--quiet');
+                    else $options[] = '--quiet';
+                }
+                file_put_contents($displayRoot . '/local/settings.json', json_encode($settings, JSON_THROW_ON_ERROR));
+                [$code, $out, $err, $report] = invoke($displayScript, $displayRoot,
+                    ['test', '^display_', '--workers', (string)$workers, ...$options]);
+                $context = "$mode/$disabled/workers=$workers: " . $out . $err;
+                check($code === 1 && $err === '' && $report['totals']['casesPassed'] === 6
+                    && $report['totals']['casesFailed'] === 6 && $report['totals']['casesSkipped'] === 2, $context);
+                $quiet = str_starts_with($mode, 'quiet');
+                foreach (['run', 'pass', 'fail', 'skip'] as $status) {
+                    $expected = $quiet ? $status === 'fail' : $disabled !== $status;
+                    check((bool)preg_match('/^' . strtoupper($status) . ' +/m', $out) === $expected, $context);
+                }
+                check(str_contains($out, '  Screenshot: ') === (!$quiet && $disabled !== 'screenshots'), $context);
+                check(str_contains($out, '    passing detail') === (!$quiet && $disabled !== 'pass'), $context);
+                check(str_contains($out, '    AssertionFailure: failing detail') === ($quiet || $disabled !== 'fail'), $context);
+                check(str_contains($out, 'INFO  BROWSER') === !$quiet && str_contains($out, 'WARN  BROWSER') === !$quiet
+                    && str_contains($out, 'INFO  NETWORK') === !$quiet && str_contains($out, 'RETRY ') === !$quiet
+                    && str_contains($out, 'Suites:') === !$quiet, $context);
+                check(str_contains($out, 'ERROR BROWSER') && substr_count($out, 'Execution error: RuntimeException: case execution error') === 2
+                    && substr_count($out, 'Execution error: RuntimeException: step execution error') === 2, $context);
+                if ($disabled === 'pass') check(!str_contains($out, '/passed/'), 'Passing screenshots escaped the status filter: ' . $context);
+                if ($disabled === 'fail') check(!str_contains($out, '/failed/'), 'Failure screenshots escaped the status filter: ' . $context);
+                $reportPath = glob($root . '/runs-' . $sequence . '/*/report.json')[0];
+                $image = $report['suites'][0]['attempts'][0]['cases'][0]['attempts'][0]['screenshots'][0]['path'];
+                check(is_file(dirname($reportPath) . '/' . $image) && is_file(dirname($reportPath) . '/report.html'), 'Display switches removed saved artifacts.');
+            }
+        }
+        [$code, $out, $err, $report] = invoke($displayScript, $displayRoot,
+            ['test', '^display_::^passed$', '--workers', (string)$workers, '--quiet']);
+        check($code === 0 && $out === '' && $err === '' && $report['totals']['casesPassed'] === 2, 'Successful quiet run printed output: ' . $out . $err);
+        echo "PASS: console switches, settings, precedence, quiet diagnostics and saved artifacts, workers=$workers\n";
+    }
+    [$code, $out, $err, $report] = invoke($displayScript, $displayRoot, ['test', '[', '--quiet']);
+    check($code === 1 && str_contains($out, 'ERROR RUN') && !str_contains($out, 'Suites:') && $report !== null, $out . $err);
+    [$code, $out, $err] = invoke($displayScript, $displayRoot, ['test', '--quiet'], shortTags: false);
+    check($code === 1 && str_contains($out . $err, 'Enable short_open_tag') && !str_contains($out, 'Suites:'), $out . $err);
+    echo "PASS: quiet retains preparation and bootstrap errors without summaries\n";
 } finally {
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $entry) {
         $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());

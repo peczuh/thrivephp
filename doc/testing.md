@@ -44,7 +44,7 @@ A leading `/` means an absolute path. Subclasses used by fixtures may override
 the protected `basePath()`, `casePath()`, and `savePath()` methods. The parent
 resolves the run directory once and passes it to workers.
 
-Every run produces live console output and both report files:
+Every run produces both report files; console settings control live output:
 
 ```text
 <savepath>/YYYY-MM-DD_HH-MM-SS/
@@ -101,17 +101,58 @@ cases and suites include duration; cases also include assertion counts.
 Suite entries use `file: description`; case entries use
 `file > method: description`. Matching names and descriptions appear only once.
 The initial suite start identifies the file before its description is loaded.
-Failed steps print as soon as they finish, labeled `STEP`, with their suite/case context,
+By default, failed steps print as soon as they finish, labeled `STEP`, with their suite/case context,
 phase, duration, supplied values, assertion messages and comparisons, author
 locations with source excerpts, and screenshot paths. Failed assertions print
 once as `AssertionFailure: message`. Unexpected exceptions also include stacks.
-Set `test.console.steps` to `true` to print successful steps as they finish too.
+Set `test.console.steps` to `true` to print successful steps as they finish too,
+provided passing output is enabled.
 Its default is `false`; a failing case or suite does not expose passing steps.
 Each step's diagnostic block prints together, including with parallel workers.
 Non-step execution errors print when received. Retry notices identify the failed
 attempt as `attempt X/Y`, where Y is the configured maximum, including the initial
 attempt. Case and suite retry contexts and results use the same numbering.
 Completed steps are not replayed at retries or in final results.
+
+These boolean settings control complete console output blocks. All default to `true`:
+
+| Setting | CLI override | Output |
+| --- | --- | --- |
+| `test.console.run` | `--run` / `--no-run` | Suite and case starts |
+| `test.console.pass` | `--pass` / `--no-pass` | Passing results, details and screenshots |
+| `test.console.fail` | `--fail` / `--no-fail` | Failures, details and screenshots |
+| `test.console.skip` | `--skip` / `--no-skip` | Skipped results |
+| `test.console.screenshots.enabled` | `--screenshots` / `--no-screenshots` | Screenshot paths and inline images for enabled statuses |
+
+```json
+{
+  "test": {
+    "console": {
+      "run": false,
+      "pass": false,
+      "fail": true,
+      "skip": true,
+      "screenshots": { "enabled": false, "columns": 80 }
+    }
+  }
+}
+```
+
+CLI switches override loaded settings and `--set` values. Repeated switches use
+their last value. Execution errors remain visible with `--no-fail`; a failing
+step containing an execution error then prints as `ERROR`.
+
+`--quiet` prints only failures and errors with their diagnostic details. It takes
+precedence over every display switch, enables failures even if configured off,
+and suppresses starts, passes, skips, retry announcements, screenshots, informational
+browser/network output and the final summary. A successful quiet run produces
+no runner output.
+PHP callers can use `new Test($root, quiet: true)`; quiet also
+applies to bootstrap errors. Direct output written by test code is not filtered.
+
+These controls affect console rendering. JSON/HTML reports, saved screenshots,
+capture policies and exit status retain their normal behavior. Individual status
+switches retain the final summary.
 
 Failure screenshots render inline on a Ghostty or Rex TTY through the Kitty graphics
 protocol. Screenshot paths on a TTY are OSC 8 hyperlinks to the original PNG's

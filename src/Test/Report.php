@@ -11,12 +11,15 @@ final class Report
     private Diagnostic $diagnostic;
     private array $shownImages = [];
     private array $announced = [];
+    /** Terminal placement width only; null retains the image's natural display size. */
+    private ?int $screenshotColumns;
 
-    /** Screenshot columns affect terminal placement only; null retains the image's natural display size. */
-    public function __construct(private string $directory, array $environment, private bool $steps = false,
-        private ?int $screenshotColumns = null)
+    /** Console settings filter display only; quiet retains failure/error diagnostics even during bootstrap. */
+    public function __construct(private string $directory, array $environment, private array $console = [],
+        private bool $quiet = false)
     {
-        if ($screenshotColumns !== null && $screenshotColumns < 1) {
+        $this->screenshotColumns = $console['screenshots']['columns'] ?? null;
+        if ($this->screenshotColumns !== null && $this->screenshotColumns < 1) {
             throw new \InvalidArgumentException('test.console.screenshots.columns must be a positive integer or null.');
         }
         $this->record = new Record($environment);
@@ -32,7 +35,7 @@ final class Report
         if ($event['type'] === 'suite_started' && !isset($this->announced[$attempt['id']])) {
             $this->announced[$attempt['id']] = true;
             $this->line('RUN', 'SUITE', $context . (isset($event['worker']) ? ' (worker ' . $event['worker'] . ')' : ''));
-        } elseif ($event['type'] === 'browser_log') {
+        } elseif ($event['type'] === 'browser_log' && $this->visible(strtoupper($event['log']['entry']['level'] ?? 'info'))) {
             $log = $event['log'];
             $entry = $log['entry'];
             $this->line(strtoupper($entry['level'] ?? 'info'), 'BROWSER', $context . ' [' . ($entry['type'] ?? 'unknown') . '] '
@@ -41,7 +44,7 @@ final class Report
             foreach (['source', 'args', 'stackTrace'] as $field) {
                 if (isset($entry[$field])) echo '    ' . $field . ': ' . self::json($entry[$field]) . PHP_EOL;
             }
-        } elseif ($event['type'] === 'browser_network') {
+        } elseif ($event['type'] === 'browser_network' && !$this->quiet) {
             $network = $event['network'];
             $entry = $network['event'];
             $params = $entry['params'];
@@ -53,7 +56,7 @@ final class Report
                 . ($network['stepId'] !== null ? ' / ' . $network['stepId'] : '') . PHP_EOL;
         } elseif ($event['type'] === 'step_finished') {
             $this->step($context, $event['step']);
-        } elseif ($event['type'] === 'error') {
+        } elseif ($event['type'] === 'error' && ($event['error']['class'] !== 'AssertionFailure' || $this->visible('FAIL'))) {
             $node = isset($event['method']) ? end($attempt['cases'][$event['method']]['attempts']) : $attempt;
             $lastStep = $node['steps'] ? end($node['steps']) : null;
             // A thrown step error can propagate to the case or hook; its diagnostics were already printed.
@@ -64,11 +67,11 @@ final class Report
             }
         } elseif ($event['type'] === 'case_finished') {
             $this->caseResult($suite, $attempt, $attempt['cases'][$event['method']]);
-        } elseif ($event['type'] === 'retry') {
-            if ($event['scope'] === 'case') {
+        } elseif ($event['type'] === 'retry' && !$this->quiet) {
+            if ($this->visible('FAIL') && $event['scope'] === 'case') {
                 $case = $attempt['cases'][$event['method']];
                 $this->screenshots(end($case['attempts'])['screenshots'], true);
-            } else {
+            } elseif ($this->visible('FAIL')) {
                 $this->screenshots($attempt['screenshots'], true);
             }
             $this->line('RETRY', strtoupper($event['scope']), $context);
@@ -144,8 +147,17 @@ final class Report
         return $context;
     }
 
+    /** Errors remain visible; quiet overrides configured status switches. */
+    private function visible(string $status): bool
+    {
+        if ($status === 'ERROR') return true;
+        if ($this->quiet) return $status === 'FAIL';
+        return (bool)($this->console[strtolower($status)] ?? true);
+    }
+
     private function line(string $status, string $kind, string $message): void
     {
+        if (!$this->visible($status)) return;
         if ($status === 'FAIL') {
             echo $this->statusText($status, sprintf('%-5s %-5s %s', $status, $kind, $message)) . PHP_EOL;
         } else {
@@ -168,6 +180,7 @@ final class Report
 
     private function suiteResult(array $suite, array $attempt, array $counts): void
     {
+        if (!$this->visible($suite['status'])) return;
         $context = $this->context($suite, $attempt);
         $this->line($suite['status'], 'SUITE', $context
             . ($suite['status'] === 'PASS' && $counts['assertionsPassed'] + $counts['assertionsFailed'] === 0 ? ' (No assertions)' : '')
@@ -177,6 +190,7 @@ final class Report
 
     private function caseResult(array $suite, array $attempt, array $case): void
     {
+        if (!$this->visible($case['status'])) return;
         $last = $case['attempts'] ? end($case['attempts']) : null;
         $context = $this->context($suite, $attempt, $case['method']);
         $this->line($case['status'], 'CASE', $context
@@ -188,13 +202,18 @@ final class Report
         }
     }
 
-    /** Completed steps print once, with failures always visible and successful steps opt-in. */
+    /** Filter complete step blocks, retaining execution errors even when failure output is disabled. */
     private function step(string $context, array $step): void
     {
         $failure = $step['status'] === 'FAIL';
+        $status = $step['status'];
+        if (!$this->visible($status)) {
+            if ($step['error'] === null || $step['error']['class'] === 'AssertionFailure') return;
+            $status = 'ERROR';
+        }
         $context .= ' > ' . $step['label'];
-        if ($failure || $this->steps) {
-            $this->line($step['status'], 'STEP', $context . sprintf(' [%s, %.3fs]', $step['phase'], $step['duration']));
+        if ($failure || ($this->console['steps'] ?? false)) {
+            $this->line($status, 'STEP', $context . sprintf(' [%s, %.3fs]', $step['phase'], $step['duration']));
             if ($step['target'] !== null) echo '    Target: ' . $step['target'] . PHP_EOL;
             if ($step['hook'] !== null) echo '    Hook: ' . $step['hook'] . PHP_EOL;
             if ($step['values']) echo '    Values: ' . self::json($step['values']) . PHP_EOL;
@@ -246,6 +265,7 @@ final class Report
 
     private function screenshots(array $screenshots, bool $failure): void
     {
+        if ($this->quiet || !($this->console['screenshots']['enabled'] ?? true)) return;
         foreach ($screenshots as $image) {
             if (isset($image['diagnostic'])) {
                 echo '  Screenshot unavailable: ' . $image['diagnostic'] . PHP_EOL;
@@ -292,6 +312,7 @@ final class Report
                 throw new \RuntimeException('Could not write complete report: ' . $file);
             }
         }
+        if ($this->quiet) return $run['status'] === 'FAIL' ? 1 : 0;
         $t = $run['totals'];
         if ($run['errors']) echo PHP_EOL . $this->statusText('FAIL', 'Run: FAIL (' . count($run['errors']) . ' run error(s))') . PHP_EOL;
         echo PHP_EOL . "Suites: {$t['checksPassed']} passed, {$t['checksFailed']} failed, {$t['checksSkipped']} skipped" . PHP_EOL;

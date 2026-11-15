@@ -48,8 +48,8 @@ class Test
     private ?Test\Report $report = null;
     private string $currentCheck = '';
 
-    /** Set the project root; discovery and report paths resolve from Settings when run() starts. */
-    public function __construct(string $pathRoot)
+    /** Resolve paths when run() starts; quiet also applies to diagnostics during bootstrap. */
+    public function __construct(string $pathRoot, private bool $quiet = false)
     {
         $this->pathRoot = $pathRoot;
     }
@@ -807,8 +807,7 @@ class Test
             'root' => $root, 'project' => null, 'php' => PHP_VERSION, 'os' => php_uname(),
             'workers' => null, 'browser' => null, 'headless' => true, 'url' => null,
             'browserVersion' => null, 'platform' => null,
-        ], class_exists(Settings::class, false) && (bool) Settings::fetch('test.console.steps'),
-            class_exists(Settings::class, false) ? Settings::fetch('test.console.screenshots.columns') : null);
+        ], class_exists(Settings::class, false) ? Settings::fetch('test.console') ?? [] : [], $this->quiet);
     }
 
     /** Managed suites use the concrete run-level selection, never a new automatic choice in a worker. */

@@ -11,7 +11,7 @@ final class CLI
     private static function arguments(array $arguments): array
     {
         $options = ['root' => null, 'browser' => null, 'headless' => null, 'workers' => null,
-            'title' => null, 'sets' => [], 'selectors' => [], 'command' => null, 'help' => false];
+            'title' => null, 'sets' => [], 'console' => [], 'quiet' => false, 'selectors' => [], 'command' => null, 'help' => false];
         $positional = false;
         for ($index = 0; $index < count($arguments); $index++) {
             $argument = $arguments[$index];
@@ -25,6 +25,15 @@ final class CLI
             }
             if (!$positional && in_array($argument, ['--headless', '--headed'], true)) {
                 $options['headless'] = $argument === '--headless';
+                continue;
+            }
+            if (!$positional && $argument === '--quiet') {
+                $options['quiet'] = true;
+                continue;
+            }
+            if (!$positional && preg_match('/^--(no-)?(run|pass|fail|skip|screenshots)$/', $argument, $match)) {
+                $path = $match[2] === 'screenshots' ? 'screenshots.enabled' : $match[2];
+                $options['console'][$path] = $match[1] === '';
                 continue;
             }
             if (!$positional && str_starts_with($argument, '--')) {
@@ -113,6 +122,13 @@ final class CLI
           --headed             Show the browser window instead of running headless.
           --workers <count>    Use a positive number of workers; omitted uses runner defaults.
           --title <text>       Set the report title.
+          --run / --no-run     Show or hide suite and case start announcements.
+          --pass / --no-pass   Show or hide passing results and their details.
+          --fail / --no-fail   Show or hide failures; execution errors remain visible.
+          --skip / --no-skip   Show or hide skipped results.
+          --screenshots / --no-screenshots
+                              Show or hide console screenshot paths and inline images.
+          --quiet             Print only failures and errors, without screenshots or summary.
           --set <path>=<json>   Override a setting after bootstrap; repeatable, in order.
           --help              Show help without loading a project.
           --                  Treat remaining arguments as positional selectors.
@@ -122,6 +138,8 @@ final class CLI
         directory. CWD is checked but never crossed when encountered during traversal.
 
         Without --headless or --headed, test.browser.headless applies and defaults to true.
+        Display switches override test.console settings; repeated switches use the last value.
+        --quiet takes precedence over all display switches, regardless of argument order.
 
         Examples:
           php cli.php test
@@ -149,9 +167,10 @@ final class CLI
         $autoload = $root . '/vendor/autoload.php';
         if (!is_file($autoload)) throw new \RuntimeException('Project autoloader not found: ' . $autoload);
         require_once $autoload;
-        $test = new Test($root);
+        $test = new Test($root, quiet: $options['quiet']);
         $test->bootstrap();
         foreach ($options['sets'] as [$path, $value]) Settings::set($path, $value);
+        foreach ($options['console'] as $path => $value) Settings::set('test.console.' . $path, $value);
         return $test->run(workers: $options['workers'], browser: $options['browser'], headless: $options['headless'],
             selectors: $options['selectors'], title: $options['title']);
     }
