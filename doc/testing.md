@@ -145,14 +145,33 @@ step containing an execution error then prints as `ERROR`.
 `--quiet` prints only failures and errors with their diagnostic details. It takes
 precedence over every display switch, enables failures even if configured off,
 and suppresses starts, passes, skips, retry announcements, screenshots, informational
-browser/network output and the final summary. A successful quiet run produces
-no runner output.
+browser/network output and the final summary. Quiet retains the progress bar on
+supported interactive terminals. Non-TTY output disables the progress bar, so a
+successful quiet run produces no runner output when redirected.
 PHP callers can use `new Test($root, quiet: true)`; quiet also
 applies to bootstrap errors. Direct output written by test code is not filtered.
 
 These controls affect console rendering. JSON/HTML reports, saved screenshots,
 capture policies and exit status retain their normal behavior. Individual status
-switches retain the final summary.
+switches retain the progress footer and final summary.
+
+Interactive runs reserve the terminal's bottom row for progress while report
+output scrolls above it. Multiple-suite runs show completed selected suite files;
+a single-suite run shows case progress once its cases have been discovered.
+The footer includes current-attempt PASS/FAIL/SKIP case counts and active suite
+paths. Retries replace earlier attempt counts rather than accumulating them.
+Filtered suite files count as processed without contributing test outcomes.
+
+The footer updates from runner events. On POSIX terminals it reads geometry with
+`stty` and uses PCNTL for resize and interruption handling. It responds to resize
+signals while idle, deferring redraws until the end of any report block or image
+transfer in progress. Images are emitted with the full
+scrolling area available, then the footer is restored beneath them. The scrolling
+region is restored before the final summary and during interruption cleanup.
+
+Redirected output, Windows terminals, `TERM=dumb`, PHP without PCNTL, and terminals
+without usable dimensions retain the ordinary console output. No alternate screen is used.
+The footer coordinates reporter output only; worker stdout/stderr are unchanged.
 
 Failure screenshots render inline on a Ghostty or Rex TTY through the Kitty graphics
 protocol. Screenshot paths on a TTY are OSC 8 hyperlinks to the original PNG's
@@ -1214,6 +1233,7 @@ php test/test-suite.php
 php test/test-attributes.php
 php test/test-selectors.php
 php test/test-parallel.php
+php test/test-progress.php
 php test/settings.php
 php test/test-configuration.php
 php test/test-cli.php

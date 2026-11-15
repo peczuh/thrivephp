@@ -755,6 +755,7 @@ class Test
         }
 
         $this->report->record->environment(['workers' => max(1, min($workers ?? 2, count($names))), 'browser' => $this->selectedBrowser]);
+        $this->report->startProgress(count($names), $workers === 1);
         if ($workers !== 1 && $names) {
             $selected = [];
             foreach ($names as $name) {

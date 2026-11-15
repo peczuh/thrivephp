@@ -11,6 +11,7 @@ final class Report
     private Diagnostic $diagnostic;
     private array $shownImages = [];
     private array $announced = [];
+    private ?Progress $progress = null;
     /** Terminal placement width only; null retains the image's natural display size. */
     private ?int $screenshotColumns;
 
@@ -26,8 +27,15 @@ final class Report
         $this->diagnostic = new Diagnostic($environment['root']);
     }
 
+    /** Start after selection; workers only send events and never own this footer. */
+    public function startProgress(int $total, bool $serial): void
+    {
+        $this->progress = new Progress($total, $serial);
+    }
+
     public function event(string $name, array $event): void
     {
+        $this->progress?->beforeOutput();
         $this->record->accept($name, $event);
         $suite = $this->record->suite($name);
         $attempt = end($suite['attempts']);
@@ -80,6 +88,10 @@ final class Report
         } elseif ($event['type'] === 'result' && $suite['status'] !== 'FILTERED') {
             $this->suiteResult($suite, $attempt, $this->record->counts($name));
         }
+        if (in_array($event['type'], ['suite_started', 'configured', 'case_started', 'case_finished', 'retry', 'result'], true)) {
+            $this->progress?->update($suite);
+        }
+        $this->progress?->afterOutput();
     }
 
     /** Record and print failures that occur before a suite can produce events. */
@@ -93,6 +105,7 @@ final class Report
 
     public function interrupt(string $name, string $message): void
     {
+        $this->progress?->beforeOutput();
         $before = $this->record->suite($name);
         $this->record->interrupt($name, $message);
         $suite = $this->record->suite($name);
@@ -116,6 +129,8 @@ final class Report
             }
         }
         $this->suiteResult($suite, $attempt, $this->record->counts($name));
+        $this->progress?->update($suite);
+        $this->progress?->afterOutput();
     }
 
     /** Print only steps completed by worker recovery; ordinary completed steps were emitted live. */
@@ -291,17 +306,20 @@ final class Report
                 continue;
             }
             $chunks = str_split(base64_encode($bytes), 4096);
+            $this->progress?->beforeImage();
             foreach ($chunks as $index => $chunk) {
                 echo "\033_G" . ($index === 0 ? 'a=T,f=100,t=d,q=2,'
                     . ($this->screenshotColumns !== null ? 'c=' . $this->screenshotColumns . ',' : '') : '')
                     . 'm=' . ($index < count($chunks) - 1 ? '1' : '0') . ';' . $chunk . "\033\\";
             }
             echo PHP_EOL;
+            $this->progress?->afterImage();
         }
     }
 
     public function summary(): int
     {
+        $this->progress?->finish();
         $run = $this->record->finish();
         $json = json_encode($run, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR) . "\n";
         $html = str_replace('{{REPORT_DATA}}', json_encode($run, JSON_HEX_TAG | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR),

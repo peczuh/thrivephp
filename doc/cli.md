@@ -86,7 +86,7 @@ arguments, as in `--workers 2`. `--` ends option parsing.
 | `--fail` / `--no-fail` | Show or hide failures; execution errors remain visible. |
 | `--skip` / `--no-skip` | Show or hide skipped results. |
 | `--screenshots` / `--no-screenshots` | Show or hide console screenshot paths and inline images. |
-| `--quiet` | Print only failure and error diagnostics, without screenshots or summary. |
+| `--quiet` | Print only failure and error diagnostics, retaining interactive progress but omitting screenshots and summary. |
 | `--set <path>=<json>` | Replace a setting after bootstrap; repeatable, in argument order. |
 | `--help` | Show help without discovery or bootstrap. |
 
@@ -96,15 +96,17 @@ options are errors.
 Display switches override `test.console.run`, `pass`, `fail`, `skip`, and
 `screenshots.enabled`, including values supplied through `--set`. All five default
 to `true`. Repeating a display switch uses its last value. `--quiet` takes precedence
-over all display switches regardless of argument order. Successful quiet runs
-produce no runner output. Execution errors remain visible even with `--no-fail`.
+over all display switches regardless of argument order. Quiet retains the progress
+bar on supported interactive terminals; non-TTY output disables the progress bar.
+Successful quiet runs produce no runner output when redirected. Execution errors
+remain visible even with `--no-fail`.
 
 ```sh
 php cli.php test --no-run --no-pass --no-screenshots
 php cli.php test --quiet
 ```
 
-The individual display switches retain the final summary.
+The individual display switches retain the final summary and progress footer.
 Saved reports, screenshot capture policies and exit status are independent of
 console display. See [console settings](testing.md#console) for configuration and
 the distinction between successful-step detail and status filtering.

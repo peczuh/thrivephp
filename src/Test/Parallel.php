@@ -61,6 +61,8 @@ final class Parallel
                 $write = $except = null;
                 $ready = @stream_select($read, $write, $except, 0, 100000);
                 if ($ready === false) {
+                    // A terminal resize can interrupt an otherwise healthy worker wait.
+                    if (str_contains(error_get_last()['message'] ?? '', 'Interrupted system call')) continue;
                     throw new \RuntimeException('Could not monitor worker connections.');
                 }
                 foreach ($read as $stream) {
