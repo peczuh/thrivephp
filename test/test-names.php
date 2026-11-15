@@ -45,19 +45,18 @@ function runNames(array $files, int $workers, array $selectors = []): array
 
 $loadMarker = '<?php file_put_contents({{MARKER}}, "loaded"); return static function () {};';
 foreach ([1, 2] as $workers) {
-    foreach (['customer login', 'customer.login', 'customer;login', 'customer$login', '-login', '9login', 'sáve', 'CON', 'nul', 'COM1', 'lpt9'] as $invalid) {
+    foreach (['customer login', 'customer.login', 'customer;login', 'customer$login', '-login', '9login', 'sáve', 'CON', 'nul', 'COM1', 'lpt9', 'customer login/save', 'CON/save'] as $invalid) {
         [$status, $console, $record, $executed] = runNames(['customer-login' => $loadMarker, $invalid => $loadMarker], $workers);
         check($status === 1 && !$executed && $record['suites'] === [] && $record['totals'] === Record::TOTALS
             && str_contains($record['errors'][0]['message'], 'Invalid suite name'), 'Invalid suite name loaded files or produced a sanitized alias: ' . $console);
     }
     foreach ([['admin/login', 'public/login'], ['admin/Login', 'public/login']] as $names) {
         [$status, $console, $record, $executed] = runNames(array_fill_keys($names, $loadMarker), $workers);
-        check($status === 1 && !$executed && $record['suites'] === [] && $record['totals'] === Record::TOTALS
-            && str_contains($record['errors'][0]['message'], 'Duplicate suite name')
-            && str_contains($console, $names[0]) && str_contains($console, $names[1]), 'Duplicate suite names were accepted: ' . $console);
+        check($status === 0 && $executed && array_column($record['suites'], 'id') === $names
+            && str_contains($console, $names[0]) && str_contains($console, $names[1]), 'Distinct suite paths with matching stems were rejected or merged: ' . $console);
     }
     [$status, $console, $record, $executed] = runNames(['admin/login' => $loadMarker, 'public/Login' => $loadMarker], $workers, ['^admin/']);
-    check($status === 0 && $executed && count($record['suites']) === 1, 'Excluded suites affected name uniqueness: ' . $console);
+    check($status === 0 && $executed && array_column($record['suites'], 'id') === ['admin/login'], 'Suite path selector included a matching stem in another directory: ' . $console);
     [$status, $console, $record, $executed] = runNames(array_fill_keys(['a/customer-login', 'b/customer_login', 'b/_Login2'], $loadMarker), $workers);
     check($status === 0 && $executed && count($record['suites']) === 3, 'Distinct safe names were collapsed: ' . $console);
     echo "PASS: suite names are literal, safe and unique before serial/parallel execution, workers=$workers\n";

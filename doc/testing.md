@@ -62,24 +62,26 @@ The timestamp uses local time. There is no session suffix. An existing run
 directory causes an exception before any suites execute; files are never overwritten
 by a later run. Move or archive the entire run directory to retain its images.
 
-The suite name is its filename stem, and the case name is its method name.
+The suite name is its path relative to the cases directory without `.php`, and
+the case name is its method name.
 For example, `folder/customer-login.php` and its `save()` method write to
-`screenshots/customer-login/save/`. Suite-level captures go directly in
-`screenshots/customer-login/`. Source directories remain in report metadata and
-file selectors, not screenshot directory names. Filenames retain suite attempt,
+`screenshots/folder/customer-login/save/`. Suite-level captures go directly in
+`screenshots/folder/customer-login/`. Report metadata, file selectors and screenshot
+directories use the same suite path. Filenames retain suite attempt,
 case attempt, step ordinal when applicable, and capture point.
 
-Suite, case and action names must contain 1 to 255 ASCII letters, digits,
-underscores or hyphens, starting with a letter or underscore. Filesystem-reserved
+Each suite path component, case name and action name must contain 1 to 255 ASCII
+letters, digits, underscores or hyphens, starting with a letter or underscore. Filesystem-reserved
 names such as `CON`, `NUL`, `COM1` and `LPT1` are rejected, ignoring case.
 Names are used literally, never sanitized or encoded. `customer login` is invalid;
 it is not converted to `customer-login`. Descriptions in `#[Test('Customer login')]`
 remain unrestricted display labels and do not determine screenshot paths.
 
-Selected suite filename stems must be unique across source directories, ignoring
-case. For example, selecting both `admin/login.php` and `public/Login.php` fails
-before any suite files or workers start. Invalid suite names are also run-level
-preparation errors. Discovered case names are validated before suite configuration
+Selected suite paths must be unique ignoring case. For example, `admin/login.php`
+and `public/login.php` are distinct suites, while selecting both `admin/login.php`
+and `Admin/Login.php` fails before any suite files or workers start. Invalid suite
+path components are also run-level preparation errors. Discovered case names are
+validated before suite configuration
 or lifecycle hooks; PHP already treats method names case-insensitively. Action
 names are validated before their callbacks execute. Repeated actions are allowed
 because their step ordinals distinguish their captures.

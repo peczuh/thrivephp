@@ -24,7 +24,7 @@ file_put_contents($root . '/vendor/autoload.php', '<?php spl_autoload_register(s
     $prefix = "ThriveData\\\\ThrivePHP\\\\";
     if (str_starts_with($class, $prefix)) require_once ' . $source . ' . str_replace("\\\\", "/", substr($class, strlen($prefix))) . ".php";
 });');
-$names = ['folder/one_case', 'folder-one_case', 'shared/customer-login', 'shared/customer_login', 'shared/_login', 'shared/login2', 'folder/one_case/save'];
+$names = ['folder/one_case', 'folder-one_case', 'shared/customer-login', 'shared/customer_login', 'shared/_login', 'shared/login2', 'folder/one_case/save', 'estimates/create', 'projects/create'];
 $fixture = <<<'PHP'
 <?php
 use ThriveData\ThrivePHP\Test\Test;
@@ -74,7 +74,7 @@ foreach ([1, 2] as $workers) {
                 foreach ($images as $image) {
                     check(!isset($image['diagnostic']), json_encode($image));
                     $path = $image['path'];
-                    $prefix = 'screenshots/' . basename($suite['id']) . '/' . ($method === null ? '' : $method . '/');
+                    $prefix = 'screenshots/' . $suite['id'] . '/' . ($method === null ? '' : $method . '/');
                     check(str_starts_with($path, $prefix), 'Wrong suite/case directory: ' . $path);
                     $bytes = file_get_contents($directory . '/' . $path);
                     check(str_contains($bytes, '/test/cases/' . $suite['id'] . '.php|'), 'Capture was overwritten by another suite: ' . $path);
@@ -86,8 +86,10 @@ foreach ([1, 2] as $workers) {
     }
     $files = iterator_to_array(new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory . '/screenshots', FilesystemIterator::SKIP_DOTS)));
     check(count($files) === count($paths) && count($paths) === count($names) * 11, 'Captures lost or duplicated: ' . count($paths));
-    check(isset($paths['screenshots/one_case/save/a2__a2__s1__pass.png'])
-        && isset($paths['screenshots/one_case/a2__suite.png'])
-        && isset($paths['screenshots/save/a2__suite.png']), 'Attempts or suite-level filenames changed.');
+    check(isset($paths['screenshots/folder/one_case/save/a2__a2__s1__pass.png'])
+        && isset($paths['screenshots/folder/one_case/a2__suite.png'])
+        && isset($paths['screenshots/folder/one_case/save/a2__suite.png'])
+        && isset($paths['screenshots/estimates/create/save/a2__a2__s1__pass.png'])
+        && isset($paths['screenshots/projects/create/save/a2__a2__s1__pass.png']), 'Suite paths, attempts or suite-level filenames changed.');
     echo "PASS: safe suite/case directories preserve serial/parallel retries, source-path separation and moved reports, workers=$workers\n";
 }

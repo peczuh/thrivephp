@@ -392,8 +392,8 @@ class Test
         }
         try {
             $image = $this->withoutSteps($this->screenshotSource);
-            // Suite filename stems are validated for uniqueness before files or workers start.
-            $directory = 'screenshots/' . basename($this->checkId);
+            // Suite paths are validated before files or workers start and retain their source directories.
+            $directory = 'screenshots/' . $this->checkId;
             $parts = ['a' . $this->suiteAttempt];
             if ($this->caseMethod !== null) {
                 $directory .= '/' . $this->caseMethod;
@@ -640,7 +640,7 @@ class Test
      * Null headless uses test.browser.headless, then true; explicit booleans override settings.
      * Capabilities replace matching test.browser.capabilities keys before suite configure() runs.
      * Title identifies the project; null uses test.project, then the root Composer package name.
-     * Selected suite filename stems must be safe names and unique ignoring case across directories.
+     * Selected suite paths must have safe components and be unique ignoring case.
      * @param list<string> $names Paths relative to checks/, without .php; empty selects all.
      * @param list<string> $selectors Regex selectors: files!!exclude::cases:!exclude##tags#!exclude.
      * Empty selects all; each alternative combines its supplied conditions with AND.
@@ -722,12 +722,11 @@ class Test
             }
             $suiteNames = [];
             foreach ($names as $name) {
-                $suiteName = basename($name);
-                Test\Name::validate($suiteName, 'suite');
-                $key = strtolower($suiteName);
+                foreach (explode('/', $name) as $component) Test\Name::validate($component, 'suite');
+                $key = strtolower($name);
                 if (isset($suiteNames[$key])) {
-                    throw new \InvalidArgumentException('Duplicate suite name ' . var_export($suiteName, true)
-                        . ': ' . $suiteNames[$key] . ' and ' . $name . '. Suite filename stems must be unique, ignoring case.');
+                    throw new \InvalidArgumentException('Duplicate suite name ' . var_export($name, true)
+                        . ': ' . $suiteNames[$key] . ' and ' . $name . '. Suite paths must be unique, ignoring case.');
                 }
                 $suiteNames[$key] = $name;
             }
