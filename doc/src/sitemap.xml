@@ -6,41 +6,44 @@
 
 			<url><loc>namespace-ThriveData.html</loc></url>
 			<url><loc>namespace-ThriveData.ThrivePHP.html</loc></url>
+			<url><loc>namespace-ThriveData.ThrivePHP.Database.html</loc></url>
+			<url><loc>namespace-ThriveData.ThrivePHP.Test.html</loc></url>
+			<url><loc>namespace-ThriveData.ThrivePHP.WebDriver.html</loc></url>
 
 			<url><loc>ThriveData.ThrivePHP.ACL.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.Application.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.ApplicationException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.Arrays.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.AutoloadException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.BadRequest.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.CLI.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.Command.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.Commander.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.CompileErrorException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.CompileWarningException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.ContextException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.Controller.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.CoreErrorException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.CoreWarningException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.CURL.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.CURLException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseCheckViolation.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseClientException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseCondition.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseConnection.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseDataException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseDataTypeMismatch.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseDateInterval.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseDateTime.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseExclusionViolation.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseInvalidTextRepresentation.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseManyResults.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseNoResult.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseNotNullViolation.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseResult.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseServerException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseUndefinedColumn.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.DatabaseUniqueViolation.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.CheckViolation.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.ClientException.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.Condition.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.Connection.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.DataException.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.DataTypeMismatch.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.DateInterval.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.DateTime.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.Exception.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.ExclusionViolation.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.ForeignKeyViolation.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.InvalidTextRepresentation.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.ManyResults.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.NoResult.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.NotNullViolation.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.Result.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.ServerException.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.UndefinedColumn.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Database.UniqueViolation.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.DB.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.DeprecatedException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.ErrorException.html</loc></url>
@@ -51,6 +54,7 @@
 			<url><loc>ThriveData.ThrivePHP.Log.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.MovedPermanently.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.MovedTemporarily.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.NoAuth.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.NotFound.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.NoticeException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.Notification.html</loc></url>
@@ -61,6 +65,7 @@
 			<url><loc>ThriveData.ThrivePHP.PermissionException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.RecoverableErrorException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.RedirectException.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Request.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.RequestException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.Response.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.ResponseException.html</loc></url>
@@ -73,32 +78,99 @@
 			<url><loc>ThriveData.ThrivePHP.SettingsException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.StrictException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.TemporaryRedirect.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.After.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.AssertionFailure.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Before.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Diagnostic.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Progress.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Record.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Report.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Suite.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.SuiteBrowser.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.SuiteConfig.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.Test.Test.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.Unauthorized.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.UserDeprecatedException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.UserErrorException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.UserNoticeException.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.UserWarningException.html</loc></url>
-			<url><loc>ThriveData.ThrivePHP.View.html</loc></url>
 			<url><loc>ThriveData.ThrivePHP.WarningException.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.Browser.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.Element.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.ElementSet.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.Network.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.NetworkDecision.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.NetworkError.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.PDF.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.Screenshot.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.ShadowRoot.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.Snapshot.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.WebDriver.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebDriver.Window.html</loc></url>
+			<url><loc>ThriveData.ThrivePHP.WebSocket.html</loc></url>
 
 
 			<url><loc>source-ACL.html</loc></url>
 			<url><loc>source-Application.html</loc></url>
-			<url><loc>source-Arrays.html</loc></url>
+			<url><loc>source-CLI.html</loc></url>
 			<url><loc>source-CURL.html</loc></url>
 			<url><loc>source-Command.html</loc></url>
 			<url><loc>source-Commander.html</loc></url>
 			<url><loc>source-ContextException.html</loc></url>
-			<url><loc>source-Controller.html</loc></url>
 			<url><loc>source-DB.html</loc></url>
+			<url><loc>source-Database.CheckViolation.html</loc></url>
+			<url><loc>source-Database.ClientException.html</loc></url>
+			<url><loc>source-Database.Condition.html</loc></url>
+			<url><loc>source-Database.Connection.html</loc></url>
+			<url><loc>source-Database.DataException.html</loc></url>
+			<url><loc>source-Database.DataTypeMismatch.html</loc></url>
+			<url><loc>source-Database.DateInterval.html</loc></url>
+			<url><loc>source-Database.DateTime.html</loc></url>
+			<url><loc>source-Database.Exception.html</loc></url>
+			<url><loc>source-Database.ExclusionViolation.html</loc></url>
+			<url><loc>source-Database.ForeignKeyViolation.html</loc></url>
+			<url><loc>source-Database.InvalidTextRepresentation.html</loc></url>
+			<url><loc>source-Database.ManyResults.html</loc></url>
+			<url><loc>source-Database.NoResult.html</loc></url>
+			<url><loc>source-Database.NotNullViolation.html</loc></url>
+			<url><loc>source-Database.Result.html</loc></url>
+			<url><loc>source-Database.ServerException.html</loc></url>
+			<url><loc>source-Database.UndefinedColumn.html</loc></url>
+			<url><loc>source-Database.UniqueViolation.html</loc></url>
 			<url><loc>source-Exception.html</loc></url>
 			<url><loc>source-Log.html</loc></url>
 			<url><loc>source-Notification.html</loc></url>
 			<url><loc>source-Page.html</loc></url>
+			<url><loc>source-Request.html</loc></url>
 			<url><loc>source-Response.html</loc></url>
 			<url><loc>source-Route.html</loc></url>
 			<url><loc>source-Router.html</loc></url>
 			<url><loc>source-Session.html</loc></url>
 			<url><loc>source-Settings.html</loc></url>
-			<url><loc>source-View.html</loc></url>
+			<url><loc>source-Test.html</loc></url>
+			<url><loc>source-Test.After.html</loc></url>
+			<url><loc>source-Test.AssertionFailure.html</loc></url>
+			<url><loc>source-Test.Before.html</loc></url>
+			<url><loc>source-Test.Diagnostic.html</loc></url>
+			<url><loc>source-Test.Progress.html</loc></url>
+			<url><loc>source-Test.Record.html</loc></url>
+			<url><loc>source-Test.Report.html</loc></url>
+			<url><loc>source-Test.Suite.html</loc></url>
+			<url><loc>source-Test.SuiteBrowser.html</loc></url>
+			<url><loc>source-Test.SuiteConfig.html</loc></url>
+			<url><loc>source-Test.Test.html</loc></url>
+			<url><loc>source-WebDriver.Browser.html</loc></url>
+			<url><loc>source-WebDriver.Element.html</loc></url>
+			<url><loc>source-WebDriver.ElementSet.html</loc></url>
+			<url><loc>source-WebDriver.Network.html</loc></url>
+			<url><loc>source-WebDriver.NetworkDecision.html</loc></url>
+			<url><loc>source-WebDriver.NetworkError.html</loc></url>
+			<url><loc>source-WebDriver.PDF.html</loc></url>
+			<url><loc>source-WebDriver.Screenshot.html</loc></url>
+			<url><loc>source-WebDriver.ShadowRoot.html</loc></url>
+			<url><loc>source-WebDriver.Snapshot.html</loc></url>
+			<url><loc>source-WebDriver.WebDriver.html</loc></url>
+			<url><loc>source-WebDriver.Window.html</loc></url>
+			<url><loc>source-WebSocket.html</loc></url>
 </urlset>

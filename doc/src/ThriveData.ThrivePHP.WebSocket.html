@@ -1,0 +1,689 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+
+	<title>Class ThriveData\ThrivePHP\WebSocket |  API</title>
+	<link rel="stylesheet" href="assets/main.css">
+	<script src="assets/main.js" defer></script>
+</head>
+
+<body class="layout">
+	<div class="layout-aside">
+	<div class="menu">
+			<div class="menu-section">
+				<h3>Namespaces</h3>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.html">ThriveData</a>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>
+	<ul>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Database.html">Database</a>
+			</li>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Test.html">Test</a>
+			</li>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">WebDriver</a>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</div>
+
+		<div class="menu-section">
+			<h3>Classes</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.ACL.html">
+							ACL
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Application.html">
+							Application
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CLI.html">
+							CLI
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Command.html">
+							Command
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Commander.html">
+							Commander
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CURL.html">
+							CURL
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DB.html">
+							DB
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Log.html">
+							Log
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Notification.html">
+							Notification
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Page.html">
+							Page
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Request.html">
+							Request
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Response.html">
+							Response
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Route.html">
+							Route
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Router.html">
+							Router
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Session.html">
+							Session
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Settings.html">
+							Settings
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.html">
+							Test
+						</a>
+					</li>
+					<li class="active">
+						<a href="ThriveData.ThrivePHP.WebSocket.html">
+							WebSocket
+						</a>
+					</li>
+			</ul>
+		</div>
+		<div class="menu-section">
+			<h3>Exceptions</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.ApplicationException.html">
+							ApplicationException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.AutoloadException.html">
+							AutoloadException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.BadRequest.html">
+							BadRequest
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CompileErrorException.html">
+							CompileErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CompileWarningException.html">
+							CompileWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ContextException.html">
+							ContextException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CoreErrorException.html">
+							CoreErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CoreWarningException.html">
+							CoreWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.CURLException.html">
+							CURLException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.DeprecatedException.html">
+							DeprecatedException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ErrorException.html">
+							ErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Exception.html">
+							Exception
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ExecuteException.html">
+							ExecuteException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.InformationException.html">
+							InformationException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.InternalServerError.html">
+							InternalServerError
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.MovedPermanently.html">
+							MovedPermanently
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.MovedTemporarily.html">
+							MovedTemporarily
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NoAuth.html">
+							NoAuth
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NotFound.html">
+							NotFound
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.NoticeException.html">
+							NoticeException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ParseException.html">
+							ParseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermanentRedirect.html">
+							PermanentRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermissionDenied.html">
+							PermissionDenied
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.PermissionException.html">
+							PermissionException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RecoverableErrorException.html">
+							RecoverableErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RedirectException.html">
+							RedirectException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RequestException.html">
+							RequestException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.ResponseException.html">
+							ResponseException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.RootPathUnknown.html">
+							RootPathUnknown
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.SeeOtherRedirect.html">
+							SeeOtherRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.SettingsException.html">
+							SettingsException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.StrictException.html">
+							StrictException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.TemporaryRedirect.html">
+							TemporaryRedirect
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Unauthorized.html">
+							Unauthorized
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserDeprecatedException.html">
+							UserDeprecatedException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserErrorException.html">
+							UserErrorException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserNoticeException.html">
+							UserNoticeException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.UserWarningException.html">
+							UserWarningException
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WarningException.html">
+							WarningException
+						</a>
+					</li>
+			</ul>
+		</div>
+	</div>
+	</div>
+
+	<div class="layout-main">
+		<div class="layout-navbar">
+	<nav class="navbar">
+		<div class="navbar-left">
+			<ul class="navbar-links">
+				<li>
+					<a href="index.html">Overview</a>
+				</li>
+				<li>
+					
+						<a href="namespace-ThriveData.ThrivePHP.html">Namespace</a>
+					
+				</li>
+<li class="active"><a href="ThriveData.ThrivePHP.WebSocket.html">Class</a></li>				<li>
+					<a href="tree.html">Tree</a>
+				</li>
+			</ul>
+		</div>
+		<div class="navbar-right">
+	<div class="search" data-elements="assets/elements.js">
+		<input class="search-input" placeholder="Search class, function or namespace" autofocus>
+		<ul class="search-results"></ul>
+	</div>
+		</div>
+	</nav>
+		</div>
+
+		<div class="layout-content">
+		<h1>
+			Class <a href="namespace-ThriveData.html">ThriveData</a>\<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>\<a href="ThriveData.ThrivePHP.WebSocket.html">WebSocket</a>
+		</h1>
+
+
+	<table class="classLikeSignatureTable">
+
+
+
+
+	</table>
+		<div class="classLikeDescription">
+	<div class="description"><p>Synchronous RFC 6455 text client using PHP streams; wss:// requires OpenSSL.
+No extensions or subprotocols are negotiated. Connection/protocol failures and
+operation timeouts close the socket and throw RuntimeException: a partially
+transferred frame cannot safely be retried. Invalid arguments instead throw
+InvalidArgumentException without closing an established connection.</p>
+<p>Example (requires a running WebSocket echo server):</p>
+<pre><code class="language-php">$socket = new \ThriveData\ThrivePHP\WebSocket('ws://localhost:8080', timeout: 10);
+try {
+    $socket-&gt;send('Hello');
+    $reply = $socket-&gt;receive(); // Returns &quot;Hello&quot;; null means the peer closed normally.
+} finally {
+    $socket-&gt;close();
+}
+</code></pre>
+<p>Protocol reference: <a href="https://www.rfc-editor.org/rfc/rfc6455">https://www.rfc-editor.org/rfc/rfc6455</a></p>
+</div>
+		</div>
+
+
+		<div class="classLikeSection">
+			<b>Located at</b> <a href="source-WebSocket.html#25" title="Go to source code">WebSocket.php</a><br>
+		</div>
+
+
+
+		<table class="table" id="methods">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Methods</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="__construct" id="___construct">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#37-114" title="Go to source code">__construct</a>(<span>string <var>$url</var></span>, <span>float <var>$timeout</var> = <span class="php-num">10</span></span>)</code>
+
+
+	<div class="expandable-collapsedView">
+		Connect and complete the HTTP upgrade immediately, verifying TLS for wss://.
+$timeout is a positive number of seconds,…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Connect and complete the HTTP upgrade immediately, verifying TLS for wss://.
+$timeout is a positive number of seconds, also stored as the default for
+send(), receive(), and close(). Each operation shares one deadline across
+its transfers rather than restarting the timeout for every read or frame.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___construct">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="send" id="_send">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#116-123" title="Go to source code">send</a>(<span>string <var>$text</var></span>): void</code>
+
+
+	<div class="expandable-collapsedView">
+		Send one UTF-8 text message, limited to 16 MiB.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Send one UTF-8 text message, limited to 16 MiB.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_send">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="receive" id="_receive">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#125-134" title="Go to source code">receive</a>(<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): ?string</code>
+
+
+	<div class="expandable-collapsedView">
+		Return one complete text message, or null for a peer close with no code,
+code 1000 (normal), or 1001 (going away).…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return one complete text message, or null for a peer close with no code,
+code 1000 (normal), or 1001 (going away). Other close codes throw.
+Handle ping/pong internally. $timeout overrides the default seconds for
+this call; control frames and text fragments do not reset its deadline.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_receive">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="enqueue" id="_enqueue">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#136-143" title="Go to source code">enqueue</a>(<span>string <var>$text</var></span>): void</code>
+
+
+	<div class="expandable-collapsedView">
+		Queue a UTF-8 message for incremental writes by pump(); does not wait for delivery.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Queue a UTF-8 message for incremental writes by pump(); does not wait for delivery.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_enqueue">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="pump" id="_pump">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#150-165" title="Go to source code">pump</a>(<span>bool <var>$read</var> = <span class="php-kw">true</span></span>): void</code>
+
+
+	<div class="expandable-collapsedView">
+		Advance available I/O once without waiting. Partial frames and writes survive calls.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Advance available I/O once without waiting. Partial frames and writes survive calls.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_pump">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="poll" id="_poll">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#172-222" title="Go to source code">poll</a>(<span>bool <var>$closing</var> = <span class="php-kw">false</span></span>): string|false|null</code>
+
+
+	<div class="expandable-collapsedView">
+		Consume one buffered text message: false means incomplete/idle, null means normal
+peer closure. Call pump() to advance…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Consume one buffered text message: false means incomplete/idle, null means normal
+peer closure. Call pump() to advance I/O. Empty text is a valid complete message.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_poll">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="close" id="_close">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#224-242" title="Go to source code">close</a>(): void</code>
+
+
+	<div class="expandable-collapsedView">
+		Perform the close handshake within the configured timeout. Safe to repeat.
+Failures throw, but the socket is released…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Perform the close handshake within the configured timeout. Safe to repeat.
+Failures throw, but the socket is released even if the peer never replies.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_close">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="__destruct" id="___destruct">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebSocket.html#244-248" title="Go to source code">__destruct</a>()</code>
+
+
+	<div class="expandable-collapsedView">
+		Release the socket without waiting; call close() for a graceful handshake.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Release the socket without waiting; call close() for a graceful handshake.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___destruct">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+
+
+
+
+
+		</div>
+
+		<div class="layout-footer">
+			 API documentation generated by <a href="https://www.apigen.org">ApiGen v7.0.0-alpha.6</a>
+		</div>
+	</div>
+
+	<div class="layout-rest">
+		<div class="navbar"></div>
+	</div>
+</body>
+</html>

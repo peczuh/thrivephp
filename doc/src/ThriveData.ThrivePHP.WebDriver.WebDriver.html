@@ -1,0 +1,522 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+
+	<title>Class ThriveData\ThrivePHP\WebDriver\WebDriver |  API</title>
+	<link rel="stylesheet" href="assets/main.css">
+	<script src="assets/main.js" defer></script>
+</head>
+
+<body class="layout">
+	<div class="layout-aside">
+	<div class="menu">
+			<div class="menu-section">
+				<h3>Namespaces</h3>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.html">ThriveData</a>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>
+	<ul>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Database.html">Database</a>
+			</li>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Test.html">Test</a>
+			</li>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">WebDriver</a>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</div>
+
+		<div class="menu-section">
+			<h3>Classes</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Browser.html">
+							Browser
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Element.html">
+							Element
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.ElementSet.html">
+							ElementSet
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Network.html">
+							Network
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.NetworkDecision.html">
+							NetworkDecision
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.PDF.html">
+							PDF
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Screenshot.html">
+							Screenshot
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.ShadowRoot.html">
+							ShadowRoot
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Snapshot.html">
+							Snapshot
+						</a>
+					</li>
+					<li class="active">
+						<a href="ThriveData.ThrivePHP.WebDriver.WebDriver.html">
+							WebDriver
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Window.html">
+							Window
+						</a>
+					</li>
+			</ul>
+		</div>
+		<div class="menu-section">
+			<h3>Exceptions</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.NetworkError.html">
+							NetworkError
+						</a>
+					</li>
+			</ul>
+		</div>
+	</div>
+	</div>
+
+	<div class="layout-main">
+		<div class="layout-navbar">
+	<nav class="navbar">
+		<div class="navbar-left">
+			<ul class="navbar-links">
+				<li>
+					<a href="index.html">Overview</a>
+				</li>
+				<li>
+					
+						<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">Namespace</a>
+					
+				</li>
+<li class="active"><a href="ThriveData.ThrivePHP.WebDriver.WebDriver.html">Class</a></li>				<li>
+					<a href="tree.html">Tree</a>
+				</li>
+			</ul>
+		</div>
+		<div class="navbar-right">
+	<div class="search" data-elements="assets/elements.js">
+		<input class="search-input" placeholder="Search class, function or namespace" autofocus>
+		<ul class="search-results"></ul>
+	</div>
+		</div>
+	</nav>
+		</div>
+
+		<div class="layout-content">
+		<h1>
+			Class <a href="namespace-ThriveData.html">ThriveData</a>\<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>\<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">WebDriver</a>\<a href="ThriveData.ThrivePHP.WebDriver.WebDriver.html">WebDriver</a>
+		</h1>
+
+
+	<table class="classLikeSignatureTable">
+
+
+
+
+	</table>
+		<div class="classLikeDescription">
+	<div class="description"><p>Local dependency inventory and an owned WebDriver service for test scaffolding.
+bootstrap() only inspects installed software. Construction starts a driver;
+browser() creates one session at a time, and stop() cleans up both resources.
+Application bootstrap is responsible for installing browsers and drivers.</p>
+<pre><code class="language-php">$inventory = WebDriver::bootstrap(); // JSON-compatible stdClass, no provisioning.
+$driver = new WebDriver(browser: 'firefox');
+try {
+    $browser = $driver-&gt;browser(headless: true);
+    $browser-&gt;navigate('https://example.com');
+} finally {
+    $driver-&gt;stop();
+}
+</code></pre>
+</div>
+		</div>
+
+
+		<div class="classLikeSection">
+			<b>Located at</b> <a href="source-WebDriver.WebDriver.html#21" title="Go to source code">WebDriver/WebDriver.php</a><br>
+		</div>
+
+
+
+		<table class="table" id="methods">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Methods</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="__construct" id="___construct">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#31-105" title="Go to source code">__construct</a>(<span>?string <var>$browser</var> = <span class="php-kw">null</span></span>, <span>?int <var>$port</var> = <span class="php-kw">null</span></span>, <span>float <var>$startupTimeout</var> = <span class="php-num">10</span></span>, <span>float <var>$shutdownTimeout</var> = <span class="php-num">3</span></span>)</code>
+
+
+	<div class="expandable-collapsedView">
+		Start a local service for chrome, chromium, firefox, safari, or safaripreview.
+Null selects Chrome, Chromium, Firefox,…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Start a local service for chrome, chromium, firefox, safari, or safaripreview.
+Null selects Chrome, Chromium, Firefox, Safari Technology Preview, then Safari;
+a failure after selection never changes
+browser. Discovery uses local executables, not bootstrap reports or downloads.</p>
+<p>$port: null prefers Safari/Preview 4445, Chrome/Chromium 9515, or Firefox 4444; an
+occupied preferred port logs a warning and selects a free port. An explicitly
+requested port (1–65535) is mandatory. Services bind to loopback only.
+$startupTimeout: positive seconds to start the service after discovery.
+$shutdownTimeout: positive seconds to terminate its process; HTTP session
+cleanup uses that session's own command timeout. No browser session starts here.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___construct">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="bootstrap" id="_bootstrap">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					static
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#107-127" title="Go to source code">bootstrap</a>(): <a href="stdClass.html"><span title="stdClass">stdClass</span></a></code>
+
+
+	<div class="expandable-collapsedView">
+		Inspect macOS, Debian Linux, FreeBSD, or Windows without installing software,
+fetching release metadata, starting…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Inspect macOS, Debian Linux, FreeBSD, or Windows without installing software,
+fetching release metadata, starting services, or creating browser sessions.
+Search conventional locations and PATH, with one entry per browser type.</p>
+<p>Returns {ready: bool, platform: {os, architecture, distribution}, browsers:
+{chrome, chromium, firefox, safari, safaripreview}}. Each browser has name, ready, path,
+version, reason, message, and a nested driver with the same component fields.
+Paths/versions/reasons/messages are null when unavailable or inapplicable.</p>
+<p>Component ready is true, 'unprovisioned' (missing), 'unsupported' (platform),
+'notready' (known execution failure), or 'unknown' (discovery/probe failure).
+Overall ready requires at least one pair whose two states are literally true.
+A successful version/metadata check does not certify compatibility, Safari
+authorization, display availability, or session creation. Discovery failures
+are data; programming errors propagate. Serialize with json_encode().</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_bootstrap">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="name" id="_name">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#129-133" title="Go to source code">name</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		The selected browser type, including 'chromium' rather than its protocol alias 'chrome'.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>The selected browser type, including 'chromium' rather than its protocol alias 'chrome'.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_name">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="endpoint" id="_endpoint">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#135-139" title="Go to source code">endpoint</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Loopback service URL. Sessions made directly with this endpoint are caller-owned.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Loopback service URL. Sessions made directly with this endpoint are caller-owned.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_endpoint">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="browser" id="_browser">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#141-210" title="Go to source code">browser</a>(
+	<span>bool <var>$headless</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$bidi</var> = <span class="php-kw">false</span></span>,
+	<span>float <var>$timeout</var> = <span class="php-num">10</span></span>,
+	<span>array <var>$capabilities</var> = []</span>,
+	<span>float <var>$waitTimeout</var> = <span class="php-num">5000</span></span>,
+	<span>float <var>$assertionTimeout</var> = <span class="php-num">5000</span></span>,
+	<span>float <var>$pollInterval</var> = <span class="php-num">500</span></span>,
+): <a href="ThriveData.ThrivePHP.WebDriver.Browser.html"><span title="ThriveData\ThrivePHP\WebDriver\Browser">Browser</span></a></code>
+
+
+	<div class="expandable-collapsedView">
+		Create the sole active owned session. After quit() or closing its last window,
+another session can be created. …
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Create the sole active owned session. After quit() or closing its last window,
+another session can be created. $headless defaults to true and adds the browser's
+headless flag. Safari and Preview require headless: false.</p>
+<p>$timeout is positive seconds for Browser's command I/O, not service startup.
+$waitTimeout, $assertionTimeout and $pollInterval configure polling in positive, finite milliseconds.
+$bidi requests BiDi support. $capabilities accepts browser-specific options;
+arguments/preferences are retained, but the detected binary cannot be replaced.
+Failure during session creation stops the owned service: a lost response may
+have left a remote session that this client cannot identify for deletion.
+Assertions report automatically to the active Test and stop on failure by default.
+Conditions query by default; $assert=true records a result, and $stop=false continues after mismatches.
+Outside Test::run(), failures throw. Assertions retry by default; $wait=false checks once.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_browser">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="stop" id="_stop">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#212-240" title="Go to source code">stop</a>(): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\WebDriver">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Quit the owned session, then terminate and reap the owned driver even if HTTP
+cleanup fails. Explicit calls throw after…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Quit the owned session, then terminate and reap the owned driver even if HTTP
+cleanup fails. Explicit calls throw after attempting cleanup; shutdown logs
+errors instead. Failed termination keeps the process handle for retry.
+Repeated calls after successful termination are harmless. Returns this runtime.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_stop">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="command" id="_command">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	protected
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#248-259" title="Go to source code">command</a>(<span>int <var>$port</var></span>): array</code>
+
+
+	<div class="expandable-collapsedView">
+		Build the driver's CLI. Chrome and Safari bind locally by default; Gecko needs --host.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Build the driver's CLI. Chrome and Safari bind locally by default; Gecko needs --host.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_command">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="__destruct" id="___destruct">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.WebDriver.html#321-324" title="Go to source code">__destruct</a>()</code>
+
+
+
+	<div class="expandable-expandedView">
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___destruct">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+		<table class="table" id="constants">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Constants</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="PREFERENCE" id="PREFERENCE">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+				</code>
+			</td>
+
+			<td class="table-cell">
+<code><a href="source-WebDriver.WebDriver.html#23-24" title="Go to source code">PREFERENCE</a> = [<span class="php-str">'chrome'</span>, <span class="php-str">'chromium'</span>, <span class="php-str">'firefox'</span>, <span class="php-str">'safaripreview'</span>, <span class="php-str">'safari'</span>]</code>
+
+	<div class="expandable-collapsedView">
+		Automatic selection stops at the first locally ready browser/driver pair.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Automatic selection stops at the first locally ready browser/driver pair.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#PREFERENCE">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+
+
+		</div>
+
+		<div class="layout-footer">
+			 API documentation generated by <a href="https://www.apigen.org">ApiGen v7.0.0-alpha.6</a>
+		</div>
+	</div>
+
+	<div class="layout-rest">
+		<div class="navbar"></div>
+	</div>
+</body>
+</html>

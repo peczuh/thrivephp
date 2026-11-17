@@ -1,0 +1,2230 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+
+	<title>Class ThriveData\ThrivePHP\WebDriver\Element |  API</title>
+	<link rel="stylesheet" href="assets/main.css">
+	<script src="assets/main.js" defer></script>
+</head>
+
+<body class="layout">
+	<div class="layout-aside">
+	<div class="menu">
+			<div class="menu-section">
+				<h3>Namespaces</h3>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.html">ThriveData</a>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>
+	<ul>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Database.html">Database</a>
+			</li>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Test.html">Test</a>
+			</li>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">WebDriver</a>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</div>
+
+		<div class="menu-section">
+			<h3>Classes</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Browser.html">
+							Browser
+						</a>
+					</li>
+					<li class="active">
+						<a href="ThriveData.ThrivePHP.WebDriver.Element.html">
+							Element
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.ElementSet.html">
+							ElementSet
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Network.html">
+							Network
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.NetworkDecision.html">
+							NetworkDecision
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.PDF.html">
+							PDF
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Screenshot.html">
+							Screenshot
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.ShadowRoot.html">
+							ShadowRoot
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Snapshot.html">
+							Snapshot
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.WebDriver.html">
+							WebDriver
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.Window.html">
+							Window
+						</a>
+					</li>
+			</ul>
+		</div>
+		<div class="menu-section">
+			<h3>Exceptions</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.WebDriver.NetworkError.html">
+							NetworkError
+						</a>
+					</li>
+			</ul>
+		</div>
+	</div>
+	</div>
+
+	<div class="layout-main">
+		<div class="layout-navbar">
+	<nav class="navbar">
+		<div class="navbar-left">
+			<ul class="navbar-links">
+				<li>
+					<a href="index.html">Overview</a>
+				</li>
+				<li>
+					
+						<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">Namespace</a>
+					
+				</li>
+<li class="active"><a href="ThriveData.ThrivePHP.WebDriver.Element.html">Class</a></li>				<li>
+					<a href="tree.html">Tree</a>
+				</li>
+			</ul>
+		</div>
+		<div class="navbar-right">
+	<div class="search" data-elements="assets/elements.js">
+		<input class="search-input" placeholder="Search class, function or namespace" autofocus>
+		<ul class="search-results"></ul>
+	</div>
+		</div>
+	</nav>
+		</div>
+
+		<div class="layout-content">
+		<h1>
+			Class <a href="namespace-ThriveData.html">ThriveData</a>\<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>\<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">WebDriver</a>\<a href="ThriveData.ThrivePHP.WebDriver.Element.html">Element</a>
+		</h1>
+
+
+	<table class="classLikeSignatureTable">
+
+
+
+
+	</table>
+		<div class="classLikeDescription">
+	<div class="description"><p>A selector-backed target or an exact DOM node in a captured window/frame.
+Searches resolve afresh per operation; resolve() freezes the resulting node.
+Ordinary readers wait for presence, then read once. Exact nodes never re-find.
+Conditions return bool by default. $is=false negates the predicate; $assert=true
+records one result and returns this element. $stop=false continues after a failed
+assertion under an active Test; outside a Test, assertion failures always throw.
+Null $wait checks queries once and polls assertions. Explicit $wait overrides this.
+Condition $timeout is positive, finite milliseconds, null for assertionTimeout,
+ignored without waiting. One budget covers lookup and evaluation at pollInterval.
+Commands retain their own timeouts. Context and unrelated driver errors propagate.
+Absence makes present()/visible() false. Other one-shot conditions require a node;
+waiting conditions remain unsatisfied while it is missing, even with $is=false.</p>
+</div>
+		</div>
+
+
+		<div class="classLikeSection">
+			<b>Located at</b> <a href="source-WebDriver.Element.html#18" title="Go to source code">WebDriver/Element.php</a><br>
+		</div>
+
+
+
+		<table class="table" id="methods">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Methods</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="id" id="_id">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#31-35" title="Go to source code">id</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Resolve a search and return its remote ID; exact nodes return their ID without a freshness check.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Resolve a search and return its remote ID; exact nodes return their ID without a freshness check.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_id">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="description" id="_description">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#37-41" title="Go to source code">description</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Author-facing selector; script-returned nodes may have no retained selector.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Author-facing selector; script-returned nodes may have no retained selector.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_description">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="window" id="_window">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#43-46" title="Go to source code">window</a>(): <a href="ThriveData.ThrivePHP.WebDriver.Window.html"><span title="ThriveData\ThrivePHP\WebDriver\Window">Window</span></a></code>
+
+
+
+	<div class="expandable-expandedView">
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_window">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="find" id="_find">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#48-52" title="Go to source code">find</a>(<span>string <var>$selector</var></span>, <span>string <var>$using</var> = <span class="php-str">'css selector'</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Describe a descendant search without looking up a node. Scoped XPath should be relative, e.g. .//input.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Describe a descendant search without looking up a node. Scoped XPath should be relative, e.g. .//input.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_find">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="findAll" id="_findAll">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#54-58" title="Go to source code">findAll</a>(<span>string <var>$selector</var></span>, <span>string <var>$using</var> = <span class="php-str">'css selector'</span></span>): <a href="ThriveData.ThrivePHP.WebDriver.ElementSet.html"><span title="ThriveData\ThrivePHP\WebDriver\ElementSet">ElementSet</span></a></code>
+
+
+	<div class="expandable-collapsedView">
+		Describe a descendant collection; count()/all() search when called.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Describe a descendant collection; count()/all() search when called.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_findAll">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="shadowRoot" id="_shadowRoot">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#60-64" title="Go to source code">shadowRoot</a>(): <a href="ThriveData.ThrivePHP.WebDriver.ShadowRoot.html"><span title="ThriveData\ThrivePHP\WebDriver\ShadowRoot">ShadowRoot</span></a></code>
+
+
+	<div class="expandable-collapsedView">
+		Return the accessible shadow root; throws if the host has none.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return the accessible shadow root; throws if the host has none.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_shadowRoot">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="focus" id="_focus">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#66-72" title="Go to source code">focus</a>(): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Wait for the target, then call its native focus() once. Non-focusable elements may remain unfocused.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Wait for the target, then call its native focus() once. Non-focusable elements may remain unfocused.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_focus">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="active" id="_active">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#74-94" title="Go to source code">active</a>(<span>bool <var>$is</var> = <span class="php-kw">true</span></span>, <span>bool <var>$assert</var> = <span class="php-kw">false</span></span>, <span>bool <var>$stop</var> = <span class="php-kw">true</span></span>, <span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check focus through the node's root and each enclosing shadow host. A host is
+active when its shadow descendant has…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check focus through the node's root and each enclosing shadow host. A host is
+active when its shadow descendant has focus, matching DOM activeElement semantics.
+Like other node-requiring conditions, a missing/stale one-shot target throws;
+waiting forms remain unsatisfied. Use present(is: false) for removal.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_active">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="open" id="_open">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#96-102" title="Go to source code">open</a>(<span>bool <var>$modal</var> = <span class="php-kw">true</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Open a native dialog once, using showModal() by default or show() with $modal=false.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Open a native dialog once, using showModal() by default or show() with $modal=false.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_open">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="close" id="_close">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#104-113" title="Go to source code">close</a>(<span>?string <var>$returnValue</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Close a native dialog once. Null omits the return value; an empty string explicitly sets it.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Close a native dialog once. Null omits the return value; an empty string explicitly sets it.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_close">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="sleep" id="_sleep">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#115-121" title="Go to source code">sleep</a>(<span>float <var>$seconds</var></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Pause locally for seconds (including fractions), preserving this element and its context.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Pause locally for seconds (including fractions), preserving this element and its context.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_sleep">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="click" id="_click">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#123-129" title="Go to source code">click</a>(<span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Native click; retry interception, non-interactability and recoverable stale nodes by default. $timeout is milliseconds.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Native click; retry interception, non-interactability and recoverable stale nodes by default. $timeout is milliseconds.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_click">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="check" id="_check">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#131-147" title="Go to source code">check</a>(<span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check a checkbox or radio, re-checking selection on retries and waiting for enabled
+state when a change is needed. …
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check a checkbox or radio, re-checking selection on retries and waiting for enabled
+state when a change is needed. $wait=false tries once; $timeout is milliseconds.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_check">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="uncheck" id="_uncheck">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#149-165" title="Go to source code">uncheck</a>(<span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Uncheck a checkbox, re-checking selection on retries and waiting for enabled state
+when a change is needed. Radios are…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Uncheck a checkbox, re-checking selection on retries and waiting for enabled state
+when a change is needed. Radios are unsupported. $timeout is milliseconds.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_uncheck">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="submit" id="_submit">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#167-184" title="Go to source code">submit</a>(): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Request submission of this form, a control's form owner, or an ancestor form.
+Honor validation and cancellable submit…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Request submission of this form, a control's form owner, or an ancestor form.
+Honor validation and cancellable submit events; neither blocking nor cancellation
+is an error. Throw if no form applies. Execute once without a submitter argument;
+click a specific button when its name/value or submission overrides matter.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_submit">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="inject" id="_inject">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#186-195" title="Go to source code">inject</a>(<span>string <var>$html</var></span>, <span>string <var>$where</var> = <span class="php-str">'beforeend'</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Insert HTML at beforebegin, afterbegin, beforeend (default), or afterend.
+Return this element. DOM insertion errors…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Insert HTML at beforebegin, afterbegin, beforeend (default), or afterend.
+Return this element. DOM insertion errors propagate; script markup does not execute.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_inject">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="firstChild" id="_firstChild">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#197-201" title="Go to source code">firstChild</a>(): ?<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">Element</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Acquire the target, then return its first element child as an exact node, or null. Ignore text/comments.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Acquire the target, then return its first element child as an exact node, or null. Ignore text/comments.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_firstChild">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="lastChild" id="_lastChild">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#203-207" title="Go to source code">lastChild</a>(): ?<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">Element</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Acquire the target, then return its last element child as an exact node, or null. Ignore text/comments.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Acquire the target, then return its last element child as an exact node, or null. Ignore text/comments.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_lastChild">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="nextSibling" id="_nextSibling">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#209-213" title="Go to source code">nextSibling</a>(): ?<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">Element</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Acquire the target, then return its next element sibling as an exact node, or null. Ignore text/comments.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Acquire the target, then return its next element sibling as an exact node, or null. Ignore text/comments.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_nextSibling">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="previousSibling" id="_previousSibling">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#215-219" title="Go to source code">previousSibling</a>(): ?<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">Element</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Acquire the target, then return its previous element sibling as an exact node, or null. Ignore text/comments.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Acquire the target, then return its previous element sibling as an exact node, or null. Ignore text/comments.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_previousSibling">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="type" id="_type">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#221-227" title="Go to source code">type</a>(<span>string <var>$text</var></span>, <span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Append text, retrying non-interactability and recoverable stale nodes. $wait=false tries once; $timeout is milliseconds.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Append text, retrying non-interactability and recoverable stale nodes. $wait=false tries once; $timeout is milliseconds.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_type">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="clear" id="_clear">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#229-235" title="Go to source code">clear</a>(<span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Empty editable content, retrying invalid state, non-interactability and staleness. $timeout is milliseconds.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Empty editable content, retrying invalid state, non-interactability and staleness. $timeout is milliseconds.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_clear">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="value" id="_value">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#237-260" title="Go to source code">value</a>(<span>?string <var>$value</var> = <span class="php-kw">null</span></span>, <span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): string|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Null acquires the target and reads once; a string clears then types and returns this element. Empty strings only clear.…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Null acquires the target and reads once; a string clears then types and returns this element. Empty strings only clear.
+Setter retries share one timeout in milliseconds; each replacement is cleared before typing.
+$wait=false makes one attempt. Reads ignore $wait and $timeout.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_value">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="key" id="_key">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#262-267" title="Go to source code">key</a>(<span>string <var>$key</var></span>, <span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Send Browser::ENTER or Browser::CONTROL . 'a' . Browser::RELEASE, with type()'s retries and millisecond timeout.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Send Browser::ENTER or Browser::CONTROL . 'a' . Browser::RELEASE, with type()'s retries and millisecond timeout.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_key">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="select" id="_select">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#269-293" title="Go to source code">select</a>(<span>string <var>$value</var></span>, <span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Select the first option with the exact DOM value in a native HTML select.
+Multiple selections are retained; an already…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Select the first option with the exact DOM value in a native HTML select.
+Multiple selections are retained; an already selected option is not toggled.
+Retry disabled selects/options, missing options, interception and recoverable stale nodes.
+Custom dropdowns need clicks. $wait=false tries once; $timeout is milliseconds.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_select">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="hover" id="_hover">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#295-301" title="Go to source code">hover</a>(): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Move the mouse to the in-view center without clicking.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Move the mouse to the in-view center without clicking.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_hover">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="doubleClick" id="_doubleClick">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#303-309" title="Go to source code">doubleClick</a>(): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Perform two consecutive primary-button clicks at the in-view center.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Perform two consecutive primary-button clicks at the in-view center.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_doubleClick">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="rightClick" id="_rightClick">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#311-317" title="Go to source code">rightClick</a>(): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Perform a secondary-button click at the in-view center.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Perform a secondary-button click at the in-view center.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_rightClick">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="dragDrop" id="_dragDrop">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#319-329" title="Go to source code">dragDrop</a>(<span><b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">Element</span></b> <var>$target</var></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Drag between element centers in the same window/frame using native pointer
+input. This does not construct HTML5…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Drag between element centers in the same window/frame using native pointer
+input. This does not construct HTML5 DataTransfer data. Returns the source.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_dragDrop">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="dragBy" id="_dragBy">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#331-337" title="Go to source code">dragBy</a>(<span>int <var>$x</var></span>, <span>int <var>$y</var></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Drag from the in-view center by signed CSS-pixel offsets.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Drag from the in-view center by signed CSS-pixel offsets.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_dragBy">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="text" id="_text">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#339-343" title="Go to source code">text</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Return WebDriver's rendered text, rather than raw textContent.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return WebDriver's rendered text, rather than raw textContent.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_text">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="attribute" id="_attribute">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#345-361" title="Go to source code">attribute</a>(<span>string <var>$key</var></span>, <span>?string <var>$value</var> = <span class="php-kw">null</span></span>): string|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b>|null</code>
+
+
+	<div class="expandable-collapsedView">
+		Get an HTML attribute, or null; boolean attributes return 'true' or null.
+A supplied value sets the attribute (null…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Get an HTML attribute, or null; boolean attributes return 'true' or null.
+A supplied value sets the attribute (null removes it) and returns this element.
+An empty string sets an empty attribute. No events are dispatched automatically.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_attribute">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="property" id="_property">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#363-376" title="Go to source code">property</a>(<span>string <var>$key</var></span>, <span>mixed <var>$value</var> = <span class="php-kw">null</span></span>): mixed</code>
+
+
+	<div class="expandable-collapsedView">
+		Get a live DOM property decoded from JSON, such as the current input value.
+A supplied value, including null or false,…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Get a live DOM property decoded from JSON, such as the current input value.
+A supplied value, including null or false, assigns the property and returns this
+element. No events are dispatched automatically. Script reference conversion applies.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_property">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="css" id="_css">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#378-382" title="Go to source code">css</a>(<span>string <var>$property</var></span>): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Return a resolved CSS value, not the inline style declaration.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return a resolved CSS value, not the inline style declaration.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_css">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="tag" id="_tag">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#384-387" title="Go to source code">tag</a>(): string</code>
+
+
+
+	<div class="expandable-expandedView">
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_tag">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="rect" id="_rect">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#389-393" title="Go to source code">rect</a>(): array</code>
+
+
+	<div class="expandable-collapsedView">
+		Return x, y, width, height in CSS pixels, relative to the element's document.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return x, y, width, height in CSS pixels, relative to the element's document.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_rect">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="role" id="_role">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#395-399" title="Go to source code">role</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Return the computed accessibility role, including implicit HTML semantics.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return the computed accessibility role, including implicit HTML semantics.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_role">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="label" id="_label">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#401-405" title="Go to source code">label</a>(): string</code>
+
+
+	<div class="expandable-collapsedView">
+		Return the computed accessible name, which may differ from text() or an HTML label.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return the computed accessible name, which may differ from text() or an HTML label.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_label">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="present" id="_present">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#407-413" title="Go to source code">present</a>(<span>bool <var>$is</var> = <span class="php-kw">true</span></span>, <span>bool <var>$assert</var> = <span class="php-kw">false</span></span>, <span>bool <var>$stop</var> = <span class="php-kw">true</span></span>, <span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check node presence; missing or stale nodes are absent.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check node presence; missing or stale nodes are absent.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_present">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="visible" id="_visible">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#415-421" title="Go to source code">visible</a>(<span>bool <var>$is</var> = <span class="php-kw">true</span></span>, <span>bool <var>$assert</var> = <span class="php-kw">false</span></span>, <span>bool <var>$stop</var> = <span class="php-kw">true</span></span>, <span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check displayedness; missing or stale nodes are invisible. Visibility does not guarantee clickability.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check displayedness; missing or stale nodes are invisible. Visibility does not guarantee clickability.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_visible">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="valueEquals" id="_valueEquals">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#423-429" title="Go to source code">valueEquals</a>(
+	<span>string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Compare the live DOM value property, not the HTML attribute, using strict equality.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Compare the live DOM value property, not the HTML attribute, using strict equality.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_valueEquals">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="textEquals" id="_textEquals">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#431-437" title="Go to source code">textEquals</a>(
+	<span>string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Compare rendered text using strict equality.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Compare rendered text using strict equality.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_textEquals">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="textContains" id="_textContains">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#439-445" title="Go to source code">textContains</a>(
+	<span>string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check a case-sensitive substring of rendered text.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check a case-sensitive substring of rendered text.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_textContains">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="attributeEquals" id="_attributeEquals">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#447-453" title="Go to source code">attributeEquals</a>(
+	<span>string <var>$name</var></span>,
+	<span>?string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Compare an attribute using strict equality; null expects an absent attribute on an existing node.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Compare an attribute using strict equality; null expects an absent attribute on an existing node.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_attributeEquals">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="attributeMatches" id="_attributeMatches">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#455-466" title="Go to source code">attributeMatches</a>(
+	<span>string <var>$name</var></span>,
+	<span>string <var>$pattern</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check an attribute against a delimited PHP regex; absence never matches.
+Invalid patterns throw before polling.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check an attribute against a delimited PHP regex; absence never matches.
+Invalid patterns throw before polling.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_attributeMatches">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="valueContains" id="_valueContains">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#468-474" title="Go to source code">valueContains</a>(
+	<span>string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check a case-sensitive substring of the live value.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check a case-sensitive substring of the live value.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_valueContains">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="textMatches" id="_textMatches">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#476-483" title="Go to source code">textMatches</a>(
+	<span>string <var>$pattern</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check rendered text against a delimited PHP regex; invalid patterns throw before polling.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check rendered text against a delimited PHP regex; invalid patterns throw before polling.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_textMatches">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="attributeContains" id="_attributeContains">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#485-491" title="Go to source code">attributeContains</a>(
+	<span>string <var>$name</var></span>,
+	<span>string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check a case-sensitive attribute substring; a missing attribute does not contain it.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check a case-sensitive attribute substring; a missing attribute does not contain it.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_attributeContains">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="propertyEquals" id="_propertyEquals">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#493-499" title="Go to source code">propertyEquals</a>(
+	<span>string <var>$name</var></span>,
+	<span>mixed <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Compare a JSON-decoded DOM property without string/number or boolean coercion.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Compare a JSON-decoded DOM property without string/number or boolean coercion.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_propertyEquals">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="propertyContains" id="_propertyContains">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#501-514" title="Go to source code">propertyContains</a>(
+	<span>string <var>$name</var></span>,
+	<span>string|array <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check a string substring or every requested array member using strict membership; other types do not match.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check a string substring or every requested array member using strict membership; other types do not match.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_propertyContains">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="propertyMatches" id="_propertyMatches">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#516-523" title="Go to source code">propertyMatches</a>(
+	<span>string <var>$name</var></span>,
+	<span>string <var>$pattern</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check a string DOM property against a delimited PHP regex; null and non-strings do not match.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check a string DOM property against a delimited PHP regex; null and non-strings do not match.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_propertyMatches">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="cssEquals" id="_cssEquals">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#525-531" title="Go to source code">cssEquals</a>(
+	<span>string <var>$name</var></span>,
+	<span>string <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Compare resolved CSS using the driver's serialization of colors, lengths, and other values.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Compare resolved CSS using the driver's serialization of colors, lengths, and other values.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_cssEquals">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="enabled" id="_enabled">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#533-539" title="Go to source code">enabled</a>(<span>bool <var>$is</var> = <span class="php-kw">true</span></span>, <span>bool <var>$assert</var> = <span class="php-kw">false</span></span>, <span>bool <var>$stop</var> = <span class="php-kw">true</span></span>, <span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check enabled state according to WebDriver's form-control rules.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check enabled state according to WebDriver's form-control rules.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_enabled">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="selected" id="_selected">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#541-547" title="Go to source code">selected</a>(
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check selected state for options, checkboxes, and radio buttons.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check selected state for options, checkboxes, and radio buttons.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_selected">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="hasAttribute" id="_hasAttribute">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#549-555" title="Go to source code">hasAttribute</a>(
+	<span>string <var>$name</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check attribute presence, including empty and boolean attributes, on an existing node.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check attribute presence, including empty and boolean attributes, on an existing node.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_hasAttribute">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="hasClass" id="_hasClass">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#557-572" title="Go to source code">hasClass</a>(
+	<span>string|array <var>$expected</var></span>,
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check all CSS class tokens, supplied as a whitespace-separated string or list; $is=false means not all are present.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check all CSS class tokens, supplied as a whitespace-separated string or list; $is=false means not all are present.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_hasClass">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="hasDescendants" id="_hasDescendants">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#574-580" title="Go to source code">hasDescendants</a>(
+	<span>bool <var>$is</var> = <span class="php-kw">true</span></span>,
+	<span>bool <var>$assert</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$stop</var> = <span class="php-kw">true</span></span>,
+	<span>?bool <var>$wait</var> = <span class="php-kw">null</span></span>,
+	<span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>,
+): bool|<b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Check for at least one descendant element; text and comments do not count.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Check for at least one descendant element; text and comments do not count.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_hasDescendants">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="screenshot" id="_screenshot">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#582-586" title="Go to source code">screenshot</a>(): <a href="ThriveData.ThrivePHP.WebDriver.Screenshot.html"><span title="ThriveData\ThrivePHP\WebDriver\Screenshot">Screenshot</span></a></code>
+
+
+	<div class="expandable-collapsedView">
+		Capture the visible rectangle immediately; use -&gt;data() for PNG bytes or -&gt;save('element.png').
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Capture the visible rectangle immediately; use -&gt;data() for PNG bytes or -&gt;save('element.png').</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_screenshot">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="reference" id="_reference">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#588-596" title="Go to source code">reference</a>(<span>?<a href="ThriveData.ThrivePHP.WebDriver.Window.html"><span title="ThriveData\ThrivePHP\WebDriver\Window">Window</span></a> <var>$window</var> = <span class="php-kw">null</span></span>, <span>?array <var>$frames</var> = <span class="php-kw">null</span></span>, <span>bool <var>$wait</var> = <span class="php-kw">true</span></span>): array</code>
+
+
+	<div class="expandable-collapsedView">
+		Return the W3C reference for low-level protocol integration. Internal callers
+supply a context to reject elements…
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return the W3C reference for low-level protocol integration. Internal callers
+supply a context to reject elements belonging to another session/window/frame.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_reference">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="resolve" id="_resolve">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-WebDriver.Element.html#622-641" title="Go to source code">resolve</a>(<span>bool <var>$wait</var> = <span class="php-kw">true</span></span>, <span>?float <var>$timeout</var> = <span class="php-kw">null</span></span>): <b><span class="active" title="ThriveData\ThrivePHP\WebDriver\Element">self</span></b></code>
+
+
+	<div class="expandable-collapsedView">
+		Return an exact node, waiting for presence by default. Timeout is milliseconds, null for waitTimeout.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Return an exact node, waiting for presence by default. Timeout is milliseconds, null for waitTimeout.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#_resolve">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+		<table class="table" id="constants">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Constants</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="REFERENCE" id="REFERENCE">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+				</code>
+			</td>
+
+			<td class="table-cell">
+<code><a href="source-WebDriver.Element.html#20-21" title="Go to source code">REFERENCE</a> = <span class="php-str">'element-6066-11e4-a52e-4f735466cecf'</span></code>
+
+	<div class="expandable-collapsedView">
+		W3C JSON element-reference key, also used by pointer action origins.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>W3C JSON element-reference key, also used by pointer action origins.</p>
+</div>
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#REFERENCE">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+
+
+		</div>
+
+		<div class="layout-footer">
+			 API documentation generated by <a href="https://www.apigen.org">ApiGen v7.0.0-alpha.6</a>
+		</div>
+	</div>
+
+	<div class="layout-rest">
+		<div class="navbar"></div>
+	</div>
+</body>
+</html>

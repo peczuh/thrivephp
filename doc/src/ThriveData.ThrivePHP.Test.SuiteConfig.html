@@ -1,0 +1,499 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width">
+
+	<title>Class ThriveData\ThrivePHP\Test\SuiteConfig |  API</title>
+	<link rel="stylesheet" href="assets/main.css">
+	<script src="assets/main.js" defer></script>
+</head>
+
+<body class="layout">
+	<div class="layout-aside">
+	<div class="menu">
+			<div class="menu-section">
+				<h3>Namespaces</h3>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.html">ThriveData</a>
+	<ul>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>
+	<ul>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.Database.html">Database</a>
+			</li>
+			<li class="menuGroup-item active">
+				<a href="namespace-ThriveData.ThrivePHP.Test.html">Test</a>
+			</li>
+			<li class="menuGroup-item">
+				<a href="namespace-ThriveData.ThrivePHP.WebDriver.html">WebDriver</a>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</li>
+	</ul>
+			</div>
+
+		<div class="menu-section">
+			<h3>Classes</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.After.html">
+							After
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Before.html">
+							Before
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Diagnostic.html">
+							Diagnostic
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Progress.html">
+							Progress
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Record.html">
+							Record
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Report.html">
+							Report
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Suite.html">
+							Suite
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.SuiteBrowser.html">
+							SuiteBrowser
+						</a>
+					</li>
+					<li class="active">
+						<a href="ThriveData.ThrivePHP.Test.SuiteConfig.html">
+							SuiteConfig
+						</a>
+					</li>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.Test.html">
+							Test
+						</a>
+					</li>
+			</ul>
+		</div>
+		<div class="menu-section">
+			<h3>Exceptions</h3>
+			<ul>
+					<li>
+						<a href="ThriveData.ThrivePHP.Test.AssertionFailure.html">
+							AssertionFailure
+						</a>
+					</li>
+			</ul>
+		</div>
+	</div>
+	</div>
+
+	<div class="layout-main">
+		<div class="layout-navbar">
+	<nav class="navbar">
+		<div class="navbar-left">
+			<ul class="navbar-links">
+				<li>
+					<a href="index.html">Overview</a>
+				</li>
+				<li>
+					
+						<a href="namespace-ThriveData.ThrivePHP.Test.html">Namespace</a>
+					
+				</li>
+<li class="active"><a href="ThriveData.ThrivePHP.Test.SuiteConfig.html">Class</a></li>				<li>
+					<a href="tree.html">Tree</a>
+				</li>
+			</ul>
+		</div>
+		<div class="navbar-right">
+	<div class="search" data-elements="assets/elements.js">
+		<input class="search-input" placeholder="Search class, function or namespace" autofocus>
+		<ul class="search-results"></ul>
+	</div>
+		</div>
+	</nav>
+		</div>
+
+		<div class="layout-content">
+		<h1>
+			Class <a href="namespace-ThriveData.html">ThriveData</a>\<a href="namespace-ThriveData.ThrivePHP.html">ThrivePHP</a>\<a href="namespace-ThriveData.ThrivePHP.Test.html">Test</a>\<a href="ThriveData.ThrivePHP.Test.SuiteConfig.html">SuiteConfig</a>
+		</h1>
+
+
+	<table class="classLikeSignatureTable">
+
+
+
+
+	</table>
+		<div class="classLikeDescription">
+	<div class="description"><p>Per-suite settings. Command/inactivity timeouts are seconds; polling budgets and interval are milliseconds.</p>
+</div>
+		</div>
+
+
+		<div class="classLikeSection">
+			<b>Located at</b> <a href="source-Test.SuiteConfig.html#8" title="Go to source code">Test/SuiteConfig.php</a><br>
+		</div>
+
+
+
+		<table class="table" id="methods">
+			<tr>
+				<th class="table-heading sortable" colspan="3" title="Switch between natural and alphabetical order">Methods</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="__construct" id="___construct">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-Test.SuiteConfig.html#10-25" title="Go to source code">__construct</a>(
+	<span>float <var>$timeout</var> = <span class="php-num">10</span></span>,
+	<span>array <var>$capabilities</var> = []</span>,
+	<span>?float <var>$idleTimeout</var> = <span class="php-kw">null</span></span>,
+	<span>bool <var>$skipRemainingOnFailure</var> = <span class="php-kw">false</span></span>,
+	<span>float <var>$waitTimeout</var> = <span class="php-num">5000</span></span>,
+	<span>float <var>$assertionTimeout</var> = <span class="php-num">5000</span></span>,
+	<span>float <var>$pollInterval</var> = <span class="php-num">500</span></span>,
+	<span>bool <var>$browserLogs</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$browserNetwork</var> = <span class="php-kw">false</span></span>,
+	<span>bool <var>$bidi</var> = <span class="php-kw">false</span></span>,
+)</code>
+
+
+
+	<div class="expandable-expandedView">
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___construct">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="__set" id="___set">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+					
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell">
+				<code><a href="source-Test.SuiteConfig.html#27-31" title="Go to source code">__set</a>(<span>string <var>$name</var></span>, <span>mixed <var>$value</var></span>): void</code>
+
+
+	<div class="expandable-collapsedView">
+		Reject misspelled options on every supported PHP version.
+	</div>
+
+	<div class="expandable-expandedView">
+	<div class="description"><p>Reject misspelled options on every supported PHP version.</p>
+</div>
+
+
+
+
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#___set">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+
+
+
+
+		<table class="table" id="properties">
+			<tr>
+				<th class="table-heading sortable" colspan="4" title="Switch between natural and alphabetical order">Properties</th>
+			</tr>
+
+	<tr class="expandable collapsed" data-order="timeout" id="$timeout">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">float</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#11" title="Go to source code">$timeout</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$timeout">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="capabilities" id="$capabilities">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">array</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#12" title="Go to source code">$capabilities</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$capabilities">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="idleTimeout" id="$idleTimeout">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">?float</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#13" title="Go to source code">$idleTimeout</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$idleTimeout">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="skipRemainingOnFailure" id="$skipRemainingOnFailure">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">bool</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#15" title="Go to source code">$skipRemainingOnFailure</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$skipRemainingOnFailure">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="waitTimeout" id="$waitTimeout">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">float</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#16" title="Go to source code">$waitTimeout</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$waitTimeout">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="assertionTimeout" id="$assertionTimeout">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">float</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#17" title="Go to source code">$assertionTimeout</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$assertionTimeout">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="pollInterval" id="$pollInterval">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">float</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#18" title="Go to source code">$pollInterval</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$pollInterval">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="browserLogs" id="$browserLogs">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">bool</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#20" title="Go to source code">$browserLogs</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$browserLogs">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="browserNetwork" id="$browserNetwork">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">bool</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#22" title="Go to source code">$browserNetwork</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$browserNetwork">#</a>
+		</td>
+	</tr>
+	<tr class="expandable collapsed" data-order="bidi" id="$bidi">
+			<td class="table-cell table-shrink">
+				<code class="nowrap">
+	public
+					
+					
+				</code>
+			</td>
+
+			<td class="table-cell table-shrink">
+				<code class="nowrap">bool</code>
+			</td>
+
+			<td class="table-cell">
+<code><var><a href="source-Test.SuiteConfig.html#24" title="Go to source code">$bidi</a></var></code>
+				
+
+	<div class="expandable-expandedView">
+	</div>
+			</td>
+		<td class="table-anchor">
+			<a href="#$bidi">#</a>
+		</td>
+	</tr>
+		</table>
+
+
+		</div>
+
+		<div class="layout-footer">
+			 API documentation generated by <a href="https://www.apigen.org">ApiGen v7.0.0-alpha.6</a>
+		</div>
+	</div>
+
+	<div class="layout-rest">
+		<div class="navbar"></div>
+	</div>
+</body>
+</html>
