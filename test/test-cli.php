@@ -29,7 +29,9 @@ function project(string $directory): string
     file_put_contents($directory . '/vendor/autoload.php', '<?php
 namespace ThriveData\ThrivePHP;
 class Application {
+    public static int $initializations = 0;
     public static function init(): void {
+        if (++self::$initializations !== 1) throw new \RuntimeException("Application initialized twice");
         Settings::init();
         file_put_contents(PATH_ROOT . "/bootstrapped", "yes");
     }
@@ -74,13 +76,15 @@ class WebDriver {
 }
 
 /** Each invocation gets a unique report directory, including calls expected to fail before bootstrap. */
-function invoke(string $script, string $cwd, array $arguments, bool $shortTags = true): array
+function invoke(string $script, string $cwd, array $arguments, bool $shortTags = true, bool $registered = false): array
 {
     global $root, $sequence;
     $save = $root . '/runs-' . ++$sequence;
     $errors = $root . '/stderr-' . $sequence;
-    $process = proc_open([PHP_BINARY, '-d', 'short_open_tag=' . (int)$shortTags, $script,
-        '--set', 'test.savepath=' . json_encode($save, JSON_THROW_ON_ERROR), ...$arguments],
+    $overrides = ['--set', 'test.savepath=' . json_encode($save, JSON_THROW_ON_ERROR)];
+    // Commander requires the command immediately after the script, before any option overrides.
+    $arguments = $registered ? [$arguments[0], ...$overrides, ...array_slice($arguments, 1)] : [...$overrides, ...$arguments];
+    $process = proc_open([PHP_BINARY, '-d', 'short_open_tag=' . (int)$shortTags, $script, ...$arguments],
         [0 => ['null'], 1 => ['pipe', 'w'], 2 => ['file', $errors, 'w']], $pipes, cwd: $cwd);
     $out = stream_get_contents($pipes[1]);
     fclose($pipes[1]);
@@ -458,6 +462,87 @@ try {
     [$code, $out, $err] = invoke($displayScript, $displayRoot, ['test', '--quiet'], shortTags: false);
     check($code === 1 && str_contains($out . $err, 'Enable short_open_tag') && !str_contains($out, 'Suites:'), $out . $err);
     echo "PASS: quiet retains preparation and bootstrap errors without summaries\n";
+
+    $registeredRoot = $root . '/registered';
+    project($registeredRoot);
+    $registeredScript = $registeredRoot . '/thrive.php';
+    file_put_contents($registeredScript, <<<'PHP'
+        <?php
+        define('PATH_ROOT', __DIR__);
+        require __DIR__ . '/vendor/autoload.php';
+        \ThriveData\ThrivePHP\Application::init();
+        \ThriveData\ThrivePHP\Settings::set('fixture.parent', 'already initialized');
+        \ThriveData\ThrivePHP\Commander::init();
+        \ThriveData\ThrivePHP\Commander::start();
+        PHP);
+    file_put_contents($registeredRoot . '/commands.php', <<<'PHP'
+        <?php
+        use ThriveData\ThrivePHP\{Command, Commander, CLI};
+        Commander::register(new Command(name: 'test', callback: function(string $name, array $argv) {
+            exit(CLI::dispatch(array_slice($argv, 1)));
+        }));
+        PHP);
+    $registeredSuite = <<<'PHP'
+        <?php
+        use ThriveData\ThrivePHP\{Application, Settings};
+        use ThriveData\ThrivePHP\Test\{Suite, Test};
+        return new class($test) extends Suite {
+            #[Test('Selected case', tags: ['smoke'])]
+            public function selected(): void {
+                $this->test->assert(Application::$initializations === 1, 'Application initialized once in this process');
+                $this->test->assert(Settings::get('fixture.parent') === 'already initialized', 'Parent runtime settings survive worker bootstrap');
+                $this->test->assert(Settings::get('fixture.override') === false, 'Last typed override reaches this process');
+                $this->test->assert($this->test->browser() === 'firefox' && !$this->test->headless(), 'Browser and headed options reach this process');
+            }
+            #[Test('Excluded case', tags: ['slow'])]
+            public function excluded(): void { throw new LogicException('Excluded case ran'); }
+            #[Test('Failing case')]
+            public function failed(): void { $this->test->assert(false, 'Registered command failure'); }
+        };
+        PHP;
+    foreach (['first', 'second'] as $name) file_put_contents($registeredRoot . '/test/cases/' . $name . '.php', $registeredSuite);
+    foreach ([1, 2] as $workers) {
+        $options = ['--workers', (string)$workers, '--browser', 'firefox', '--headed',
+            '--title', 'Registered tests', '--set', 'fixture.override=true', '--set', 'fixture.override=false',
+            '--set', 'test.console.pass=false', '--pass', '--no-run', '--no-screenshots'];
+        [$code, $out, $err, $report] = invoke($registeredScript, $registeredRoot,
+            ['test', '^(first|second)$::^selected$##smoke', ...$options], registered: true);
+        check($code === 0 && $err === '' && selected($report) === ['first::selected', 'second::selected']
+            && $report['totals']['assertionsPassed'] === 8 && $report['environment']['project'] === 'Registered tests'
+            && !str_contains($out, 'RUN ') && str_contains($out, 'PASS '), $out . $err);
+        [$code, $out, $err, $report] = invoke($registeredScript, $root,
+            ['test', '^first$::^selected$', '--root', $registeredRoot, ...$options, '--quiet'], registered: true);
+        check($code === 0 && $err === '' && $out === "registering command test\n"
+            && $report['totals']['casesPassed'] === 1, $out . $err);
+        [$code, $out, $err, $report] = invoke($registeredScript, $registeredRoot,
+            ['test', '^(first|second)$::^failed$', '--workers', (string)$workers, '--quiet'], registered: true);
+        check($code === 1 && $err === '' && $report['totals']['casesFailed'] === 2
+            && str_contains($out, 'Registered command failure') && !str_contains($out, 'Suites:'), $out . $err);
+        [$code, $out, $err, $report] = invoke($registeredScript, $registeredRoot,
+            ['test', '[', '--workers', (string)$workers], registered: true);
+        check($code === 1 && $err === '' && $report !== null && str_contains($out, 'Invalid'), $out . $err);
+        echo "PASS: registered command forwards selectors/options and bootstraps each process exactly once, workers=$workers\n";
+    }
+    $externalCases = $registeredRoot . '/custom-cases';
+    mkdir($externalCases);
+    file_put_contents($externalCases . '/external.php', $registeredSuite);
+    $externalSave = $registeredRoot . '/custom-reports';
+    [$code, $out, $err] = invoke($registeredScript, $registeredRoot,
+        ['test', '^external$::^selected$', '--casepath', 'custom-cases', '--savepath', 'custom-reports', ...$options], registered: true);
+    $externalReports = glob($externalSave . '/*/report.json');
+    check($code === 0 && $err === '' && count($externalReports) === 1, $out . $err);
+    $externalRecord = json_decode(file_get_contents($externalReports[0]), true, flags: JSON_THROW_ON_ERROR);
+    check(selected($externalRecord) === ['external::selected'], 'Registered command ignored explicit paths.');
+    foreach ([['test', '--help'], ['test', '--workers', '0'], ['test', '--unknown'],
+        ['test', '--root', $root . '/other']] as $arguments) {
+        [$code, $out, $err, $report] = invoke($registeredScript, $registeredRoot, $arguments, registered: true);
+        if (in_array('--help', $arguments, true)) {
+            check($code === 0 && str_contains($out, 'Usage:') && $err === '' && $report === null, $out . $err);
+        } else {
+            check($code === 1 && str_starts_with($err, 'ERROR ') && $report === null, $out . $err);
+        }
+    }
+    echo "PASS: registered command preserves paths, help, usage errors and the initialized project root\n";
 } finally {
     foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $entry) {
         $entry->isDir() && !$entry->isLink() ? rmdir($entry->getPathname()) : unlink($entry->getPathname());

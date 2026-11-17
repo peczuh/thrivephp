@@ -46,6 +46,39 @@ PHP resolves symlinks for `__DIR__`. A project-level `cli.php` symlink to the
 framework script therefore starts discovery inside the framework's `bin`
 directory.
 
+## Registered application commands
+
+An application that already called `Application::init()` can register a test
+command in its `commands.php`:
+
+```php
+use ThriveData\ThrivePHP\{CLI, Command, Commander};
+
+Commander::register(new Command(name: 'test', callback: function(string $name, array $argv) {
+    exit(CLI::dispatch(array_slice($argv, 1)));
+}));
+```
+
+`Commander` supplies the command name and the complete argument vector. Remove
+only the script name so `dispatch()` receives `test`, selectors, and options:
+
+```sh
+php thrive.php test '^login$' --browser chrome --workers 1
+php thrive.php test --no-run --no-pass --no-screenshots
+php thrive.php test --quiet --set test.console.steps=true
+```
+
+`CLI::dispatch()` uses the same parser, option precedence, and exit statuses as
+`CLI::run()`, but uses the initialized `PATH_ROOT` without discovery or another
+application bootstrap. `--root` may identify that same project; it cannot select
+a different project after initialization. Relative case/save paths still use the
+project root. Each fresh parallel worker initializes the application once before
+receiving the effective parent settings.
+
+Exit with the returned status so test failures return a nonzero shell status.
+Output already printed by the application's command registration is outside the
+test reporter's display filters, including `--quiet`.
+
 ## Test selection
 
 ```sh

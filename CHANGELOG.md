@@ -8,6 +8,52 @@ Some 1.x minor releases contain breaking changes. When skipping versions, follow
 each intervening migration section. Applications install ThrivePHP through
 Composer; updating the package does not migrate application databases.
 
+## 1.3.2
+
+### Key features and changes
+
+- Added `CLI::dispatch()` for registered application commands that need the test
+  CLI's selectors and options without bootstrapping the parent application again.
+  Both CLI entry points share argument parsing, settings overrides, and test
+  execution.
+- Added the optional `bootstrapped` argument to the `Test` constructor so an
+  already-initialized parent can still initialize each fresh parallel worker.
+- Added registered-command regression checks for serial and parallel execution,
+  option precedence, runtime settings, paths, help, errors, and exit status.
+
+### Breaking changes
+
+None. The standalone framework CLI retains its existing behavior.
+
+### Migrating from 1.3.1
+
+1. Update the package to 1.3.2. If the application's existing constraint allows
+   this release, run:
+
+   ```sh
+   composer update peczuh/thrivephp
+   ```
+
+2. To expose tests through an application's `commands.php`, register a callback
+   that accepts the command name and complete argument vector:
+
+   ```php
+   use ThriveData\ThrivePHP\{CLI, Command, Commander};
+
+   Commander::register(new Command(name: 'test', callback: function(string $name, array $argv) {
+       exit(CLI::dispatch(array_slice($argv, 1)));
+   }));
+   ```
+
+   This supports commands such as `php thrive.php test '^login$' --workers 1`.
+   Use `dispatch()` after application initialization, not `CLI::run()` or another
+   call to `Test::bootstrap()`. An explicit `--root` must identify the already
+   initialized project.
+
+No application database migration is required.
+
+---
+
 ## 1.3.1
 
 ### Key features and changes

@@ -171,12 +171,42 @@ final class CLI
         require_once $autoload;
         $test = new Test($root, quiet: $options['quiet']);
         $test->bootstrap();
+        return self::execute($options, $test);
+    }
+
+    /** Both entry points apply the same overrides and run options after application initialization. */
+    private static function execute(array $options, Test $test): int
+    {
         foreach ($options['sets'] as [$path, $value]) Settings::set($path, $value);
         if ($options['casepath'] !== null) Settings::set('test.casepath', $options['casepath']);
         if ($options['savepath'] !== null) Settings::set('test.savepath', $options['savepath']);
         foreach ($options['console'] as $path => $value) Settings::set('test.console.' . $path, $value);
         return $test->run(workers: $options['workers'], browser: $options['browser'], headless: $options['headless'],
             selectors: $options['selectors'], title: $options['title']);
+    }
+
+    /** Dispatch arguments excluding the script name using the application already initialized at PATH_ROOT. */
+    public static function dispatch(array $arguments): int
+    {
+        try {
+            $options = self::arguments($arguments);
+            if ($options['help']) {
+                self::printHelp();
+                return 0;
+            }
+            $root = PATH_ROOT;
+            if ($options['root'] !== null) {
+                $cwd = getcwd();
+                if ($cwd === false) throw new \RuntimeException('Could not determine the working directory.');
+                if (realpath(self::absolutePath($options['root'], $cwd)) !== realpath($root)) {
+                    throw new \InvalidArgumentException('--root cannot change the project of an initialized application.');
+                }
+            }
+            return self::execute($options, new Test($root, quiet: $options['quiet'], bootstrapped: true));
+        } catch (\Throwable $error) {
+            fwrite(STDERR, 'ERROR ' . $error->getMessage() . PHP_EOL);
+            return 1;
+        }
     }
 
     /** Run arguments excluding the script name, using the launcher's directory as the discovery start. */

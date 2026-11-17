@@ -21,6 +21,12 @@ $test->bootstrap();
 exit($test->run());
 ```
 
+For a registered command in an already-initialized application, use
+[`CLI::dispatch()`](cli.md#registered-application-commands) to retain CLI option
+parsing without bootstrapping the parent again. Direct PHP integrations can pass
+`bootstrapped: true` to the `Test` constructor when the application has already
+initialized; this ensures each fresh parallel worker still bootstraps itself.
+
 Pass names to `run(['layouts', 'login'])` to select files. A nonzero return value
 means at least one file failed. Callable checks continue to receive the runner
 as their argument and report one result per file.

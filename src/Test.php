@@ -48,10 +48,14 @@ class Test
     private ?Test\Report $report = null;
     private string $currentCheck = '';
 
-    /** Resolve paths when run() starts; quiet also applies to diagnostics during bootstrap. */
-    public function __construct(string $pathRoot, private bool $quiet = false)
+    /**
+     * Resolve paths when run() starts; quiet also applies to diagnostics during bootstrap.
+     * Set bootstrapped for an initialized parent so each fresh worker still initializes the application.
+     */
+    public function __construct(string $pathRoot, private bool $quiet = false, bool $bootstrapped = false)
     {
         $this->pathRoot = $pathRoot;
+        $this->bootstrapped = $bootstrapped;
     }
 
     /** Initialize the application without command dispatch; exit with status 1 on failure. */

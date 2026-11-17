@@ -65,6 +65,9 @@ call `Application::setPathRoot($path)` before initialization.
 
 The separate framework CLI described below runs tests and displays help. It
 does not dispatch application commands from `commands.php`.
+Registered application commands can call
+[`CLI::dispatch()`](doc/cli.md#registered-application-commands) to run tests with
+the same options after application initialization.
 
 Configure your web server to send requests to the front controller. The current
 request implementation expects `HTTP_HOST`, `REQUEST_METHOD`, `PATH_INFO`, and
