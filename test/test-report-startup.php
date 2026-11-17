@@ -86,7 +86,7 @@ ob_start();
 try { $status = (new Test($root))->run(workers: 1); }
 finally { $console = ob_get_clean(); }
 check($status === 1, 'Invalid save setting returned success.');
-failedReport($root . '/test/runs', $console, 'string', 'preparation');
+failedReport($root . '/work/test', $console, 'string', 'preparation');
 echo "PASS: preparation failures retain console, JSON, HTML, causes and zero-suite totals\n";
 
 file_put_contents($root . '/blocked', 'not a directory');
@@ -129,7 +129,7 @@ foreach (['short-tags', 'composer', 'settings', 'configured', 'invalid-save'] as
     $project = $root . '/' . $mode;
     mkdir($project . '/vendor', 0700, true);
     $autoload = '<?php ';
-    $save = $project . '/test/runs';
+    $save = $project . '/work/test';
     if ($mode === 'composer') {
         $autoload .= 'throw new RuntimeException("Composer platform failure");';
         $message = 'Composer platform failure';
@@ -171,7 +171,7 @@ $test = new class(' . var_export($project, true) . ') extends \ThriveData\Thrive
     protected function resolveBrowser(?string $browser): ?string { return null; }
 };
 $test->bootstrap(); exit($test->run(workers: 2));');
-$files = glob($project . '/test/runs/*/report.json');
+$files = glob($project . '/work/test/*/report.json');
 check($status === 1 && count($files) === 1, 'Worker created a competing report: ' . $console);
 $record = json_decode(file_get_contents($files[0]), true, flags: JSON_THROW_ON_ERROR);
 check($record['status'] === 'FAIL' && $record['suites'][0]['attempts'][0]['errors'][0]['message'] === 'worker bootstrap failure'

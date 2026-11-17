@@ -38,12 +38,14 @@ has been removed. Paths resolve when `run()` starts, after application bootstrap
 | --- | --- | --- |
 | `test.basepath` | `<project root>/test` | Project root |
 | `test.casepath` | `<basepath>/cases` | Project root |
-| `test.savepath` | `<basepath>/runs` | Project root |
+| `test.savepath` | `<project root>/work/test` | Project root |
 
-Omitted or null case/save paths follow the test base. Explicit relative paths
-resolve against the project root, whether configured in settings or supplied with
-`--casepath`, `--savepath`, or `--set`. For example, `test.casepath: "samples"`
-selects `<project root>/samples`, not `<basepath>/samples`.
+An omitted or null case path follows the test base. An omitted or null save path
+uses `<project root>/work/test`, independently of `test.basepath`. Explicit
+relative paths resolve against the project root, whether configured in settings
+or supplied with `--casepath`, `--savepath`, or `--set`. For example,
+`test.casepath: "samples"` selects `<project root>/samples`, not
+`<basepath>/samples`.
 
 A leading `/` means an absolute path. Subclasses used by fixtures may override
 the protected `basePath()`, `casePath()`, and `savePath()` methods. The parent
@@ -95,7 +97,7 @@ Preparation failures, including invalid options, discovery, selectors and browse
 selection, produce run-level diagnostics in all three outputs. Caught application
 bootstrap failures use the same reporter even when Composer or short tags are
 unavailable. If report-path settings cannot be loaded or resolved, reports use
-`<project root>/test/runs`. A failure to create or write report storage is printed
+`<project root>/work/test`. A failure to create or write report storage is printed
 to the console and remains an error; existing runs are never overwritten.
 Worker bootstrap errors belong to the assigned suite in the parent's report.
 

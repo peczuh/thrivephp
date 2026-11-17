@@ -160,6 +160,25 @@ try {
     check(!file_exists($cwd . '/ignored') && !file_exists($cwd . '/ignored-setting'), 'Overridden save paths were used.');
     echo "PASS: savepath uses root-relative/absolute paths, spaces, explicit precedence and last value in serial/parallel runs\n";
 
+    foreach ([1, 2] as $workers) {
+        foreach ([[], ['savepath' => null]] as $index => $defaults) {
+            $directory = $root . '/default-save-' . $workers . '-' . $index;
+            $defaultScript = project($directory);
+            // Replacing the test object removes invoke()'s savepath override.
+            $settings = ['basepath' => 'unused-tests', 'casepath' => 'test/cases'] + $defaults;
+            [$code, $out, $err] = invoke($defaultScript, $root, ['--root', $directory, 'test',
+                '--workers', (string)$workers, '--set', 'test=' . json_encode($settings, JSON_THROW_ON_ERROR)]);
+            $reports = glob($directory . '/work/test/*/report.json');
+            check($code === 0 && $err === '' && count($reports) === 1, $out . $err);
+            $report = json_decode(file_get_contents($reports[0]), true, flags: JSON_THROW_ON_ERROR);
+            check(selected($report) === ['suite1::caseA', 'suite1::caseB', 'suite2::caseA', 'suite2::caseB']
+                && is_file(dirname($reports[0]) . '/report.html'), 'Default report artifacts are incomplete: ' . $out . $err);
+            check(!is_dir($directory . '/test/runs') && !is_dir($directory . '/unused-tests/runs'),
+                'Default report path followed the test base or used the old location.');
+        }
+    }
+    echo "PASS: omitted/null savepath uses project work/test independently of test.basepath and CWD in serial/parallel runs\n";
+
     file_put_contents($cwd . '/test/cases/overrides.php', <<<'PHP'
         <?php
         use ThriveData\ThrivePHP\Settings;

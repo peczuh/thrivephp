@@ -62,7 +62,7 @@ Settings::set('', ['test' => ['screenshots' => ['suites' => 'always'],
     'console' => ['screenshots' => ['columns' => 80]]]]);
 $runner = new Test($root);
 $status = $runner->run(workers: (int)($argv[2] ?? 2), browser: $argv[1] ?? 'chrome', headless: true);
-$file = glob($root . '/test/runs/*/report.json')[0] ?? null;
+$file = glob($root . '/work/test/*/report.json')[0] ?? null;
 check($status === 1 && $file !== null, 'Expected intentional assertion failures and report artifacts.');
 $record = json_decode(file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
 check($record['environment']['root'] === realpath($root), 'Report does not retain the resolved absolute project root.');

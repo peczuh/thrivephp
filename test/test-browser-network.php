@@ -75,7 +75,7 @@ PHP;
     $name = $argv[1] ?? 'chrome';
     $workers = (int)($argv[2] ?? 1);
     $status = (new Test($root))->run(workers: $workers, browser: $name, headless: true);
-    $file = glob($root . '/test/runs/*/report.json')[0] ?? null;
+    $file = glob($root . '/work/test/*/report.json')[0] ?? null;
     check($status === 0 && $file !== null, 'Network reporting run failed.');
     $record = json_decode(file_get_contents($file), true, flags: JSON_THROW_ON_ERROR);
     check($record['totals']['casesPassed'] === 2 && $record['totals']['assertionsFailed'] === 0, 'Retry totals changed.');

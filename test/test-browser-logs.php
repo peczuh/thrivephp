@@ -60,7 +60,7 @@ PHP;
 foreach (['one', 'two'] as $name) file_put_contents($root . '/test/cases/' . $name . '.php', $suite);
 Settings::set('', ['test' => ['screenshots' => ['steps' => 'off', 'cases' => 'off', 'suites' => 'off']]]);
 $status = (new Test($root))->run(workers: (int)($argv[2] ?? 1), browser: $argv[1] ?? 'chrome', headless: true);
-$path = glob($root . '/test/runs/*/report.json')[0] ?? null;
+$path = glob($root . '/work/test/*/report.json')[0] ?? null;
 check($status === 0 && $path !== null, 'Expected passing diagnostic-only run.');
 $record = json_decode(file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
 check($record['totals']['assertionsFailed'] === 0 && $record['totals']['casesPassed'] === 2, 'Browser errors changed final totals.');

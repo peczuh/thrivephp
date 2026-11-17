@@ -82,7 +82,7 @@ class Test
             try {
                 // Composer or short-tag settings may be unavailable at this point.
                 $settingsLoaded = class_exists(Settings::class, false);
-                $savePath = $this->pathRoot . '/test/runs';
+                $savePath = $this->pathRoot . '/work/test';
                 $pathError = null;
                 if ($settingsLoaded) {
                     try {
@@ -476,11 +476,14 @@ class Test
         return str_starts_with($path, '/') ? $path : $this->pathRoot . '/' . $path;
     }
 
-    /** Reports default to the test base's runs directory; explicit relative paths use the project root. */
+    /**
+     * Reports default to work/test under the project root, independently of the test base.
+     * Explicit relative paths also resolve against the project root.
+     */
     protected function savePath(): string
     {
         $path = Settings::fetch('test.savepath');
-        if ($path === null) return $this->basePath() . '/runs';
+        if ($path === null) return $this->pathRoot . '/work/test';
         return str_starts_with($path, '/') ? $path : $this->pathRoot . '/' . $path;
     }
 
@@ -655,7 +658,7 @@ class Test
             $savePath = $this->savePath();
         } catch (\Throwable $error) {
             $pathError = $error;
-            $savePath = $this->pathRoot . '/test/runs';
+            $savePath = $this->pathRoot . '/work/test';
         }
         $this->startReport($savePath, ['project' => $title, 'headless' => $headless]);
         $files = [];

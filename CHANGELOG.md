@@ -8,6 +8,39 @@ Some 1.x minor releases contain breaking changes. When skipping versions, follow
 each intervening migration section. Applications install ThrivePHP through
 Composer; updating the package does not migrate application databases.
 
+## 1.3.1
+
+### Key features and changes
+
+- Changed the default test report directory to `<project root>/work/test`.
+  Timestamped run directories still contain JSON/HTML reports and enabled captures.
+- Applied the same default to preparation and application-bootstrap failure
+  reports, including failures before settings can be loaded.
+
+### Breaking changes
+
+Runs without an explicit `test.savepath` now write to `work/test` instead of
+`test/runs`. The default no longer follows a custom `test.basepath`.
+Explicit settings and CLI overrides retain their existing behavior.
+
+### Migrating from 1.3.0
+
+1. Update scripts, CI artifact collection, and ignore rules that assume the old
+   report location. New reports are in `work/test/<timestamp>/`.
+2. To retain the previous location, set `test.savepath` to `"test/runs"` or pass
+   `--savepath test/runs`. If a custom test base previously controlled the report
+   directory, set that old path explicitly instead.
+3. Update the package:
+
+   ```sh
+   composer require peczuh/thrivephp:1.3.1
+   ```
+
+Existing reports are not moved or deleted. Suite discovery and timestamped run
+directory names are unchanged.
+
+---
+
 ## 1.3.0
 
 ### Key features and changes

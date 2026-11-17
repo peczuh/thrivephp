@@ -157,7 +157,7 @@ php vendor/peczuh/thrivephp/bin/cli.php --root . test --browser chrome --workers
 Headless execution defaults to true. Safari and Safari Technology Preview require
 `--headed --workers 1`. Browserless suites do not require an installed browser.
 
-Each run writes JSON and HTML reports under `test/runs/<timestamp>/` by default,
+Each run writes JSON and HTML reports under `work/test/<timestamp>/` by default,
 with screenshots when enabled for browser suites. Failures return a nonzero exit
 status. Console controls such as `--quiet` do not change saved reports, capture
 policies, or exit status.

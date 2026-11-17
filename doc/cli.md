@@ -62,7 +62,8 @@ Use `--casepath <dir>` to select a different case root and `--savepath <dir>` to
 select the parent directory for timestamped reports without editing settings.
 Explicit relative case/save paths resolve against the project root; absolute
 paths are used directly. This applies to configuration settings and `--set` too.
-Omitted or null values default to `<test base>/cases` and `<test base>/runs`.
+An omitted or null case path defaults to `<test base>/cases`. An omitted or null
+save path defaults to `<project root>/work/test`, independently of `test.basepath`.
 Each dedicated option overrides its project/local setting and `--set` value
 regardless of argument order. Repeating an option uses its last value.
 

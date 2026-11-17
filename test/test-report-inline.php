@@ -42,7 +42,7 @@ try {
         fclose($pipes[1]);
         fclose($pipes[2]);
         check(proc_close($process) === 1 && $err === '', 'Fixture did not report its intentional failure: ' . $out . $err);
-        $reports = glob($project . '/test/runs/*/report.json');
+        $reports = glob($project . '/work/test/*/report.json');
         check(count($reports) === 1, 'Report missing.');
         $record = json_decode(file_get_contents($reports[0]), true, flags: JSON_THROW_ON_ERROR);
         $steps = $record['suites'][0]['attempts'][0]['steps'];
