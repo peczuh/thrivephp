@@ -72,7 +72,7 @@ availability, or successful session creation.
 
 ### Platform discovery
 
-Support macOS, Debian Linux, FreeBSD, and Windows. Inspect conventional
+Support macOS, Debian and Alpine Linux, FreeBSD, and Windows. Inspect conventional
 installation locations and `PATH`; do not recursively search the filesystem.
 Report the actual selected executable path and version. Preserve the distinction
 between a missing executable and an inaccessible discovery location.
@@ -230,7 +230,7 @@ php test/webdriver-runtime.php
 
 Distinguish simulated platform-path coverage, native inventory, native driver
 startup, and actual browser-session tests in the handoff. A passing fixture suite
-on macOS does not establish native Windows, Debian, or FreeBSD execution. A ready
+on macOS does not establish native Windows, Linux, or FreeBSD execution. A ready
 driver endpoint does not establish that a browser session can be created.
 
 ## Protocol references

@@ -610,6 +610,10 @@ browser capabilities. Terminal display scaling does not resample screenshot file
 
 ### Browser availability
 
+On Linux, local browser and driver discovery recognizes Debian and Alpine.
+Browsers and drivers must already be installed. See
+[Docker on Alpine](docker.md) for test image and browser setup.
+
 Set `test.browser.driver` to an ordered list of browser names for automatic
 selection:
 
@@ -1270,3 +1274,44 @@ and `php test/test-configuration-browser.php firefox`. These require PHP OpenSSL
 and the selected browser/driver. They create a temporary self-signed HTTPS origin
 and verify settings, run overrides, suite overrides, and negotiated capabilities
 through two real browser workers.
+
+### On-demand Docker regression
+
+From a ThrivePHP checkout, run the [Docker smoke test](../test/docker-alpine-browser.sh):
+
+```sh
+sh test/docker-alpine-browser.sh
+```
+
+The default output lists completed browser checks and ends with an overall
+`PASS` or `FAIL`. The script stops at the first failure and prints that stage's
+output under a label.
+Use `sh test/docker-alpine-browser.sh --verbose` to stream all build and test
+output with source labels. Both modes run the same checks and return a nonzero
+exit status if any stage fails.
+
+This check is not part of the default test runs or CI. It uses the active Docker
+context and platform. Run it with a Linux container engine that supports
+BuildKit. The build needs network access to Docker Hub, Alpine's package
+repositories, and Google's Chrome for Testing downloads. Allow several minutes
+for the first build. Docker can reuse cached layers on later runs.
+
+The available Alpine browser and driver packages and the pinned Chrome for
+Testing downloads determine which platforms can run the full check. The pinned
+Google release provides `linux/amd64` and `linux/arm64` binaries. To explicitly
+test another platform supported by your engine, set Docker's platform override,
+for example:
+
+```sh
+DOCKER_DEFAULT_PLATFORM=linux/amd64 sh test/docker-alpine-browser.sh
+```
+
+The regression mounts the checkout read-only and uses disposable containers with
+networking disabled at runtime. It checks discovery, real headless page
+interaction, and driver shutdown for Alpine's Chromium and Firefox. It also
+verifies saved reports and screenshots from managed suites with one and two
+workers. Separate checks verify why the pinned Google Chrome for Testing pair is
+unavailable on stock Alpine and with `gcompat`. On stock Alpine, neither binary
+can load. With `gcompat`, both report a relocation error on ARM64. On AMD64
+under Rosetta, ChromeDriver reports a version but Chrome crashes. A changed
+result fails the check so it can be investigated.

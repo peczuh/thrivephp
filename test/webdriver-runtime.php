@@ -202,6 +202,19 @@ try {
 		check(json_decode(json_encode($inventory, JSON_THROW_ON_ERROR))->ready === true, 'Inventory did not serialize as JSON.');
 	});
 
+	scenario('inventory discovers Chromium and ChromeDriver on Alpine and Debian', function () {
+		foreach (['alpine', 'debian'] as $distribution):
+			$discovery = new FixtureDiscovery(['os' => 'linux', 'architecture' => 'x64', 'distribution' => $distribution]);
+			$discovery->paths = ['chromium' => [PHP_BINARY], 'chromedriver' => [PHP_BINARY]];
+			FixtureDriver::$source = $discovery;
+			$inventory = FixtureDriver::bootstrap();
+			$chromium = $inventory->browsers->chromium;
+			check($inventory->ready === true && $chromium->ready === true && $chromium->driver->ready === true,
+				"Chromium and ChromeDriver were not discovered on $distribution.");
+			check($inventory->browsers->safari->ready === 'unsupported', "Safari was supported on $distribution.");
+		endforeach;
+	});
+
 	scenario('inventory distinguishes unsupported, unknown and failed probes', function () {
 		$freebsd = new FixtureDiscovery(['os' => 'freebsd', 'architecture' => 'x64', 'distribution' => null]);
 		check($freebsd->browser('chrome')->ready === 'unsupported', 'Google Chrome was supported on FreeBSD.');
@@ -214,6 +227,8 @@ try {
 		endforeach;
 		$linux = new FixtureDiscovery(['os' => 'linux', 'architecture' => 'x64', 'distribution' => null]);
 		check($linux->browser('firefox')->ready === 'unknown', 'Unknown distribution was treated as missing software.');
+		$linux = new FixtureDiscovery(['os' => 'linux', 'architecture' => 'x64', 'distribution' => 'fedora']);
+		check($linux->browser('firefox')->ready === 'unsupported', 'An unsupported Linux distribution was probed.');
 		$discovery = installation(['firefox']);
 		foreach ([
 			['exitCode' => 1, 'output' => 'missing library', 'timedOut' => false, 'metadata' => false, 'state' => 'notready'],
