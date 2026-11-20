@@ -105,7 +105,7 @@
 		}
 
 		/**
-		 * Inspect macOS, Debian Linux, FreeBSD, or Windows without installing software,
+		 * Inspect macOS, Debian or Alpine Linux, FreeBSD, or Windows without installing software,
 		 * fetching release metadata, starting services, or creating browser sessions.
 		 * Search conventional locations and PATH, with one entry per browser type.
 		 *

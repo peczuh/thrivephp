@@ -10,6 +10,7 @@ optional WebDriver BiDi.
 - [CLI](doc/cli.md): project discovery, test selection, and command-line options.
 - [Settings](doc/settings.md): configuration loading, merging, and runtime overrides.
 - [Testing](doc/testing.md): suites, assertions, lifecycle hooks, and reports.
+- [Docker on Alpine](doc/docker.md): application test images and browser setup.
 - [WebDriver](doc/webdriver-contract.md): browser targets, conditions, and retries.
 - [WebDriver BiDi](doc/webdriver-bidi.md): browser logs, network observation, and interception.
 

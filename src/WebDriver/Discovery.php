@@ -14,7 +14,7 @@
 			$this->environment = array_change_key_case($environment, CASE_UPPER);
 		}
 
-		/** Detect the host; Linux support is specifically Debian, not an inferred binary ABI. */
+		/** Detect the host and read the Linux distribution ID from /etc/os-release. */
 		public static function local(): self
 		{
 			$environment = getenv();
@@ -78,7 +78,7 @@
 				$reason = 'platform_unknown';
 				$message = 'Could not identify the Linux distribution from /etc/os-release.';
 			elseif (!in_array($os, ['macos', 'freebsd', 'linux', 'windows'], true)
-				|| ($os === 'linux' && $this->platform['distribution'] !== 'debian')
+				|| ($os === 'linux' && !in_array($this->platform['distribution'], ['debian', 'alpine'], true))
 				|| (in_array($name, ['safari', 'safaripreview'], true) && $os !== 'macos') || ($name === 'chrome' && $os === 'freebsd')):
 				$state = 'unsupported';
 				$reason = 'platform_unsupported';
